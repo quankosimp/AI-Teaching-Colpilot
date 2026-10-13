@@ -1,0 +1,6 @@
+{
+  "name": "TutorPulse - Nền tảng Gia sư & AI Copilot Sư phạm",
+  "description": "Nền tảng hỗ trợ gia sư chuyên nghiệp: Soạn giáo án tương thích học sinh, phòng dạy trực tiếp với Math Scratchpad & AI Copilot, tổng kết buổi dạy và quản lý hồ sơ học sinh.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
