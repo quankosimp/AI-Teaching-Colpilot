@@ -32,6 +32,7 @@ export function normalizeData(input: Partial<AppData>): AppData {
     events: [],
     recordings: [],
     aiRequests: [],
+    reactions: [],
     ...input,
     version: 2,
   };

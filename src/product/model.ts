@@ -110,6 +110,15 @@ export type Claim = {
   createdAt: string;
 };
 
+export type RoomReaction = {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  emoji: string;
+  label: string;
+  createdAt: string;
+};
+
 export type AppData = {
   students: Student[];
   materials: Material[];
@@ -128,6 +137,7 @@ export type AppData = {
   events: SessionEvent[];
   recordings: Recording[];
   aiRequests: AIRequest[];
+  reactions?: RoomReaction[];
   version: number;
 };
 
@@ -153,6 +163,8 @@ export type Stroke = {
   authorId: string;
   color: string;
   points: { x: number; y: number }[];
+  width?: number;
+  kind?: "pen" | "line" | "rect" | "circle" | "axes";
 };
 export type Board = {
   id: string;

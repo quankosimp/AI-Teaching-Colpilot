@@ -610,6 +610,61 @@ input[type="checkbox"] {
   padding: 16px;
   align-items: start;
   flex: 1;
+  transition: grid-template-columns 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.classroom-layout.left-collapsed {
+  grid-template-columns: 48px minmax(0, 1fr) 320px;
+}
+.classroom-layout.right-collapsed {
+  grid-template-columns: 220px minmax(0, 1fr) 48px;
+}
+.classroom-layout.left-collapsed.right-collapsed {
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+}
+.panel-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.panel-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-surface);
+  color: var(--ui-subtle);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex: none;
+}
+.panel-collapse-btn:hover {
+  background: var(--ui-hover);
+  color: var(--ui-ink);
+}
+.room-left.collapsed-panel,
+.room-right.collapsed-panel {
+  padding: 12px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  min-height: 480px;
+}
+.collapsed-panel-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--ui-muted);
+  text-transform: uppercase;
+  margin-top: 12px;
+  user-select: none;
 }
 .room-left,
 .room-right {
@@ -618,6 +673,7 @@ input[type="checkbox"] {
   border: 1px solid var(--ui-line);
   border-radius: 12px;
   padding: 16px;
+  transition: padding 0.2s ease;
 }
 .room-left .section-head h2,
 .room-right .section-head h2 {
@@ -1798,3 +1854,212 @@ input[type="checkbox"] {
     animation: none;
   }
 }
+
+/* --- Smart Whiteboard & Shape Tools --- */
+.board-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-right: 1px solid var(--ui-line);
+  padding-right: 8px;
+}
+.board-palette {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+.palette-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+}
+.palette-color:hover {
+  transform: scale(1.18);
+}
+.palette-color.active {
+  box-shadow: 0 0 0 2px var(--ui-surface), 0 0 0 4px var(--ui-brand);
+  transform: scale(1.1);
+}
+.board-sizes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.size-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ui-line);
+  border-radius: 6px;
+  background: var(--ui-surface);
+  cursor: pointer;
+  padding: 0;
+  color: var(--ui-subtle);
+  transition: all 0.15s ease;
+}
+.size-btn:hover {
+  background: var(--ui-hover);
+  color: var(--ui-ink);
+}
+.size-btn.active {
+  border-color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+  color: var(--ui-brand);
+}
+.size-dot {
+  background: currentColor;
+  border-radius: 50%;
+}
+
+/* --- Student Micro-reactions & Teacher Reaction HUD --- */
+.student-reaction-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-line);
+  border-radius: 999px;
+  padding: 6px 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  margin: 12px auto 0;
+  max-width: fit-content;
+  flex-wrap: wrap;
+}
+.student-reaction-bar small {
+  color: var(--ui-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px;
+  color: var(--ui-ink);
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.reaction-pill:hover {
+  background: var(--ui-hover);
+}
+.reaction-pill.active {
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-brand);
+  color: var(--ui-brand);
+  font-weight: 600;
+  transform: translateY(-1px);
+}
+.teacher-reaction-hud {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-line);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.reaction-hud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--ui-brand-soft);
+  color: var(--ui-brand);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+/* --- In-Room Heads-Up Alert Banner --- */
+.room-heads-up {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fef8ee;
+  color: #8c5b04;
+  border-bottom: 1px solid #f6e3b5;
+  padding: 9px 24px;
+  font-size: 12px;
+  animation: slideDown 0.2s ease-out;
+}
+.room-heads-up button {
+  background: #fff;
+  border: 1px solid #e8cd8a;
+  border-radius: 6px;
+  color: #7b4f00;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.room-heads-up button:hover {
+  background: #fdf2d8;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Submission Image Zoom Modal --- */
+.submission-zoom-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+}
+.submission-zoom-img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--ui-line);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+.submission-zoom-meta {
+  width: 100%;
+  background: var(--ui-bg);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* --- Dark Mode Overrides for Classroom --- */
+[data-theme="dark"] .classroom, body.dark .classroom { background: var(--ui-bg); }
+[data-theme="dark"] .room-header, body.dark .room-header { background: var(--ui-surface); border-color: var(--ui-line); }
+[data-theme="dark"] .room-left, body.dark .room-left,
+[data-theme="dark"] .room-right, body.dark .room-right,
+[data-theme="dark"] .room-controls, body.dark .room-controls,
+[data-theme="dark"] .room-stage, body.dark .room-stage { background: var(--ui-surface); border-color: var(--ui-line); }
+[data-theme="dark"] .drawing-surface, body.dark .drawing-surface { background: #131728; }
+[data-theme="dark"] .board-peer-note, body.dark .board-peer-note,
+[data-theme="dark"] .board-seed-text, body.dark .board-seed-text,
+[data-theme="dark"] .board-preview pre, body.dark .board-preview pre { background: #101321; }
+[data-theme="dark"] .room-tabs button, body.dark .room-tabs button { color: var(--ui-subtle); border-bottom-color: transparent; }
+[data-theme="dark"] .room-tabs button:hover, body.dark .room-tabs button:hover { color: var(--ui-ink); }
+[data-theme="dark"] .room-tabs button.active, body.dark .room-tabs button.active { color: var(--ui-brand); border-bottom-color: var(--ui-brand); }
+[data-theme="dark"] .room-activity:hover, body.dark .room-activity:hover { background: var(--ui-hover); }
+[data-theme="dark"] .room-activity.active, body.dark .room-activity.active { background: var(--ui-brand-soft); color: var(--ui-brand); }
+[data-theme="dark"] .room-heads-up, body.dark .room-heads-up { background: #282110; color: #f5cf7b; border-color: #4b3d1c; }
+[data-theme="dark"] .room-heads-up button, body.dark .room-heads-up button { background: #372d15; border-color: #5c4b22; color: #f9d98e; }
+[data-theme="dark"] .student-reaction-bar, body.dark .student-reaction-bar { background: var(--ui-surface); border-color: var(--ui-line); }
+[data-theme="dark"] .teacher-reaction-hud, body.dark .teacher-reaction-hud { background: var(--ui-surface); border-color: var(--ui-line); }
+[data-theme="dark"] .panel-collapse-btn, body.dark .panel-collapse-btn { background: var(--ui-surface); border-color: var(--ui-line); color: var(--ui-subtle); }
+[data-theme="dark"] .panel-collapse-btn:hover, body.dark .panel-collapse-btn:hover { background: var(--ui-hover); color: var(--ui-ink); }
+[data-theme="dark"] .size-btn, body.dark .size-btn { background: var(--ui-surface); border-color: var(--ui-line); color: var(--ui-subtle); }
+[data-theme="dark"] .size-btn.active, body.dark .size-btn.active { background: var(--ui-brand-soft); border-color: var(--ui-brand); color: var(--ui-brand); }
+

@@ -130,6 +130,7 @@ export function SubmissionPanel({
   const [activityId, setActivityId] = useState(
     session.currentActivityId || session.activities[0]?.id || "",
   );
+  const [zoomSub, setZoomSub] = useState<Submission | null>(null);
   const student = data.students.find((s) => s.id === studentId)!;
   const submissions = data.submissions.filter(
     (s) => s.sessionId === session.id && s.studentId === studentId,
@@ -298,6 +299,16 @@ export function SubmissionPanel({
                   : "Giáo viên chưa duyệt"}
               </small>
               {s.answer && <p>{s.answer}</p>}
+              {s.fileData && (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setZoomSub(s)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 4 }}
+                >
+                  🔍 Xem tệp đính kèm ({s.fileName || "Ảnh/PDF"})
+                </button>
+              )}
               {s.finalFeedback && <Banner>{s.finalFeedback}</Banner>}
             </div>
           ))
@@ -305,6 +316,37 @@ export function SubmissionPanel({
           <p className="muted">Chưa gửi bài trong buổi này.</p>
         )}
       </div>
+      {zoomSub && (
+        <Modal
+          title={`Bài làm: ${zoomSub.title}`}
+          onClose={() => setZoomSub(null)}
+          wide
+        >
+          <div className="submission-zoom-content">
+            {zoomSub.fileData ? (
+              zoomSub.fileData.startsWith("data:application/pdf") ? (
+                <iframe
+                  src={zoomSub.fileData}
+                  title={zoomSub.fileName || "PDF"}
+                  className="pdf-frame"
+                  style={{ width: "100%", height: "60vh", border: 0 }}
+                />
+              ) : (
+                <img
+                  src={zoomSub.fileData}
+                  alt={zoomSub.title}
+                  className="submission-zoom-img"
+                />
+              )
+            ) : null}
+            <div className="submission-zoom-meta">
+              <strong>{zoomSub.title}</strong>
+              <p>{zoomSub.answer || "Không có lời giải bằng văn bản."}</p>
+              <small className="muted">Gửi lúc: {formatTime(zoomSub.createdAt)}</small>
+            </div>
+          </div>
+        </Modal>
+      )}
       {confirm && (
         <Modal
           title="Xác nhận bài gửi"
@@ -438,6 +480,34 @@ export function CopilotPanel({
     setStatus("idle");
     setReply("");
   };
+  const saveAsEvidence = async () => {
+    if (!reply.trim()) return;
+    const saved = await commitData((prev) => ({
+      ...prev,
+      evidence: [
+        ...prev.evidence,
+        {
+          id: uid("ev"),
+          sessionId: session.id,
+          studentId,
+          activityId: activityId || undefined,
+          kind: "Gợi ý giảng dạy",
+          title: "Copilot · " + (last || "Gợi ý sư phạm"),
+          detail: reply.trim(),
+          support: "Có gợi ý",
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      aiRequests: prev.aiRequests.map((r) =>
+        r.id === requestId ? { ...r, status: "used", text: reply } : r,
+      ),
+    }));
+    if (saved) {
+      toast("Đã lưu trực tiếp vào mục Minh chứng & Ghi chú.", "success");
+      setStatus("idle");
+      setReply("");
+    }
+  };
   return (
     <div className="copilot-workflow">
       <SectionHead
@@ -532,6 +602,14 @@ export function CopilotPanel({
                 onClick={() => decide("used")}
               >
                 Dùng
+              </button>
+              <button
+                className="button secondary small"
+                disabled={!reply.trim()}
+                onClick={saveAsEvidence}
+                title="Lưu gợi ý này thành ghi chú minh chứng của học sinh"
+              >
+                <Check size={14} /> Lưu thành minh chứng
               </button>
               <button
                 className="button ghost small"

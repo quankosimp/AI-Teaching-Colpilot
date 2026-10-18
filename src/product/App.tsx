@@ -24,6 +24,7 @@ import {
   LibraryBig,
   Menu,
   MessageSquareText,
+  Moon,
   Pencil,
   Play,
   Plus,
@@ -33,6 +34,7 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  Sun,
   Trash2,
   Upload,
   Users,
@@ -73,7 +75,7 @@ import {
 } from "./ui";
 import { AuthScreen, AccountPage } from "./Auth";
 import { useTeacherAccount } from "./adapters";
-import { TeacherRoom, GuestPortal } from "./Classroom";
+import { TeacherRoom, GuestPortal, useTheme } from "./Classroom";
 import {
   SessionSetup,
   ActivityEditor,
@@ -138,6 +140,7 @@ const navMain: { page: Page; label: string; icon: typeof LayoutDashboard }[] = [
 
 function Shell({ children }: { children: ReactNode }) {
   const { page, go, data, toast } = useStore();
+  const { theme, toggle: toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pending =
     data.submissions.filter((s) => s.status !== "reviewed").length +
@@ -228,6 +231,22 @@ function Shell({ children }: { children: ReactNode }) {
             <strong>{pageNames[page]}</strong>
           </div>
           <div className="topbar-right">
+            <button
+              className="icon-button"
+              aria-label={
+                theme === "dark"
+                  ? "Chuyển sang giao diện Sáng"
+                  : "Chuyển sang giao diện Tối"
+              }
+              title={
+                theme === "dark"
+                  ? "Giao diện Sáng"
+                  : "Giao diện Tối (Bảo vệ mắt)"
+              }
+              onClick={toggleTheme}
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
             <span className="local-pill">
               <span /> Dữ liệu trong trình duyệt
             </span>

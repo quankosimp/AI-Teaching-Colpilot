@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   Film,
   Hand,
@@ -11,17 +13,19 @@ import {
   Mic,
   MicOff,
   Monitor,
+  Moon,
   Pencil,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   Square,
+  Sun,
   Users,
   Video,
   VideoOff,
 } from "lucide-react";
 import type { Session } from "./model";
-import { boardKey, defaultTools, sessionStudentIds } from "./model";
+import { boardKey, defaultTools, sessionStudentIds, uid } from "./model";
 import { useStore } from "./store";
 import { appendEvent, mockRecording, useCall } from "./adapters";
 import { inviteValid, SessionSetup } from "./SessionSetup";
@@ -45,6 +49,34 @@ import {
   SubmissionPanel,
 } from "./RoomPanels";
 import { SourceViewer } from "./SourceViewer";
+
+export function useTheme() {
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    return (
+      (localStorage.getItem("ai-teaching-copilot-theme") as
+        | "light"
+        | "dark") || "light"
+    );
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    if (theme === "dark") {
+      document.body.classList.add("dark");
+    } else {
+      document.body.classList.remove("dark");
+    }
+    localStorage.setItem("ai-teaching-copilot-theme", theme);
+  }, [theme]);
+  const toggle = () => setTheme((t) => (t === "light" ? "dark" : "light"));
+  return { theme, toggle };
+}
+
+export const ROOM_REACTIONS = [
+  { emoji: "👍", label: "Đã hiểu", tone: "green" },
+  { emoji: "✋", label: "Cần giảng lại", tone: "amber" },
+  { emoji: "⏳", label: "Cần thêm giờ", tone: "blue" },
+  { emoji: "💡", label: "Có cách khác", tone: "violet" },
+] as const;
 
 function useClock() {
   const [now, setNow] = useState(Date.now());
@@ -346,6 +378,9 @@ function TeacherSession({
   const { data, setData, go, toast } = useStore();
   const call = useCall(session.id);
   const [entered, setEntered] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const { theme, toggle: toggleTheme } = useTheme();
   const [panel, setPanel] = useState<
     "copilot" | "evidence" | "submissions" | "chat"
   >("copilot");
@@ -367,6 +402,13 @@ function TeacherSession({
     (m) =>
       m.sessionId === session.id &&
       sessionStudentIds(session).includes(m.studentId),
+  );
+  const sessionReactions = (data.reactions || []).filter(
+    (r) => r.sessionId === session.id,
+  );
+  const handRaisers = members.filter((m) => m.handRaised);
+  const newSubmissions = data.submissions.filter(
+    (s) => s.sessionId === session.id && s.status === "new",
   );
   const current =
     session.activities.find((a) => a.id === session.currentActivityId) ||
@@ -456,6 +498,22 @@ function TeacherSession({
           <h1>{session.title}</h1>
         </div>
         <div className="room-header-actions">
+          <button
+            className="icon-button"
+            aria-label={
+              theme === "dark"
+                ? "Chuyển sang giao diện Sáng"
+                : "Chuyển sang giao diện Tối"
+            }
+            title={
+              theme === "dark"
+                ? "Giao diện Sáng"
+                : "Giao diện Tối (Bảo vệ mắt)"
+            }
+            onClick={toggleTheme}
+          >
+            {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
           <Status tone="violet">Demo</Status>
           <span className="room-timer">
             {String(Math.floor(elapsed / 60)).padStart(2, "0")}:
@@ -485,6 +543,51 @@ function TeacherSession({
           </button>
         </div>
       </header>
+      {handRaisers.length > 0 && (
+        <div className="room-heads-up">
+          <span>
+            ✋ <strong>Học sinh giơ tay:</strong>{" "}
+            {handRaisers
+              .map(
+                (m) =>
+                  data.students.find((s) => s.id === m.studentId)?.name,
+              )
+              .filter(Boolean)
+              .join(", ")}
+          </span>
+          <button
+            onClick={() => {
+              const first = handRaisers[0];
+              if (first) {
+                setStudentId(first.studentId);
+                setData((prev) => ({
+                  ...prev,
+                  members: prev.members.map((m) =>
+                    m.id === first.id ? { ...m, handRaised: false } : m,
+                  ),
+                }));
+              }
+            }}
+          >
+            Tiếp nhận ngay
+          </button>
+        </div>
+      )}
+      {newSubmissions.length > 0 && (
+        <div className="room-heads-up">
+          <span>
+            📝 Có <strong>{newSubmissions.length}</strong> bài nộp mới trong buổi!
+          </span>
+          <button
+            onClick={() => {
+              setPanel("submissions");
+              setRightCollapsed(false);
+            }}
+          >
+            Mở bài nộp
+          </button>
+        </div>
+      )}
       {recording && (
         <div className="recording-indicator">
           <span /> Đang ghi hình mô phỏng · Chỉ video và nội dung chung
@@ -511,13 +614,44 @@ function TeacherSession({
           </button>
         </Banner>
       )}
-      <div className="classroom-layout">
-        <aside className="room-left">
-          <SectionHead
-            title="Lộ trình"
-            meta={`${session.activities.length} hoạt động · ${session.duration} phút`}
-          />
-          {session.activities.map((a, i) => (
+      <div
+        className={
+          "classroom-layout" +
+          (leftCollapsed ? " left-collapsed" : "") +
+          (rightCollapsed ? " right-collapsed" : "")
+        }
+      >
+        {leftCollapsed ? (
+          <aside className="room-left collapsed-panel">
+            <button
+              className="panel-collapse-btn"
+              onClick={() => setLeftCollapsed(false)}
+              title="Mở rộng lộ trình & danh sách học sinh"
+              aria-label="Mở rộng lộ trình"
+            >
+              <ChevronRight size={16} />
+            </button>
+            <span className="collapsed-panel-label">
+              Lộ trình ({session.activities.length})
+            </span>
+          </aside>
+        ) : (
+          <aside className="room-left">
+            <div className="panel-head-row">
+              <SectionHead
+                title="Lộ trình"
+                meta={`${session.activities.length} hoạt động · ${session.duration} phút`}
+              />
+              <button
+                className="panel-collapse-btn"
+                onClick={() => setLeftCollapsed(true)}
+                title="Thu gọn lộ trình để mở rộng bảng viết"
+                aria-label="Thu gọn lộ trình"
+              >
+                <ChevronLeft size={16} />
+              </button>
+            </div>
+            {session.activities.map((a, i) => (
             <button
               className={
                 "room-activity " + (current?.id === a.id ? "active" : "")
@@ -528,6 +662,9 @@ function TeacherSession({
                   appendEvent(
                     {
                       ...prev,
+                      reactions: (prev.reactions || []).filter(
+                        (r) => r.sessionId !== session.id,
+                      ),
                       sessions: prev.sessions.map((s) =>
                         s.id === session.id
                           ? {
@@ -658,7 +795,8 @@ function TeacherSession({
             </button>
           </details>
         </aside>
-        <main className="room-main">
+      )}
+      <main className="room-main">
           <VideoStrip session={session} call={call} />
           <div className="room-stage">
             <div className="stage-top">
@@ -666,10 +804,45 @@ function TeacherSession({
                 <small>ĐANG CHIA SẺ VỚI HỌC SINH</small>
                 <h2>{current?.title}</h2>
               </div>
-              <Status tone="green">
-                <Monitor size={13} />
-                Nội dung chung
-              </Status>
+              <div className="row-actions">
+                {sessionReactions.length > 0 && (
+                  <div
+                    className="teacher-reaction-hud"
+                    title="Phản hồi thời gian thực từ học sinh"
+                  >
+                    {ROOM_REACTIONS.map((r) => {
+                      const count = sessionReactions.filter(
+                        (x) => x.label === r.label,
+                      ).length;
+                      if (!count) return null;
+                      return (
+                        <span key={r.label} className="reaction-hud-badge">
+                          {r.emoji} {count}
+                        </span>
+                      );
+                    })}
+                    <button
+                      className="text-button"
+                      style={{ fontSize: 11, minHeight: "auto", padding: 0 }}
+                      onClick={() =>
+                        setData((prev) => ({
+                          ...prev,
+                          reactions: (prev.reactions || []).filter(
+                            (x) => x.sessionId !== session.id,
+                          ),
+                        }))
+                      }
+                      title="Làm mới phản hồi"
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                )}
+                <Status tone="green">
+                  <Monitor size={13} />
+                  Nội dung chung
+                </Status>
+              </div>
             </div>
             <div
               className="room-tabs"
@@ -772,102 +945,126 @@ function TeacherSession({
             )}
           </div>
         </main>
-        <aside className="room-right">
-          <div className="private-panel-label">
-            <ShieldCheck size={15} />
-            Chỉ giáo viên thấy
-          </div>
-          <select
-            value={studentId}
-            onChange={(e) => setStudentId(e.target.value)}
-            aria-label="Học sinh đang quan sát"
-          >
-            {sessionStudentIds(session).map((id) => (
-              <option key={id} value={id}>
-                {data.students.find((s) => s.id === id)?.name}
-              </option>
-            ))}
-          </select>
-          <div className="room-tabs panel-navigation">
-            {(
-              [
-                { id: "copilot", label: "Copilot" },
-                { id: "evidence", label: "Ghi nhận" },
-                { id: "submissions", label: "Bài nộp" },
-                { id: "chat", label: "Chat" },
-              ] as const
-            ).map((t) => (
+        {rightCollapsed ? (
+          <aside className="room-right collapsed-panel">
+            <button
+              className="panel-collapse-btn"
+              onClick={() => setRightCollapsed(false)}
+              title="Mở rộng bảng điều khiển sư phạm"
+              aria-label="Mở rộng bảng điều khiển"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="collapsed-panel-label">Copilot & Ghi nhận</span>
+          </aside>
+        ) : (
+          <aside className="room-right">
+            <div className="panel-head-row">
+              <div className="private-panel-label" style={{ marginBottom: 0 }}>
+                <ShieldCheck size={15} />
+                Chỉ giáo viên thấy
+              </div>
               <button
-                className={panel === t.id ? "active" : ""}
-                key={t.id}
-                onClick={() => setPanel(t.id)}
+                className="panel-collapse-btn"
+                onClick={() => setRightCollapsed(true)}
+                title="Thu gọn bảng điều khiển sư phạm để mở rộng bảng viết"
+                aria-label="Thu gọn bảng điều khiển"
               >
-                {t.label}
-                {t.id === "submissions" && <span>{submissions.length}</span>}
-              </button>
-            ))}
-          </div>
-          {panel === "copilot" && (
-            <CopilotPanel
-              key={`${studentId}:${current?.id}`}
-              session={session}
-              studentId={studentId}
-            />
-          )}{" "}
-          {panel === "evidence" && (
-            <CapturePanel
-              key={studentId}
-              session={session}
-              studentId={studentId}
-            />
-          )}{" "}
-          {panel === "chat" && (
-            <ChatPanel session={session} actorId="teacher" teacher />
-          )}{" "}
-          {panel === "submissions" && (
-            <div>
-              <SectionHead
-                title="Bài của học sinh"
-                meta="Chọn bài để xem gốc và nhận xét."
-              />
-              {submissions.length ? (
-                submissions.map((s) => (
-                  <div className="room-submission" key={s.id}>
-                    <strong>{s.title}</strong>
-                    <p>{s.answer || s.fileName}</p>
-                    <Status tone={s.status === "reviewed" ? "green" : "amber"}>
-                      {s.status === "reviewed" ? "Đã duyệt" : "Cần xem"}
-                    </Status>
-                    <button
-                      className="text-button"
-                      onClick={() => {
-                        const ev = data.evidence.find(
-                          (e) => e.submissionId === s.id,
-                        );
-                        if (ev) setSource(ev.id);
-                        else setLeft(true);
-                      }}
-                    >
-                      Xem & chấm bài
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <Empty
-                  icon={<ClipboardCheck size={23} />}
-                  title="Chưa có bài nộp"
-                  description="Học sinh gửi từ công cụ Bài làm trong phòng."
-                />
-              )}
-              <button
-                className="button ghost full"
-                onClick={() => setLeft(true)}
-              >
-                Mở hộp chấm bài
+                <ChevronRight size={16} />
               </button>
             </div>
-          )}
-        </aside>
+            <select
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              aria-label="Học sinh đang quan sát"
+            >
+              {sessionStudentIds(session).map((id) => (
+                <option key={id} value={id}>
+                  {data.students.find((s) => s.id === id)?.name}
+                </option>
+              ))}
+            </select>
+            <div className="room-tabs panel-navigation">
+              {(
+                [
+                  { id: "copilot", label: "Copilot" },
+                  { id: "evidence", label: "Ghi nhận" },
+                  { id: "submissions", label: "Bài nộp" },
+                  { id: "chat", label: "Chat" },
+                ] as const
+              ).map((t) => (
+                <button
+                  className={panel === t.id ? "active" : ""}
+                  key={t.id}
+                  onClick={() => setPanel(t.id)}
+                >
+                  {t.label}
+                  {t.id === "submissions" && <span>{submissions.length}</span>}
+                </button>
+              ))}
+            </div>
+            {panel === "copilot" && (
+              <CopilotPanel
+                key={`${studentId}:${current?.id}`}
+                session={session}
+                studentId={studentId}
+              />
+            )}{" "}
+            {panel === "evidence" && (
+              <CapturePanel
+                key={studentId}
+                session={session}
+                studentId={studentId}
+              />
+            )}{" "}
+            {panel === "chat" && (
+              <ChatPanel session={session} actorId="teacher" teacher />
+            )}{" "}
+            {panel === "submissions" && (
+              <div>
+                <SectionHead
+                  title="Bài của học sinh"
+                  meta="Chọn bài để xem gốc và nhận xét."
+                />
+                {submissions.length ? (
+                  submissions.map((s) => (
+                    <div className="room-submission" key={s.id}>
+                      <strong>{s.title}</strong>
+                      <p>{s.answer || s.fileName}</p>
+                      <Status tone={s.status === "reviewed" ? "green" : "amber"}>
+                        {s.status === "reviewed" ? "Đã duyệt" : "Cần xem"}
+                      </Status>
+                      <button
+                        className="text-button"
+                        onClick={() => {
+                          const ev = data.evidence.find(
+                            (e) => e.submissionId === s.id,
+                          );
+                          if (ev) setSource(ev.id);
+                          else setLeft(true);
+                        }}
+                      >
+                        Xem & chấm bài
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <Empty
+                    icon={<ClipboardCheck size={23} />}
+                    title="Chưa có bài nộp"
+                    description="Học sinh gửi từ công cụ Bài làm trong phòng."
+                  />
+                )}
+                <button
+                  className="button ghost full"
+                  onClick={() => setLeft(true)}
+                >
+                  Mở hộp chấm bài
+                </button>
+              </div>
+            )}
+          </aside>
+        )}
       </div>
       <footer className="room-controls">
         <div className="row-actions">
@@ -1166,6 +1363,7 @@ function StudentSession({
   token: string;
 }) {
   const { data, setData } = useStore();
+  const { theme, toggle: toggleTheme } = useTheme();
   const student = data.students.find((s) => s.id === studentId)!;
   const member = data.members.find(
     (m) => m.sessionId === session.id && m.studentId === studentId,
@@ -1284,13 +1482,31 @@ function StudentSession({
           <small>{student.name} · Không gian học sinh</small>
           <h1>{session.title}</h1>
         </div>
-        <Status tone="violet">Demo</Status>
-        {recording && (
-          <Status tone="amber">
-            <Film size={13} />
-            Đang ghi hình
-          </Status>
-        )}
+        <div className="room-header-actions">
+          <button
+            className="icon-button"
+            aria-label={
+              theme === "dark"
+                ? "Chuyển sang giao diện Sáng"
+                : "Chuyển sang giao diện Tối"
+            }
+            title={
+              theme === "dark"
+                ? "Giao diện Sáng"
+                : "Giao diện Tối (Bảo vệ mắt)"
+            }
+            onClick={toggleTheme}
+          >
+            {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+          <Status tone="violet">Demo</Status>
+          {recording && (
+            <Status tone="amber">
+              <Film size={13} />
+              Đang ghi hình
+            </Status>
+          )}
+        </div>
       </header>
       {!connected && (
         <Banner error>
@@ -1322,6 +1538,57 @@ function StudentSession({
           <span className="eyebrow">HOẠT ĐỘNG HIỆN TẠI</span>
           <h2>{activity?.title}</h2>
           <p>{activity?.description}</p>
+        </div>
+        <div
+          className="student-reaction-bar"
+          role="toolbar"
+          aria-label="Phản hồi nhanh"
+        >
+          <small>Phản hồi nhanh:</small>
+          {ROOM_REACTIONS.map((r) => {
+            const active = (data.reactions || []).some(
+              (x) =>
+                x.sessionId === session.id &&
+                x.studentId === studentId &&
+                x.label === r.label,
+            );
+            return (
+              <button
+                key={r.label}
+                type="button"
+                className={"reaction-pill " + (active ? "active" : "")}
+                disabled={!connected}
+                onClick={() => {
+                  setData((prev) => {
+                    const existing = (prev.reactions || []).filter(
+                      (x) =>
+                        !(
+                          x.sessionId === session.id &&
+                          x.studentId === studentId
+                        ),
+                    );
+                    const next = active
+                      ? existing
+                      : [
+                          ...existing,
+                          {
+                            id: uid("react"),
+                            sessionId: session.id,
+                            studentId,
+                            emoji: r.emoji,
+                            label: r.label,
+                            createdAt: new Date().toISOString(),
+                          },
+                        ];
+                    return { ...prev, reactions: next };
+                  });
+                }}
+              >
+                <span>{r.emoji}</span>
+                <span>{r.label}</span>
+              </button>
+            );
+          })}
         </div>
         <div
           className="room-tabs student-tabs"
