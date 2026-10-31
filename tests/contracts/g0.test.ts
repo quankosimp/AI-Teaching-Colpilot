@@ -22,6 +22,9 @@ import {
   ClaimRef,
   EvidenceForApproval,
   ObservationInput,
+  StudentSubmission,
+  UploadIntent,
+  MAX_UPLOAD_BYTES,
 } from "../../contracts/index.js";
 
 // Helper fixtures
@@ -333,12 +336,13 @@ test("G0-CONTRACT: Session lifecycle enforces valid state transitions and reject
     "Live session cannot be transitioned via review_reopened",
   );
 
-  // Student write context: prohibited if session is ended or tool is disabled
+  // Student write context: prohibited if session is ended, member is not joined, or canWrite is false
   const baseWrite = {
     status: "live" as const,
     memberState: "joined" as const,
     memberBelongsToSession: true,
-    inviteValid: true,
+    roomSessionValid: true,
+    canWrite: true,
     toolEnabled: true,
     memberToolEnabled: true,
   };
@@ -352,6 +356,11 @@ test("G0-CONTRACT: Session lifecycle enforces valid state transitions and reject
     StudentToolWriteContext.safeParse({ ...baseWrite, memberState: "waiting" }).success,
     false,
     "Student tool write must be rejected when member is in waiting state",
+  );
+  assert.equal(
+    StudentToolWriteContext.safeParse({ ...baseWrite, canWrite: false }).success,
+    false,
+    "Student tool write must be rejected when member canWrite is false (even if session is valid)",
   );
   assert.equal(
     StudentToolWriteContext.safeParse({ ...baseWrite, toolEnabled: false }).success,
@@ -558,5 +567,116 @@ test("G0-CONTRACT: Realtime envelopes enforce monotonic sequencing and strict au
     canReceiveEvent(studentActor, teacherOnlyEvent),
     false,
     "Student must NOT receive teacher-only scoped events",
+  );
+});
+
+// =========================================================================
+// 7. MF01..03 Contract Review Audits (Post-d8d98a3 Refinements)
+// =========================================================================
+test("G0-CONTRACT: Audit MF01..03 refinements (upload cap, AI consistency, student submission and board ownership)", () => {
+  // MF01: Member grant independent of invite rotation (roomSessionValid + canWrite)
+  const rotatedInviteWrite = {
+    status: "live" as const,
+    memberState: "joined" as const,
+    memberBelongsToSession: true,
+    roomSessionValid: true, // student is joined in room even if invite was rotated
+    canWrite: true,
+    toolEnabled: true,
+    memberToolEnabled: true,
+  };
+  assert.equal(StudentToolWriteContext.safeParse(rotatedInviteWrite).success, true);
+
+  // MF02a: UploadIntent cap at 10 MiB
+  assert.equal(MAX_UPLOAD_BYTES, 10 * 1024 * 1024);
+  const validUpload = {
+    fileName: "homework.pdf",
+    mimeType: "application/pdf" as const,
+    sizeBytes: MAX_UPLOAD_BYTES,
+    sha256: "a".repeat(64),
+  };
+  assert.equal(UploadIntent.safeParse(validUpload).success, true);
+  assert.equal(
+    UploadIntent.safeParse({ ...validUpload, sizeBytes: MAX_UPLOAD_BYTES + 1 }).success,
+    false,
+    "UploadIntent must reject files exceeding 10 MiB",
+  );
+
+  // MF02b: ObservationInput kind/source consistency
+  const validAIObservation = {
+    studentId: "stu-1",
+    kind: "GoiYGiangDay" as const,
+    title: "Gợi ý giảng dạy",
+    detail: "Thử phân tích hằng đẳng thức",
+    support: "CoGoiY" as const,
+    source: { type: "ai_suggestion" as const, id: "ai-1", version: 1 },
+  };
+  assert.equal(ObservationInput.safeParse(validAIObservation).success, true);
+
+  // GoiYGiangDay with non-ai source must be rejected
+  assert.equal(
+    ObservationInput.safeParse({
+      ...validAIObservation,
+      source: { type: "submission" as const, id: "sub-1", version: 1 },
+    }).success,
+    false,
+    "GoiYGiangDay must have source.type == ai_suggestion",
+  );
+
+  // Non-GoiYGiangDay kind with ai_suggestion source must be rejected
+  assert.equal(
+    ObservationInput.safeParse({
+      ...validAIObservation,
+      kind: "BaiLam" as const,
+    }).success,
+    false,
+    "BaiLam must not have ai_suggestion as source",
+  );
+
+  // MF03a: StudentSubmission exposes own feedback and file, but strictly rejects suggestedFeedback
+  const validStudentSubmission = {
+    id: "sub-1",
+    activityId: "act-1",
+    title: "Bài tập 1",
+    answer: "x = 2",
+    status: "reviewed" as const,
+    fileName: "sub-1.png",
+    readUrl: "https://minio.local/signed/sub-1.png",
+    support: "DocLap" as const,
+    finalFeedback: "Làm đúng công thức",
+    score: "10/10",
+    createdAt: "2026-10-31T15:00:00.000Z",
+  };
+  assert.equal(StudentSubmission.safeParse(validStudentSubmission).success, true);
+
+  // Must reject private AI suggested feedback on student submission view model
+  assert.equal(
+    StudentSubmission.safeParse({
+      ...validStudentSubmission,
+      suggestedFeedback: "AI suggestion: review step 2",
+    }).success,
+    false,
+    "suggestedFeedback must never leak into StudentSubmission view model",
+  );
+
+  // MF03b: sharedBoard owner must match session.sharedBoardOwnerId
+  const roomWithMismatchedSharedBoard = {
+    ...validRoom,
+    session: {
+      ...validSession,
+      sharedBoardOwnerId: "stu-1", // Teacher chose stu-1 board to share
+    },
+    sharedBoard: {
+      id: "board-s2",
+      ownerId: "stu-2", // But sharedBoard has owner stu-2!
+      shared: true,
+      revision: 1,
+      strokes: [],
+      text: "Nháp",
+    },
+  };
+  assert.equal(
+    validateStudentRoomProjection(roomWithMismatchedSharedBoard, "stu-1").success,
+    false,
+    "sharedBoard owner must match session.sharedBoardOwnerId",
   );
 });
