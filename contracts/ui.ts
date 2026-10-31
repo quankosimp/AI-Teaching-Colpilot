@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { Id, SessionStatus, Stroke, Tools, Timestamp } from "./domain.js";
+import {
+  Id,
+  SessionStatus,
+  Stroke,
+  SupportLevel,
+  Tools,
+  Timestamp,
+} from "./domain.js";
 import { ErrorCode } from "./errors.js";
 
 export const StudentActivity = z.strictObject({
@@ -38,6 +45,11 @@ export const StudentSubmission = z.strictObject({
   title: z.string(),
   answer: z.string(),
   status: z.enum(["new", "draft", "reviewed"]),
+  fileName: z.string().nullable().optional(),
+  readUrl: z.url().nullable().optional(),
+  support: SupportLevel.nullable().optional(),
+  finalFeedback: z.string().nullable().optional(),
+  score: z.string().nullable().optional(),
   createdAt: Timestamp,
 });
 export const StudentRoomViewModel = z.strictObject({
@@ -149,8 +161,8 @@ export function validateStudentRoomProjection(
     (view.commonBoard && view.commonBoard.ownerId !== "common") ||
     (view.ownBoard && view.ownBoard.ownerId !== studentId) ||
     (view.sharedBoard &&
-      view.sharedBoard.ownerId !== "common" &&
-      !view.sharedBoard.shared)
+      (view.sharedBoard.ownerId !== view.session.sharedBoardOwnerId ||
+        (view.sharedBoard.ownerId !== "common" && !view.sharedBoard.shared)))
   ) {
     return {
       success: false as const,

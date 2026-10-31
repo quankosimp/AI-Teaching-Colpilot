@@ -14,6 +14,10 @@ import {
   ReviewCompletionContext,
   StudentToolWriteContext,
   validateStudentRoomProjection,
+  UploadIntent,
+  MAX_UPLOAD_BYTES,
+  ObservationInput,
+  StudentSubmission,
 } from "../../../contracts/index";
 
 const observation = {
@@ -273,7 +277,8 @@ test("review completion and student writes respect session and membership gates"
     status: "live",
     memberState: "joined",
     memberBelongsToSession: true,
-    inviteValid: true,
+    roomSessionValid: true,
+    canWrite: true,
     toolEnabled: true,
     memberToolEnabled: true,
   };
@@ -292,6 +297,173 @@ test("review completion and student writes respect session and membership gates"
   );
   assert.equal(
     IdempotencyResponse.safeParse({ status: "raw-secret" }).success,
+    false,
+  );
+});
+
+test("member grant survives invite rotation but explicit revocation and missing command permission fail", () => {
+  const grant = {
+    status: "live",
+    memberState: "joined",
+    memberBelongsToSession: true,
+    roomSessionValid: true,
+    canWrite: true,
+    toolEnabled: true,
+    memberToolEnabled: true,
+  };
+  assert.equal(StudentToolWriteContext.safeParse(grant).success, true);
+  assert.equal(
+    StudentToolWriteContext.safeParse({ ...grant, roomSessionValid: false })
+      .success,
+    false,
+  );
+  assert.equal(
+    StudentToolWriteContext.safeParse({ ...grant, memberState: "left" })
+      .success,
+    false,
+  );
+  assert.equal(
+    StudentToolWriteContext.safeParse({ ...grant, canWrite: false }).success,
+    false,
+  );
+  assert.equal(
+    StudentToolWriteContext.safeParse({ ...grant, inviteValid: false }).success,
+    false,
+  );
+});
+
+test("uploads enforce 10 MiB and AI aid kind matches a supplied source", () => {
+  const file = {
+    fileName: "a.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: MAX_UPLOAD_BYTES,
+    sha256: "a".repeat(64),
+  };
+  assert.equal(UploadIntent.safeParse(file).success, true);
+  assert.equal(
+    UploadIntent.safeParse({ ...file, sizeBytes: MAX_UPLOAD_BYTES + 1 })
+      .success,
+    false,
+  );
+  assert.equal(
+    UploadIntent.safeParse({ ...file, sizeBytes: 0 }).success,
+    false,
+  );
+  const item = {
+    studentId: "s",
+    kind: "GoiYGiangDay",
+    title: "t",
+    detail: "d",
+    support: "CoGoiY",
+  };
+  const ai = { type: "ai_suggestion", id: "ai", version: 1 };
+  const sub = { type: "submission", id: "sub", version: 1 };
+  assert.equal(
+    ObservationInput.safeParse({ ...item, source: ai }).success,
+    true,
+  );
+  assert.equal(ObservationInput.safeParse(item).success, true);
+  assert.equal(
+    ObservationInput.safeParse({ ...item, source: sub }).success,
+    false,
+  );
+  assert.equal(
+    ObservationInput.safeParse({ ...item, kind: "BaiLam", source: ai }).success,
+    false,
+  );
+  assert.equal(
+    ObservationInput.safeParse({ ...item, kind: "BaiLam", source: sub })
+      .success,
+    true,
+  );
+});
+
+test("own submission exposes feedback but rejects private AI suggestions", () => {
+  const submission = {
+    id: "sub",
+    activityId: null,
+    title: "Bài",
+    answer: "1",
+    status: "reviewed",
+    createdAt: "2026-10-31T00:00:00Z",
+  };
+  assert.equal(
+    StudentSubmission.safeParse({
+      ...submission,
+      fileName: "a.pdf",
+      readUrl: "https://example.test/file",
+      support: "DocLap",
+      finalFeedback: "Tốt",
+      score: "8",
+    }).success,
+    true,
+  );
+  assert.equal(
+    StudentSubmission.safeParse({
+      ...submission,
+      fileName: null,
+      readUrl: null,
+      support: null,
+      finalFeedback: null,
+      score: null,
+    }).success,
+    true,
+  );
+  assert.equal(
+    StudentSubmission.safeParse({ ...submission, suggestedFeedback: "riêng" })
+      .success,
+    false,
+  );
+});
+
+test("shared board must match the selected owner and actually be shared", () => {
+  const session = {
+    id: "room",
+    title: "Class",
+    sharedGoal: "Goal",
+    status: "live",
+    currentActivityId: null,
+    sharedView: "board",
+    sharedBoardOwnerId: "s2",
+    materialPage: 0,
+    tools: { board: true, check: true, upload: true, chat: true },
+  };
+  const sharedBoard = {
+    id: "b",
+    ownerId: "s2",
+    shared: true,
+    revision: 1,
+    strokes: [],
+    text: "shared",
+  };
+  const view = {
+    session,
+    activities: [],
+    currentMaterial: null,
+    commonBoard: null,
+    sharedBoard,
+    ownBoard: null,
+    ownAttempts: [],
+    ownSubmissions: [],
+    activeQuickCheck: null,
+    ownCheckResponse: null,
+    roomMessages: [],
+    members: [],
+    lastEventSeq: 0,
+  };
+  assert.equal(validateStudentRoomProjection(view, "s1").success, true);
+  assert.equal(
+    validateStudentRoomProjection(
+      { ...view, session: { ...session, sharedBoardOwnerId: "common" } },
+      "s1",
+    ).success,
+    false,
+  );
+  assert.equal(
+    validateStudentRoomProjection(
+      { ...view, sharedBoard: { ...sharedBoard, shared: false } },
+      "s1",
+    ).success,
     false,
   );
 });

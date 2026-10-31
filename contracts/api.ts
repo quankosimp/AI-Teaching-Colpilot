@@ -73,23 +73,31 @@ export const AnnotationInput = z.strictObject({
   text: z.string().trim().min(1),
   studentId: Id.optional(),
 });
-export const ObservationInput = z.strictObject({
-  studentId: Id,
-  activityId: Id.nullable().optional(),
-  kind: z.enum([
-    "GhiChu",
-    "BaiLam",
-    "MucHoTro",
-    "GoiYGiangDay",
-    "TrangNhap",
-    "KiemTraDocLap",
-    "ChuThichDe",
-  ]),
-  title: z.string(),
-  detail: z.string(),
-  support: SupportLevel,
-  source: SourceRef.optional(),
-});
+export const ObservationInput = z
+  .strictObject({
+    studentId: Id,
+    activityId: Id.nullable().optional(),
+    kind: z.enum([
+      "GhiChu",
+      "BaiLam",
+      "MucHoTro",
+      "GoiYGiangDay",
+      "TrangNhap",
+      "KiemTraDocLap",
+      "ChuThichDe",
+    ]),
+    title: z.string(),
+    detail: z.string(),
+    support: SupportLevel,
+    source: SourceRef.optional(),
+  })
+  .refine(
+    (input) =>
+      !input.source ||
+      (input.kind === "GoiYGiangDay") ===
+        (input.source.type === "ai_suggestion"),
+    { message: "AI teaching aid kind and source must match" },
+  );
 export const ClaimReviewCommand = z.discriminatedUnion("action", [
   z.strictObject({
     action: z.literal("approve"),
@@ -237,10 +245,11 @@ export const StudentInput = z.strictObject({
   notes: z.string(),
   status: z.enum(["active", "archived"]),
 });
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const UploadIntent = z.strictObject({
   fileName: z.string().min(1),
   mimeType: z.enum(["application/pdf", "image/jpeg", "image/png"]),
-  sizeBytes: z.number().int().positive(),
+  sizeBytes: z.number().int().positive().max(MAX_UPLOAD_BYTES),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
 export const MaterialInput = z.strictObject({

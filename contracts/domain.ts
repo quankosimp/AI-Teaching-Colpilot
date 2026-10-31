@@ -203,12 +203,14 @@ export const ReviewCompletionContext = z
       });
   });
 
+// canWrite is derived per command; a board-only lock must not disable chat or uploads.
 export const StudentToolWriteContext = z
   .strictObject({
     status: SessionStatus,
     memberState: MemberState,
     memberBelongsToSession: z.boolean(),
-    inviteValid: z.boolean(),
+    roomSessionValid: z.boolean(),
+    canWrite: z.boolean(),
     toolEnabled: z.boolean(),
     memberToolEnabled: z.boolean(),
   })
@@ -217,7 +219,8 @@ export const StudentToolWriteContext = z
       input.status === "live" &&
       input.memberState === "joined" &&
       input.memberBelongsToSession &&
-      input.inviteValid &&
+      input.roomSessionValid &&
+      input.canWrite &&
       input.toolEnabled &&
       input.memberToolEnabled,
     { message: "Student tool action is not permitted" },
