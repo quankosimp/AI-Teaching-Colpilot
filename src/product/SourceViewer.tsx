@@ -118,10 +118,15 @@ export function SourceViewer({
           className="button primary"
           disabled={!detail.trim()}
           onClick={() => {
-            setData((prev) =>
-              appendEvent(
+            setData((prev) => {
+              const current = prev.evidence.find((e) => e.id === item.id);
+              if (!current || (current.detail === detail.trim() && (current.support || "Chưa rõ") === support)) return prev;
+              const affected = prev.claims.filter((c) => c.status === "approved" && c.evidenceIds.includes(item.id));
+              return appendEvent(
                 {
                   ...prev,
+                  claims: prev.claims.map((c) => affected.some((a) => a.id === c.id) ? { ...c, status: "pending" } : c),
+                  sessions: prev.sessions.map((s) => s.status === "reviewed" && affected.some((c) => c.sessionId === s.id) ? { ...s, status: "ended" } : s),
                   evidence: prev.evidence.map((e) =>
                     e.id === item.id
                       ? {
@@ -141,8 +146,8 @@ export function SourceViewer({
                   sourceId: item.id,
                   shared: false,
                 },
-              ),
-            );
+              );
+            });
             toast("Đã cập nhật minh chứng, giữ nguyên bài gốc.");
             onClose();
           }}

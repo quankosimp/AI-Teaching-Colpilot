@@ -65,11 +65,7 @@ export function SessionSetup({ session }: { session: Session }) {
       members: prev.members.some(
         (m) => m.sessionId === session.id && m.studentId === studentId,
       )
-        ? prev.members.map((m) =>
-            m.sessionId === session.id && m.studentId === studentId
-              ? { ...m, state: "invited" }
-              : m,
-          )
+        ? prev.members
         : [
             ...prev.members,
             {

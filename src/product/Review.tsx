@@ -153,8 +153,7 @@ export function SummaryWorkflow() {
             className="button primary"
             disabled={
               session.status === "reviewed" ||
-              pending.length > 0 ||
-              !allClaims.length
+              pending.length > 0
             }
             onClick={() => {
               setData((prev) => ({
@@ -163,7 +162,7 @@ export function SummaryWorkflow() {
                   s.id === session.id ? { ...s, status: "reviewed" } : s,
                 ),
               }));
-              toast("Đã hoàn tất tổng kết.");
+              toast(allClaims.some((c) => c.status === "approved") ? "Đã hoàn tất tổng kết." : "Đã hoàn tất tổng kết. Chưa đủ dữ liệu kết luận.");
             }}
           >
             <Check size={17} />
@@ -379,7 +378,7 @@ export function SummaryWorkflow() {
                 </div>
               ))
             ) : (
-              <p className="muted">Chưa có nhận định được duyệt.</p>
+              <p className="muted">Chưa đủ dữ liệu kết luận.</p>
             )}
             <button
               className="button ghost full"

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, MessageSquarePlus } from "lucide-react";
 import type { Material, Session } from "./model";
-import { uid } from "./model";
+import { uid, sessionStudentIds } from "./model";
 import { useStore } from "./store";
 import { appendEvent } from "./adapters";
 import { Banner, Empty, Modal } from "./ui";
@@ -20,6 +20,7 @@ export function DocumentStage({
   const [annotating, setAnnotating] = useState(false);
   const [pin, setPin] = useState<{ x: number; y: number } | null>(null);
   const [text, setText] = useState("");
+  const [evidenceStudent, setEvidenceStudent] = useState("");
   const [opened, setOpened] = useState("");
   if (!material || !activity)
     return (
@@ -79,7 +80,7 @@ export function DocumentStage({
     };
     setData((prev) =>
       appendEvent(
-        { ...prev, annotations: [...prev.annotations, annotation] },
+        { ...prev, annotations: [...prev.annotations, annotation], evidence: evidenceStudent ? [...prev.evidence, { id: uid("ev"), studentId: evidenceStudent, sessionId: session.id, activityId: activity.id, kind: "Chú thích đề", title: material.title, detail: annotation.text, sourceId: annotation.id, createdAt: annotation.createdAt }] : prev.evidence },
         {
           sessionId: session.id,
           activityId: activity.id,
@@ -183,6 +184,9 @@ export function DocumentStage({
               onChange={(e) => setText(e.target.value)}
               autoFocus
             />
+          </label>
+          <label>Gắn minh chứng cho học sinh (không bắt buộc)
+            <select value={evidenceStudent} onChange={(e) => setEvidenceStudent(e.target.value)}><option value="">Chỉ lưu chú thích</option>{sessionStudentIds(session).map((id) => <option key={id} value={id}>{data.students.find((s) => s.id === id)?.name}</option>)}</select>
           </label>
           <div className="modal-actions">
             <button className="button ghost" onClick={() => setPin(null)}>
