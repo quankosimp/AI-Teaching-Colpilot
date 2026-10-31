@@ -1,0 +1,244 @@
+{
+  "contractVersion": "v1",
+  "generatedAt": "2026-10-31T22:55:00.000Z",
+  "description": "Root API fixture manifest of HTTP commands and payloads matching frozen G0 contracts for G1 integration and authz tests.",
+  "routes": [
+    {
+      "name": "auth.mock",
+      "method": "POST",
+      "path": "/api/v1/auth/mock",
+      "actor": "public",
+      "productionAllowed": false,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Request-Id": "req-auth-mock-1"
+      },
+      "body": {
+        "email": "teacher.demo@example.com",
+        "name": "Hoàng Nam",
+        "workspaceId": "ws-demo-01"
+      },
+      "expectedStatus": 200,
+      "productionRejectedStatus": 403
+    },
+    {
+      "name": "auth.logout",
+      "method": "POST",
+      "path": "/api/v1/auth/logout",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "X-Request-Id": "req-logout-1"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "auth.me",
+      "method": "GET",
+      "path": "/api/v1/auth/me",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "X-Request-Id": "req-me-1"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "ops.health",
+      "method": "GET",
+      "path": "/api/v1/health",
+      "actor": "public",
+      "headers": {
+        "X-Request-Id": "req-health-1"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "students.list",
+      "method": "GET",
+      "path": "/api/v1/students?status=active",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "X-Request-Id": "req-students-1"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "students.create",
+      "method": "POST",
+      "path": "/api/v1/students",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "Content-Type": "application/json",
+        "X-Request-Id": "req-create-student-1"
+      },
+      "body": {
+        "name": "Lê Gia Huy",
+        "grade": "Lớp 9",
+        "subject": "Toán",
+        "goal": "Ôn thi vào 10",
+        "strengths": ["Hình học"],
+        "gaps": ["Giải toán lập phương trình"],
+        "notes": "Cần luyện thêm dạng bài chuyển động",
+        "status": "active"
+      },
+      "expectedStatus": 201
+    },
+    {
+      "name": "materials.upload_intent",
+      "method": "POST",
+      "path": "/api/v1/materials/upload-intent",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "Content-Type": "application/json",
+        "X-Request-Id": "req-upload-intent-1"
+      },
+      "body": {
+        "fileName": "de-on-tap-viete.pdf",
+        "mimeType": "application/pdf",
+        "sizeBytes": 5242880,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "maxSizeBytes": 10485760,
+      "expectedStatus": 200
+    },
+    {
+      "name": "sessions.create",
+      "method": "POST",
+      "path": "/api/v1/sessions",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "Content-Type": "application/json",
+        "X-Request-Id": "req-create-session-1"
+      },
+      "body": {
+        "studentIds": ["stu-minh", "stu-huy"],
+        "title": "Hệ thức Viète và ứng dụng",
+        "goal": "Gia sư đánh giá kỹ năng kiểm tra delta",
+        "sharedGoal": "Luyện tập hệ thức Viète",
+        "date": "2026-11-01",
+        "time": "19:30",
+        "duration": 90,
+        "tools": {
+          "board": true,
+          "upload": true,
+          "check": true,
+          "chat": true
+        }
+      },
+      "expectedStatus": 201
+    },
+    {
+      "name": "sessions.start",
+      "method": "POST",
+      "path": "/api/v1/sessions/ses-1/start",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "X-Request-Id": "req-start-session-1"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "sessions.end",
+      "method": "POST",
+      "path": "/api/v1/sessions/ses-1/end",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "X-Request-Id": "req-end-session-1"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "invites.create",
+      "method": "POST",
+      "path": "/api/v1/sessions/ses-1/invites",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "Content-Type": "application/json",
+        "X-Request-Id": "req-invite-1"
+      },
+      "body": {
+        "studentId": "stu-minh",
+        "expiresAt": "2026-11-08T00:00:00Z"
+      },
+      "expectedStatus": 201
+    },
+    {
+      "name": "room.join_request",
+      "method": "POST",
+      "path": "/api/v1/room/join-request",
+      "actor": "student",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Request-Id": "req-join-1"
+      },
+      "body": {
+        "token": "{{rawInviteToken}}",
+        "name": "Bảo Minh",
+        "consent": true
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "room.admit",
+      "method": "POST",
+      "path": "/api/v1/sessions/ses-1/members/mem-minh/admit",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "X-Request-Id": "req-admit-1"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "room.state",
+      "method": "GET",
+      "path": "/api/v1/room/state",
+      "actor": "student",
+      "headers": {
+        "Authorization": "Bearer {{studentToken}}",
+        "X-Request-Id": "req-room-state-1"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "claims.review",
+      "method": "PATCH",
+      "path": "/api/v1/claims/cl-1/review",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "Content-Type": "application/json",
+        "X-Request-Id": "req-claim-review-1"
+      },
+      "body": {
+        "action": "approve",
+        "revision": 1,
+        "evidenceIds": ["ev-1"]
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "review.complete",
+      "method": "POST",
+      "path": "/api/v1/sessions/ses-1/complete-review",
+      "actor": "teacher",
+      "headers": {
+        "Authorization": "Bearer {{teacherToken}}",
+        "Content-Type": "application/json",
+        "X-Request-Id": "req-complete-review-1"
+      },
+      "body": {
+        "reviewNote": "Đã hoàn tất duyệt nhận định."
+      },
+      "expectedStatus": 200
+    }
+  ]
+}

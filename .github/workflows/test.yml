@@ -24,13 +24,21 @@ jobs:
         with:
           version: 11.25.0
 
-      - name: Install dependencies (frozen lockfile)
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies (frozen strict)
+        run: pnpm install --frozen-lockfile --strict-peer-dependencies
 
-      - name: Validate Prisma Schema
+      - name: Validate and Generate Prisma Client
         env:
           DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_test"
-        run: npx prisma validate
+        run: |
+          pnpm exec prisma validate
+          pnpm exec prisma generate
+
+      - name: Verify Planning Traceability
+        run: |
+          if [ -f scripts/check_plans.py ]; then
+            python3 scripts/check_plans.py
+          fi
 
       - name: Typecheck Frontend
         run: pnpm run lint
@@ -38,11 +46,11 @@ jobs:
       - name: Typecheck Server
         run: pnpm run typecheck:server
 
-      - name: Run Product Unit & Domain Tests
+      - name: Run Test Suites (Recursive Discovery)
         run: pnpm test
-
-      - name: Run QA Contract Verification Tests
-        run: npx tsx --test tests/contracts/*.test.ts
 
       - name: Build Frontend Production Bundle
         run: pnpm run build
+
+      - name: Build Server
+        run: pnpm run build:server
