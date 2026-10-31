@@ -1,0 +1,19 @@
+{
+  "scope": "PRODUCT-12-A local packaging candidate; not runtime acceptance",
+  "candidateCommit": "7c7a7f6",
+  "environment": "Local-Docker",
+  "supervisorChecks": [
+    {"check": "Isolated containers running", "result": "passed", "detail": "API, gateway, PostgreSQL and MinIO running; published ports bind to 127.0.0.1:4170/55433/59002/59003"},
+    {"check": "Gateway serves SPA", "result": "passed", "httpStatus": 200},
+    {"check": "Gateway reaches API /health/live", "result": "failed", "httpStatus": 502},
+    {"check": "API internal dependency readiness", "result": "passed", "detail": "database/storage ready; realtime not_configured; AI/video unconfigured, probe not_run; overall degraded"},
+    {"check": "Browser private upload", "result": "blocked", "detail": "Requires primary PRODUCT public MinIO signer hook and gateway API access"}
+  ],
+  "decision": "in_review",
+  "remediation": [
+    "Primary PRODUCT: configurable BIND_HOST and separate internal storage/public signer configuration",
+    "Ops: doctor must probe actual behavior and return nonzero for required failed/blocked checks; remove wildcard CORS",
+    "Independent REVIEW: audit exact packaging candidate before integration"
+  ],
+  "realProviders": "blocked: no credentials or HTTPS target; not inferred from local health"
+}
