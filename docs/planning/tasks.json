@@ -500,7 +500,10 @@
       ],
       "acceptance": "OAuth subject identity, revocable refresh, tenant authorization, local/test-only auth mock; negative authorization checks.",
       "commit": null,
-      "evidence": []
+      "evidence": [
+        "docs/planning/evidence/g1-integrated.json"
+      ],
+      "local_gate": "G1-local passed; global SRS acceptance still tracked independently"
     },
     {
       "id": "PRODUCT-02",
@@ -524,7 +527,10 @@
       ],
       "acceptance": "Create/edit/archive/restore; preserve history/manual goals; expose only approved history with evidence provenance.",
       "commit": null,
-      "evidence": []
+      "evidence": [
+        "docs/planning/evidence/g1-integrated.json"
+      ],
+      "local_gate": "G1-local passed; global SRS acceptance still tracked independently"
     },
     {
       "id": "PRODUCT-03",
@@ -548,7 +554,10 @@
       ],
       "acceptance": "Private versioned PDF/JPG/PNG up to 10 MiB, signed uploads/read, MIME/size finalization, material pages and normalized annotations.",
       "commit": null,
-      "evidence": []
+      "evidence": [
+        "docs/planning/evidence/g1-integrated.json"
+      ],
+      "local_gate": "G1-local passed; global SRS acceptance still tracked independently"
     },
     {
       "id": "PRODUCT-04",
@@ -572,13 +581,16 @@
       ],
       "acceptance": "One to five active students, ordered activities/duration warning, approved source links, teacher-accepted suggestions; new next-session identity without old admission/responses/tokens.",
       "commit": null,
-      "evidence": []
+      "evidence": [
+        "docs/planning/evidence/g1-integrated.json"
+      ],
+      "local_gate": "G1-local passed; global SRS acceptance still tracked independently"
     },
     {
       "id": "PRODUCT-05",
       "owner": "PRODUCT",
       "title": "Classroom lifecycle",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "LIVE 001",
         "LIVE 002",
@@ -602,7 +614,7 @@
       "id": "PRODUCT-06",
       "owner": "PRODUCT",
       "title": "Admission and server permissions",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "ROOM 001",
         "ROOM 002",
@@ -626,7 +638,7 @@
       "id": "PRODUCT-07",
       "owner": "PRODUCT",
       "title": "Ordered realtime and recovery",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "ROOM 005",
         "LIVE 006"
@@ -647,7 +659,7 @@
       "id": "PRODUCT-08",
       "owner": "PRODUCT",
       "title": "Learning tools",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "TOOL 001",
         "TOOL 002",
@@ -671,7 +683,7 @@
       "id": "PRODUCT-09",
       "owner": "PRODUCT",
       "title": "Evidence and human review",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "EVD 001",
         "EVD 002",
@@ -830,7 +842,7 @@
       "id": "QA-05",
       "owner": "QA",
       "title": "Full multi-context lifecycle through approved profile and next-session",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
@@ -954,5 +966,21 @@
       "commit": null,
       "evidence": []
     }
-  ]
+  ],
+  "active_executors": {
+    "PRODUCT": {
+      "agentId": "dffe62c1-4068-45a7-b7b1-26ef1653714e",
+      "provider": "antigravity-1/gemini-4-argon-high",
+      "reason": "Preferred Codex worker hit usage quota after committing G1 fixes; replacement verified runtime, ownership unchanged."
+    },
+    "QA": {
+      "agentId": "f21a5ec6-49fc-4369-9041-75d2f8a23e11",
+      "provider": "antigravity-3/gemini-3.8-flash-high"
+    },
+    "REVIEW": {
+      "agentId": "7353d326-2054-405b-8669-fa3f963ba765",
+      "provider": "antigravity-1/gemini-4-argon-high",
+      "independentFromWriter": true
+    }
+  }
 }

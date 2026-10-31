@@ -14,3 +14,5 @@
 - D12: PDF/JPG/PNG max 10 MiB; private/versioned uploads validated at finalization, short-lived authorized signed URLs. Annotation coordinates are normalized.
 - D13: Runtime Node22 and pnpm committed lockfile, strict compatible peers; no legacy-peer-deps as the delivery installation path.
 - D14: Existing local demo storage is not silently uploaded/imported into online data. Preserve user storage; server demo fixtures are separate and synthetic.
+- D15: G1 local is accepted independently of absent real-provider credentials. Global SRS provider/HTTPS acceptance remains blocked. Local code gates can proceed to G2 with exact-commit PostgreSQL/MinIO/HTTP/browser evidence.
+- D16: When preferred Codex PRODUCT quota is exhausted, use a discovered available Antigravity-1/Gemini4 Argon High executor for the same PRODUCT role and worktree. The failed writer does not continue; runtime file ownership stays unchanged and a separate agent performs independent review. Provider availability does not imply available model quota.

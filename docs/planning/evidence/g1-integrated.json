@@ -1,0 +1,61 @@
+{
+  "gate": "G1-local",
+  "result": "passed",
+  "providerRealAcceptance": false,
+  "productCommit": "b63254217d139bdff33c4dffb46b7a47211fa8f0",
+  "integratedCommit": "273dd29ffba0def332d0a9adc846bbc0acf83a97",
+  "contractVersion": "v1 (+ additive G1 DTOs)",
+  "environment": "Local-Docker",
+  "checks": {
+    "supervisorHTTPAndUnit": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 8,
+      "api": "http://127.0.0.1:3110",
+      "database": "copilot_test",
+      "bucket": "copilot-private-test"
+    },
+    "productRecoveryIntegration": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "database": "copilot_recovery_test",
+      "bucket": "copilot-recovery-test"
+    },
+    "independentQAWithProductIntegration": {
+      "passed": 41,
+      "failed": 0,
+      "skipped": 6
+    },
+    "frontendTypecheck": "passed",
+    "serverTypecheck": "passed",
+    "frontendBuild": "passed",
+    "serverBuild": "passed",
+    "frozenStrictInstallNode22": "passed",
+    "prismaGenerate": "passed"
+  },
+  "browserEvidence": {
+    "pdfPages": 2,
+    "renderedOnCanvas": true,
+    "iframeCount": 0,
+    "relativePinXBeforeResize": 0.2491,
+    "relativePinXAfterResize": 0.2491,
+    "pinHiddenOnOtherPage": true,
+    "crossAccountMaterialLeak": false
+  },
+  "limitations": [
+    "Google OAuth/Gemini/Zoom real provider and public HTTPS remain unconfigured.",
+    "G2 classroom/admission/collaboration/tools and later review/provider requirements not yet accepted.",
+    "Initial supervisor HTTP run could not connect because QA server had stopped; supervisor started its own dedicated test API and reran successfully."
+  ],
+  "artifacts": [
+    "g1-review-b632542.md",
+    "g1-recovery-verification.md",
+    "g1-supervisor-tests.tap",
+    {
+      "path": "g1-pdf-annotation.png",
+      "sha256": "1258984a646b75960205873afac56df07210a9e2b03a8957d47f2f5e62d7cf1f",
+      "content": "Synthetic local demo data; recovery browser verification screenshot"
+    }
+  ]
+}
