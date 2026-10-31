@@ -436,3 +436,23 @@ body.dark .danger-text, [data-theme="dark"] .danger-text { color: #ff8798; }
   border-color: var(--ui-line-strong);
   color: #c9bfff;
 }
+
+.presentation-stack { display: grid; gap: 14px; }
+.presentation-stack label { color: var(--ui-ink); }
+.presentation-stack .presentation-check { display: flex; align-items: flex-start; gap: 9px; line-height: 1.5; font-weight: 500; }
+.presentation-check input { flex: none; width: auto; margin: 3px 0 0; }
+.presentation-notice, .presentation-suggestion { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px; border: 1px solid var(--ui-line-strong); border-radius: var(--ui-radius); background: var(--ui-surface); color: var(--ui-ink); overflow-wrap: anywhere; }
+.presentation-notice > span { flex: 1 1 180px; min-width: 0; }
+.presentation-notice small { display: block; color: var(--ui-subtle); margin-top: 4px; }
+.presentation-error { border-color: #bd5361; }
+.presentation-warning { color: #8c5c08; }
+.presentation-suggestion { display: block; }
+.presentation-suggestion p { margin: 8px 0 12px; white-space: pre-wrap; }
+.presentation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+:is(body.dark, [data-theme="dark"]) .presentation-warning { color: #f5cf7b; }
+:is(body.dark, [data-theme="dark"]) :is(.presentation-notice, .presentation-suggestion) .button.ghost {
+  background: var(--ui-hover);
+  color: var(--ui-ink);
+  border-color: var(--ui-line-strong);
+}
+:is(body.dark, [data-theme="dark"]) :is(.presentation-notice, .presentation-suggestion) .button.ghost:hover:not(:disabled) { background: var(--ui-brand-soft); }
