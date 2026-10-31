@@ -365,3 +365,18 @@ label { color: #3b4760; font-size: 12px; gap: 7px; font-weight: 650; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+/* Keep form labels and dialog controls legible on dark surfaces. */
+body.dark label, [data-theme="dark"] label { color: var(--ui-ink); }
+body.dark .icon-button, [data-theme="dark"] .icon-button {
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+  border-color: var(--ui-line-strong);
+}
+body.dark .icon-button:hover, [data-theme="dark"] .icon-button:hover { background: var(--ui-hover); }
+.modal-head { gap: 12px; }
+.modal-head h2 { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 540px) {
+  .modal-actions { flex-wrap: wrap; }
+  .modal-actions .button { white-space: normal; }
+}
