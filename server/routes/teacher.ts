@@ -17,6 +17,7 @@ import {
   type TeacherActor,
 } from "../context.js";
 import { createOnce } from "../idempotency.js";
+import { filterEligibleApprovedClaims } from "../eligibleClaims.js";
 import { ClaimRef } from "../../contracts/domain.js";
 import type { Request, Response } from "express";
 
@@ -109,8 +110,8 @@ async function markStale(sessions: SessionDetails[], teacherId: string) {
   }));
 }
 const studentCreate = StudentInput.extend({
-  initials: z.string().min(1).max(6),
-  color: z.string().max(40),
+  initials: z.string().min(1).max(6).optional(),
+  color: z.string().max(40).optional(),
 });
 export function teacherRouter(config: AppConfig) {
   const r = Router();
@@ -141,6 +142,16 @@ export function teacherRouter(config: AppConfig) {
         const student = await tx.student.create({
           data: {
             ...parsed.data,
+            initials:
+              parsed.data.initials ||
+              parsed.data.name
+                .trim()
+                .split(/\s+/)
+                .slice(-2)
+                .map((part) => part[0])
+                .join("")
+                .toUpperCase(),
+            color: parsed.data.color || "violet",
             teacherId: res.locals.actor.id,
             archivedAt: parsed.data.status === "archived" ? new Date() : null,
           },
@@ -230,24 +241,51 @@ export function teacherRouter(config: AppConfig) {
         return fail(res, 400, "VALIDATION_ERROR", "ID không hợp lệ");
       const student = await ownedStudent(req.params.id, res.locals.actor, res);
       if (!student) return;
+      const claims = await db.claim.findMany({
+        where: {
+          studentId: student.id,
+          sessionIdRef: { teacherId: res.locals.actor.id },
+          status: "approved",
+        },
+        select: {
+          id: true,
+          sessionId: true,
+          studentId: true,
+          text: true,
+          evidenceIds: true,
+          revision: true,
+          reviewedAt: true,
+          status: true,
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+      const eligible = await filterEligibleApprovedClaims(
+        claims,
+        res.locals.actor.id,
+      );
+      const observations = await db.evidence.findMany({
+        where: {
+          id: { in: eligible.flatMap((claim) => claim.evidenceIds) },
+          status: "active",
+          isObservation: true,
+          kind: { not: "GoiYGiangDay" },
+          sourceType: { not: "ai_suggestion" },
+          sessionIdRef: { teacherId: res.locals.actor.id },
+        },
+        select: { id: true, sessionId: true, studentId: true },
+      });
       return res.json({
-        claims: await db.claim.findMany({
-          where: {
-            studentId: student.id,
-            sessionIdRef: { teacherId: res.locals.actor.id },
-            status: "approved",
-          },
-          select: {
-            id: true,
-            sessionId: true,
-            studentId: true,
-            text: true,
-            evidenceIds: true,
-            revision: true,
-            reviewedAt: true,
-          },
-          orderBy: { updatedAt: "desc" },
-        }),
+        claims: eligible.map((claim) => ({
+          ...claim,
+          observationEvidenceIds: claim.evidenceIds.filter((id) =>
+            observations.some(
+              (item) =>
+                item.id === id &&
+                item.sessionId === claim.sessionId &&
+                item.studentId === claim.studentId,
+            ),
+          ),
+        })),
       });
     }),
   );
@@ -725,8 +763,16 @@ export function teacherRouter(config: AppConfig) {
           select: { studentId: true },
         }),
       ]);
-      if (
-        parsed.data.some((item) =>
+      const eligible = await filterEligibleApprovedClaims(
+        claims,
+        res.locals.actor.id,
+      );
+      const isObservation = (source: (typeof sources)[number]) =>
+        source.isObservation &&
+        source.kind !== "GoiYGiangDay" &&
+        source.sourceType !== "ai_suggestion";
+      const invalid = parsed.data.some((item) => {
+        if (
           item.materialId
             ? !materials.some(
                 (m) =>
@@ -735,38 +781,54 @@ export function teacherRouter(config: AppConfig) {
                     (v) => v.version === item.materialVersion,
                   ),
               )
-            : item.materialVersion != null,
-        ) ||
-        sourceIds.some(
-          (id) =>
-            !sources.some(
-              (source) =>
-                source.id === id &&
-                members.some(
-                  (member) => member.studentId === source.studentId,
-                ) &&
-                claims.some(
-                  (claim) =>
-                    claim.studentId === source.studentId &&
-                    claim.evidenceIds.includes(id) &&
-                    claimRefs.some(
-                      (ref) =>
-                        ref.claimId === claim.id &&
-                        ref.revision === claim.revision,
-                    ),
-                ),
-            ),
-        ) ||
-        claimRefs.some(
-          (ref) =>
-            !claims.some(
-              (c) =>
-                c.id === ref.claimId &&
-                c.revision === ref.revision &&
-                members.some((m) => m.studentId === c.studentId),
-            ),
+            : item.materialVersion != null
         )
-      )
+          return true;
+        if (
+          (item.sourceEvidenceIds.length === 0) !==
+          (item.sourceClaimRefs.length === 0)
+        )
+          return true;
+        return (
+          item.sourceEvidenceIds.some(
+            (id) =>
+              !sources.some(
+                (source) =>
+                  source.id === id &&
+                  isObservation(source) &&
+                  members.some(
+                    (member) => member.studentId === source.studentId,
+                  ) &&
+                  eligible.some(
+                    (claim) =>
+                      claim.studentId === source.studentId &&
+                      claim.sessionId === source.sessionId &&
+                      claim.evidenceIds.includes(id) &&
+                      item.sourceClaimRefs.some(
+                        (ref) =>
+                          ref.claimId === claim.id &&
+                          ref.revision === claim.revision,
+                      ),
+                  ),
+              ),
+          ) ||
+          item.sourceClaimRefs.some(
+            (ref) =>
+              !eligible.some(
+                (claim) =>
+                  claim.id === ref.claimId &&
+                  claim.revision === ref.revision &&
+                  members.some(
+                    (member) => member.studentId === claim.studentId,
+                  ) &&
+                  item.sourceEvidenceIds.some((id) =>
+                    claim.evidenceIds.includes(id),
+                  ),
+              ),
+          )
+        );
+      });
+      if (invalid)
         return fail(res, 403, "PERMISSION_DENIED", "Nguồn không khả dụng");
       try {
         const result = await db.$transaction(async (tx) => {

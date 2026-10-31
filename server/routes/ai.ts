@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { GoogleGenAI } from "@google/genai";
+import { filterEligibleApprovedClaims } from "../eligibleClaims.js";
 import { z } from "zod";
 import {
   asyncRoute,
@@ -86,40 +87,19 @@ export function aiRouter(config: AppConfig) {
           },
         },
         orderBy: { reviewedAt: "desc" },
-        take: 4,
         select: {
           id: true,
           revision: true,
           text: true,
           evidenceIds: true,
           sessionId: true,
+          studentId: true,
+          status: true,
         },
       });
-      const evidence = await db.evidence.findMany({
-        where: {
-          id: { in: claims.flatMap((claim) => claim.evidenceIds) },
-          studentId: parsed.data.studentId,
-          status: "active",
-          sessionIdRef: { teacherId: res.locals.actor.id },
-        },
-      });
-      const eligible = claims.filter((claim) => {
-        const selected = claim.evidenceIds.map((id) =>
-          evidence.find(
-            (item) => item.id === id && item.sessionId === claim.sessionId,
-          ),
-        );
-        return (
-          selected.length > 0 &&
-          selected.every(Boolean) &&
-          selected.some(
-            (item) =>
-              item?.isObservation &&
-              item.kind !== "GoiYGiangDay" &&
-              item.sourceType !== "ai_suggestion",
-          )
-        );
-      });
+      const eligible = (
+        await filterEligibleApprovedClaims(claims, res.locals.actor.id)
+      ).slice(0, 4);
       if (!eligible.length)
         return fail(
           res,
@@ -127,6 +107,17 @@ export function aiRouter(config: AppConfig) {
           "VALIDATION_ERROR",
           "Chưa có lịch sử đã duyệt và đồng ý sử dụng cho AI",
         );
+      const observations = await db.evidence.findMany({
+        where: {
+          id: { in: eligible.flatMap((claim) => claim.evidenceIds) },
+          status: "active",
+          isObservation: true,
+          kind: { not: "GoiYGiangDay" },
+          sourceType: { not: "ai_suggestion" },
+          sessionIdRef: { teacherId: res.locals.actor.id },
+        },
+        select: { id: true, sessionId: true, studentId: true },
+      });
       const studentNames = (
         await db.student.findMany({
           where: { teacherId: res.locals.actor.id },
@@ -184,7 +175,14 @@ export function aiRouter(config: AppConfig) {
             sources: eligible.map((c) => ({
               claimId: c.id,
               revision: c.revision,
-              evidenceIds: c.evidenceIds,
+              evidenceIds: c.evidenceIds.filter((id) =>
+                observations.some(
+                  (item) =>
+                    item.id === id &&
+                    item.sessionId === c.sessionId &&
+                    item.studentId === c.studentId,
+                ),
+              ),
             })),
           },
         });
