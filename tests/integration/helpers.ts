@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 
-export const QA_BASE_URL = process.env.QA_BASE_URL ?? "http://127.0.0.1:3110";
+export const QA_BASE_URL = process.env.QA_BASE_URL || "";
 export const APP_ORIGIN = process.env.APP_ORIGIN || QA_BASE_URL;
 
 export const SKIP_IF_NO_SERVER = QA_BASE_URL

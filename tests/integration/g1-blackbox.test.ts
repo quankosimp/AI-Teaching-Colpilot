@@ -106,7 +106,7 @@ test(
 );
 
 test(
-  "T-AUTH-005-POS: Logout isolates own session and respects other teacher's cookie (MF-G1-03 rule)",
+  "T-AUTH-003-SESSION-SCOPING: Logout isolates own session and respects other teacher's cookie (AUTH 003 session scoping / MF-G1-03 rule)",
   { skip: SKIP_IF_NO_SERVER },
   async () => {
     // Teacher A logs in two sessions: A1 and A2
