@@ -1,0 +1,48 @@
+name: CI Test Suite
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate Prisma Schema
+        env:
+          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_test"
+        run: npx prisma validate
+
+      - name: Typecheck Frontend
+        run: pnpm run lint
+
+      - name: Typecheck Server
+        run: pnpm run typecheck:server
+
+      - name: Run Product Unit & Domain Tests
+        run: pnpm test
+
+      - name: Run QA Contract Verification Tests
+        run: npx tsx --test tests/contracts/*.test.ts
+
+      - name: Build Frontend Production Bundle
+        run: pnpm run build
