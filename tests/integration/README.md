@@ -81,7 +81,7 @@ pnpm test
 |---|---|---|---|
 | `T-AUTH-004-POS` | Mock login giáo viên cấp JWT access token và cookie refresh; `/auth/me` trả hồ sơ | `AUTH 004` (Mock guard) | PASS |
 | `T-AUTH-003-POS` | Đăng xuất giáo viên trả 204 No Content, thu hồi `sid`, xóa cookie refresh | `AUTH 003` | PASS |
-| `T-AUTH-005-POS` | Đăng xuất thu hồi đúng phiên của giáo viên, không xóa cookie của giáo viên khác | `AUTH 003`, `D12` | PASS |
+| `T-AUTH-003-SESSION-SCOPING` | Đăng xuất thu hồi đúng phiên của giáo viên, không xóa cookie của giáo viên khác | `AUTH 003`, `D12` | PASS |
 | `T-AUTH-002-NEG` | Ranh giới multi-tenant: Teacher B bị từ chối 403 Forbidden khi đọc/sửa học sinh Teacher A | `AUTH 002` | PASS |
 | `T-STU-001-POS` | Vòng đời học sinh: Tạo (201), Sửa có `If-Match-Version`, Bắt xung đột (409), Archive & Restore | `STU 001` | PASS |
 | `T-STU-001-NEG` | Học sinh đã lưu trữ (archived) bị từ chối 400 khi xếp vào buổi học mới | `STU 001` | PASS |
