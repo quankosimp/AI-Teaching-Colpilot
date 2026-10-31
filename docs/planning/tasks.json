@@ -965,6 +965,22 @@
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
       "commit": null,
       "evidence": []
+    },
+    {
+      "id": "PRODUCT-12-A",
+      "owner": "PRODUCT",
+      "parent_task": "PRODUCT-12",
+      "executor": "ef9df4c2-9056-4f2a-afc2-3e54889e80df",
+      "title": "Isolated local Docker application packaging",
+      "status": "running",
+      "srs_ids": [],
+      "gate": "G1/G5-local",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Reproducible full local application stack, localhost-only published ports/private persistence and real gateway/upload checks after primary PRODUCT bind/public-signer hooks. No external-provider acceptance.",
+      "commit": null,
+      "evidence": []
     }
   ],
   "active_executors": {
@@ -975,12 +991,19 @@
     },
     "QA": {
       "agentId": "f21a5ec6-49fc-4369-9041-75d2f8a23e11",
-      "provider": "antigravity-3/gemini-3.8-flash-high"
+      "provider": "antigravity-3/gemini-3.8-flash-high",
+      "last_event": "Stream interrupted after G2 scaffold commit 0d9674b; worktree clean, prepared tests preserved; no runtime G2 pass inferred."
     },
     "REVIEW": {
       "agentId": "7353d326-2054-405b-8669-fa3f963ba765",
       "provider": "antigravity-1/gemini-4-argon-high",
       "independentFromWriter": true
+    },
+    "PRODUCT-OPS": {
+      "agentId": "ef9df4c2-9056-4f2a-afc2-3e54889e80df",
+      "provider": "antigravity-3/gemini-3.8-flash-high",
+      "task": "PRODUCT-12-A",
+      "scope": "Only new Docker/deploy files in isolated operations worktree; no primary runtime file overlap."
     }
   }
 }

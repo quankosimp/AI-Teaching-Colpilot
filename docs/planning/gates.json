@@ -1,0 +1,35 @@
+{
+  "scope": "local-docker until external provider/VPS credentials supplied",
+  "gates": {
+    "G0": {
+      "state": "accepted",
+      "contract": "v1",
+      "evidence": "evidence/g0-integrated.json"
+    },
+    "G1-local": {
+      "state": "accepted",
+      "productCommit": "b63254217d139bdff33c4dffb46b7a47211fa8f0",
+      "evidence": "evidence/g1-integrated.json"
+    },
+    "G1-real-auth": {
+      "state": "blocked",
+      "reason": "No Google OAuth credentials/HTTPS target"
+    },
+    "G2": {
+      "state": "running",
+      "owner": "PRODUCT"
+    },
+    "G3-real": {
+      "state": "blocked",
+      "reason": "Zoom credentials/HTTPS target absent; adapter implementation still pending"
+    },
+    "G4-real": {
+      "state": "blocked",
+      "reason": "Gemini credentials absent; classroom AI/review implementation still pending"
+    },
+    "G5": {
+      "state": "planned",
+      "reason": "Requires all mandatory implemented tests/real-provider evidence and release operations; 60/60 global P0 acceptance not reached"
+    }
+  }
+}

@@ -48,3 +48,12 @@ Status: approved plan; task progress and evidence are tracked by supervisor.
 
 - Early G0 Zoom/Gemini spikes may be blocked by credentials without blocking local contracts/mock development.
 - Complete technical specification: [g0-contract-spec.md](g0-contract-spec.md); supervisor normalization takes precedence over raw ARCH wording.
+
+## Execution card PRODUCT-12-A — local container packaging
+
+- Executor: Antigravity Fast agent ef9df4c2 in its own operations worktree; the primary PRODUCT implementation executor remains dffe62c1.
+- Inputs: accepted local G1 source, Node22/pnpm lock, Prisma migrations and Express API; no real-provider credentials or VPS target.
+- Exclusive new paths: Dockerfile, .dockerignore, compose.docker.yml, deploy/** and optional scripts/docker-doctor.mjs. Do not edit primary PRODUCT server/src/contracts/schema/package/lock or existing compose.local.yml.
+- Deliverables: reproducible API/frontend/Caddy images; isolated PostgreSQL/MinIO volumes; gateway 127.0.0.1:4170, DB 55433, browser MinIO 59002; local fixture/bootstrap and start/stop instructions. Existing development and unrelated user containers remain untouched.
+- Producer dependencies: primary PRODUCT supplies BIND_HOST for API container access and separate internal storage I/O vs public URL signing configuration. Ops must not work around these through host networking or weakened auth.
+- Acceptance: real image build/config validation; actual gateway/API/private upload checks after hooks land. Missing hooks are blocked integration, not a passing runtime check. Production/HTTPS remains unverified until credentials/target exist.
