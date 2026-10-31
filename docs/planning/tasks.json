@@ -1,0 +1,921 @@
+{
+  "task_states": [
+    "planned",
+    "ready",
+    "running",
+    "blocked",
+    "in_review",
+    "done"
+  ],
+  "roles": {
+    "ARCH": {
+      "file": "01-architecture.md",
+      "profile": "worker-antigravity-architecture",
+      "ownership": [
+        "Design specification only; read-only runtime code"
+      ],
+      "inputs": [
+        "Approved SRS baseline and supervisor decisions"
+      ],
+      "outputs": [
+        "Domain/state/permission specification",
+        "API/event/provider/UI contract specification",
+        "Contract/ownership audit"
+      ],
+      "depends_on": [],
+      "tasks": [
+        [
+          "ARCH-01",
+          "Domain/source revisions and state machines"
+        ],
+        [
+          "ARCH-02",
+          "Actor/tenant permissions, OAuth and invites"
+        ],
+        [
+          "ARCH-03",
+          "REST, events, errors, idempotency and files"
+        ],
+        [
+          "ARCH-04",
+          "Media/AI adapters and presentation view-models"
+        ],
+        [
+          "ARCH-05",
+          "Migration, audit, health, flags and environment"
+        ],
+        [
+          "ARCH-06",
+          "Contract freeze, ownership and change impact review"
+        ]
+      ]
+    },
+    "UI": {
+      "file": "02-ui.md",
+      "profile": "worker-codex-alt (dedicated UI instance)",
+      "ownership": [
+        "src/product/ui.tsx",
+        "src/product/*.css",
+        "src/product/presentation/**"
+      ],
+      "inputs": [
+        "Frozen contracts",
+        "Product view-models/capabilities/actions"
+      ],
+      "outputs": [
+        "Presentational components and all required async states",
+        "Desktop/mobile/light/dark/keyboard evidence"
+      ],
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "tasks": [
+        [
+          "UI-01",
+          "Shared components, accessible modal/focus and async states"
+        ],
+        [
+          "UI-02",
+          "Account/student/material/planning presentation"
+        ],
+        [
+          "UI-03",
+          "Invite, consent, lobby, denial and expired/revoked states"
+        ],
+        [
+          "UI-04",
+          "Classroom/media and separate realtime/video status"
+        ],
+        [
+          "UI-05",
+          "Board/annotation/check/submission/support presentation"
+        ],
+        [
+          "UI-06",
+          "Source/AI/per-student review and approved-vs-draft presentation"
+        ],
+        [
+          "UI-07",
+          "360px responsive, light/dark, keyboard, contrast and unavailable features"
+        ]
+      ]
+    },
+    "PRODUCT": {
+      "file": "03-product.md",
+      "profile": "worker-codex-alt (dedicated product instance)",
+      "ownership": [
+        "server/**",
+        "contracts/**",
+        "prisma/**",
+        "src/product containers/data/provider wiring (excluding UI-owned paths)",
+        "package.json",
+        "pnpm-lock.yaml",
+        "tests/unit/product/**",
+        "Docker/Caddy/release workflow"
+      ],
+      "inputs": [
+        "ARCH specification and supervisor contract freeze",
+        "UI components and QA findings"
+      ],
+      "outputs": [
+        "Runtime contracts, migrations, APIs, providers and frontend wiring",
+        "Business tests and reproducible release"
+      ],
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "tasks": [
+        [
+          "PRODUCT-01",
+          "Identity, authorization and foundations"
+        ],
+        [
+          "PRODUCT-02",
+          "Student profiles and approved history"
+        ],
+        [
+          "PRODUCT-03",
+          "Private materials and versioned annotations"
+        ],
+        [
+          "PRODUCT-04",
+          "Planning and next-session provenance"
+        ],
+        [
+          "PRODUCT-05",
+          "Classroom lifecycle"
+        ],
+        [
+          "PRODUCT-06",
+          "Admission and server permissions"
+        ],
+        [
+          "PRODUCT-07",
+          "Ordered realtime and recovery"
+        ],
+        [
+          "PRODUCT-08",
+          "Learning tools"
+        ],
+        [
+          "PRODUCT-09",
+          "Evidence and human review"
+        ],
+        [
+          "PRODUCT-10",
+          "Gemini server adapter"
+        ],
+        [
+          "PRODUCT-11",
+          "Zoom media adapter"
+        ],
+        [
+          "PRODUCT-12",
+          "Operations and release"
+        ]
+      ]
+    },
+    "QA": {
+      "file": "04-qa.md",
+      "profile": "worker-antigravity-fast",
+      "ownership": [
+        "tests/contracts/**",
+        "tests/integration/**",
+        "tests/authz/**",
+        "tests/e2e/**",
+        "tests/perf/**",
+        "tests/a11y/**",
+        "qa/fixtures/**",
+        ".github/workflows/test.yml"
+      ],
+      "inputs": [
+        "Frozen contracts, runnable product, provider mocks and staging configuration"
+      ],
+      "outputs": [
+        "Positive/negative execution scenarios per P0",
+        "Exact-commit test/evidence rows; never writes canonical RTM"
+      ],
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "tasks": [
+        [
+          "QA-01",
+          "Per-requirement traceability and contract checks"
+        ],
+        [
+          "QA-02",
+          "Domain, state transitions, revision and zero-evidence cases"
+        ],
+        [
+          "QA-03",
+          "PostgreSQL/private storage/idempotency and evidence filters/pagination"
+        ],
+        [
+          "QA-04",
+          "Cross-tenant, teacher/student/guest authorization negative tests"
+        ],
+        [
+          "QA-05",
+          "Full multi-context lifecycle through approved profile and next-session"
+        ],
+        [
+          "QA-06",
+          "Disconnect/replay/queue/upload/AI/media failures and mock guards"
+        ],
+        [
+          "QA-07",
+          "Responsive/accessibility/browser matrix and p95 performance"
+        ],
+        [
+          "QA-08",
+          "Real Google OAuth/Zoom/Gemini HTTPS and release-candidate evidence"
+        ]
+      ]
+    },
+    "REVIEW": {
+      "file": "05-review.md",
+      "profile": "worker-antigravity-review; independent Architecture fallback when quota blocked",
+      "ownership": [
+        "Read-only code and evidence; findings submitted to supervisor"
+      ],
+      "inputs": [
+        "ARCH contracts, integrated Product/UI changes and QA artifacts"
+      ],
+      "outputs": [
+        "Severity/SRS-linked findings and release recommendation"
+      ],
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "tasks": [
+        [
+          "REVIEW-01",
+          "Contracts, ownership, dependency and SRS completeness"
+        ],
+        [
+          "REVIEW-02",
+          "OAuth, authorization, invites, private files and privacy"
+        ],
+        [
+          "REVIEW-03",
+          "Source immutability, AI and review/next-session integrity"
+        ],
+        [
+          "REVIEW-04",
+          "Independent media/realtime recovery and UI/accessibility"
+        ],
+        [
+          "REVIEW-05",
+          "Exact-commit 60-P0 evidence and release recommendation"
+        ]
+      ]
+    }
+  },
+  "tasks": [
+    {
+      "id": "ARCH-01",
+      "owner": "ARCH",
+      "title": "Domain/source revisions and state machines",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "G0",
+      "depends_on": [],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "ARCH-02",
+      "owner": "ARCH",
+      "title": "Actor/tenant permissions, OAuth and invites",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "G0",
+      "depends_on": [],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "ARCH-03",
+      "owner": "ARCH",
+      "title": "REST, events, errors, idempotency and files",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "G0",
+      "depends_on": [],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "ARCH-04",
+      "owner": "ARCH",
+      "title": "Media/AI adapters and presentation view-models",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "G0",
+      "depends_on": [],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "ARCH-05",
+      "owner": "ARCH",
+      "title": "Migration, audit, health, flags and environment",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "G0",
+      "depends_on": [],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "ARCH-06",
+      "owner": "ARCH",
+      "title": "Contract freeze, ownership and change impact review",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "G0",
+      "depends_on": [],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "UI-01",
+      "owner": "UI",
+      "title": "Shared components, accessible modal/focus and async states",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "UI-02",
+      "owner": "UI",
+      "title": "Account/student/material/planning presentation",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "UI-03",
+      "owner": "UI",
+      "title": "Invite, consent, lobby, denial and expired/revoked states",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "UI-04",
+      "owner": "UI",
+      "title": "Classroom/media and separate realtime/video status",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "UI-05",
+      "owner": "UI",
+      "title": "Board/annotation/check/submission/support presentation",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "UI-06",
+      "owner": "UI",
+      "title": "Source/AI/per-student review and approved-vs-draft presentation",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "UI-07",
+      "owner": "UI",
+      "title": "360px responsive, light/dark, keyboard, contrast and unavailable features",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-01",
+      "owner": "PRODUCT",
+      "title": "Identity, authorization and foundations",
+      "status": "planned",
+      "srs_ids": [
+        "AUTH 001",
+        "AUTH 002",
+        "AUTH 003",
+        "AUTH 004"
+      ],
+      "gate": "G1",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "OAuth subject identity, revocable refresh, tenant authorization, local/test-only auth mock; negative authorization checks.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-02",
+      "owner": "PRODUCT",
+      "title": "Student profiles and approved history",
+      "status": "planned",
+      "srs_ids": [
+        "STU 001",
+        "STU 002",
+        "STU 004",
+        "STU 005",
+        "REV 005"
+      ],
+      "gate": "G1",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "Create/edit/archive/restore; preserve history/manual goals; expose only approved history with evidence provenance.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-03",
+      "owner": "PRODUCT",
+      "title": "Private materials and versioned annotations",
+      "status": "planned",
+      "srs_ids": [
+        "MAT 001",
+        "MAT 002",
+        "MAT 003",
+        "MAT 005",
+        "TOOL 003"
+      ],
+      "gate": "G1",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "Private versioned PDF/JPG/PNG up to 10 MiB, signed uploads/read, MIME/size finalization, material pages and normalized annotations.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-04",
+      "owner": "PRODUCT",
+      "title": "Planning and next-session provenance",
+      "status": "planned",
+      "srs_ids": [
+        "PLAN 001",
+        "PLAN 002",
+        "PLAN 003",
+        "PLAN 004",
+        "REV 006"
+      ],
+      "gate": "G1,G4",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "One to five active students, ordered activities/duration warning, approved source links, teacher-accepted suggestions; new next-session identity without old admission/responses/tokens.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-05",
+      "owner": "PRODUCT",
+      "title": "Classroom lifecycle",
+      "status": "planned",
+      "srs_ids": [
+        "LIVE 001",
+        "LIVE 002",
+        "LIVE 003",
+        "LIVE 004",
+        "LIVE 005"
+      ],
+      "gate": "G2",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "Idempotent start/end, persistent shared view/current activity/completion, dock by student, student writes stop at ended.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-06",
+      "owner": "PRODUCT",
+      "title": "Admission and server permissions",
+      "status": "planned",
+      "srs_ids": [
+        "ROOM 001",
+        "ROOM 002",
+        "ROOM 003",
+        "ROOM 004",
+        "ROOM 006"
+      ],
+      "gate": "G2",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "CSPRNG hashed invite/TTL/rotation/revoke, consent/admit/reject, per-command authorization and role-filtered guest projections.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-07",
+      "owner": "PRODUCT",
+      "title": "Ordered realtime and recovery",
+      "status": "planned",
+      "srs_ids": [
+        "ROOM 005",
+        "LIVE 006"
+      ],
+      "gate": "G2",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "Transactional ordered outbox, dedupe/replay/last-event cursor, independent media/realtime recovery; bounded queue 50 commands, 1 MiB, TTL 5 minutes.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-08",
+      "owner": "PRODUCT",
+      "title": "Learning tools",
+      "status": "planned",
+      "srs_ids": [
+        "TOOL 001",
+        "TOOL 002",
+        "TOOL 004",
+        "TOOL 005",
+        "TOOL 007"
+      ],
+      "gate": "G2",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "Author-aware live board and private drafts/snapshots, unique quick check response, retry-safe text/image/PDF submissions, four support levels.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-09",
+      "owner": "PRODUCT",
+      "title": "Evidence and human review",
+      "status": "planned",
+      "srs_ids": [
+        "EVD 001",
+        "EVD 002",
+        "EVD 003",
+        "EVD 004",
+        "REV 001",
+        "REV 002",
+        "REV 003",
+        "REV 004"
+      ],
+      "gate": "G2,G4",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "Versioned immutable sources and evidence corrections/audit, per-student filtering/stable pagination, claim revisions/approval provenance, explicit review reopen, zero-claim completion.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-10",
+      "owner": "PRODUCT",
+      "title": "Gemini server adapter",
+      "status": "planned",
+      "srs_ids": [
+        "AI 001",
+        "AI 002",
+        "AI 003",
+        "AI 004",
+        "AI 005",
+        "AI 006",
+        "AI 007"
+      ],
+      "gate": "G4",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "Real Gemini configured on server; minimized consent-filtered context, suggestion lifecycle and model/prompt version, sourced pending claims, timeout/retry without blocking teaching.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-11",
+      "owner": "PRODUCT",
+      "title": "Zoom media adapter",
+      "status": "planned",
+      "srs_ids": [
+        "VID 001",
+        "VID 002",
+        "VID 003",
+        "VID 004",
+        "VID 005"
+      ],
+      "gate": "G3",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "Authorized JWT signer, persistent Toolkit container, join/leave/mic/camera/share/participants/speaker, local/CI mock and real-device HTTPS evidence.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "PRODUCT-12",
+      "owner": "PRODUCT",
+      "title": "Operations and release",
+      "status": "planned",
+      "srs_ids": [
+        "OPS 001",
+        "OPS 002",
+        "OPS 003",
+        "OPS 004"
+      ],
+      "gate": "G1,G5",
+      "depends_on": [
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05"
+      ],
+      "acceptance": "Request IDs/redacted append-only audit, liveness/readiness/degraded/flags, Docker/Caddy, private storage, backup/restore and rollback.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-01",
+      "owner": "QA",
+      "title": "Per-requirement traceability and contract checks",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-02",
+      "owner": "QA",
+      "title": "Domain, state transitions, revision and zero-evidence cases",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-03",
+      "owner": "QA",
+      "title": "PostgreSQL/private storage/idempotency and evidence filters/pagination",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-04",
+      "owner": "QA",
+      "title": "Cross-tenant, teacher/student/guest authorization negative tests",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-05",
+      "owner": "QA",
+      "title": "Full multi-context lifecycle through approved profile and next-session",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-06",
+      "owner": "QA",
+      "title": "Disconnect/replay/queue/upload/AI/media failures and mock guards",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-07",
+      "owner": "QA",
+      "title": "Responsive/accessibility/browser matrix and p95 performance",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-08",
+      "owner": "QA",
+      "title": "Real Google OAuth/Zoom/Gemini HTTPS and release-candidate evidence",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "REVIEW-01",
+      "owner": "REVIEW",
+      "title": "Contracts, ownership, dependency and SRS completeness",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "REVIEW-02",
+      "owner": "REVIEW",
+      "title": "OAuth, authorization, invites, private files and privacy",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "REVIEW-03",
+      "owner": "REVIEW",
+      "title": "Source immutability, AI and review/next-session integrity",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "REVIEW-04",
+      "owner": "REVIEW",
+      "title": "Independent media/realtime recovery and UI/accessibility",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    },
+    {
+      "id": "REVIEW-05",
+      "owner": "REVIEW",
+      "title": "Exact-commit 60-P0 evidence and release recommendation",
+      "status": "planned",
+      "srs_ids": [],
+      "gate": "cross-cutting",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
+      "commit": null,
+      "evidence": []
+    }
+  ]
+}
