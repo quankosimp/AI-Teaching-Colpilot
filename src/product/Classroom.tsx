@@ -283,8 +283,13 @@ function SharedStage({
     session.activities.find((a) => a.id === session.currentActivityId) ||
     session.activities[0];
   const requestedOwner = session.sharedBoardOwnerId || "common";
-  const requestedBoard = data.boards.find((b) => b.id === boardKey(session.id, activity?.id || "", requestedOwner));
-  const owner = requestedOwner !== "common" && !requestedBoard?.shared ? "common" : requestedOwner;
+  const requestedBoard = data.boards.find(
+    (b) => b.id === boardKey(session.id, activity?.id || "", requestedOwner),
+  );
+  const owner =
+    requestedOwner !== "common" && !requestedBoard?.shared
+      ? "common"
+      : requestedOwner;
   const board = data.boards.find(
     (b) => b.id === boardKey(session.id, activity?.id || "", owner),
   );
@@ -377,7 +382,7 @@ function TeacherSession({
   session: Session;
   select: (id: string) => void;
 }) {
-  const { data, setData, go, toast } = useStore();
+  const { data, setData, go, toast, setSelectedSubmissionId } = useStore();
   const call = useCall(session.id);
   const [entered, setEntered] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -393,6 +398,7 @@ function TeacherSession({
   const [source, setSource] = useState("");
   const [draft, setDraft] = useState("");
   const [left, setLeft] = useState(false);
+  const [gradingTarget, setGradingTarget] = useState("");
   useEffect(() => {
     if (entered) window.scrollTo({ top: 0, behavior: "auto" });
   }, [entered]);
@@ -1042,7 +1048,7 @@ function TeacherSession({
                       <button
                         className="text-button"
                         onClick={() => {
-                          sessionStorage.setItem("copilot-grading-submission", s.id);
+                          setGradingTarget(s.id);
                           setLeft(true);
                         }}
                       >
@@ -1059,7 +1065,10 @@ function TeacherSession({
                 )}
                 <button
                   className="button ghost full"
-                  onClick={() => setLeft(true)}
+                  onClick={() => {
+                    setGradingTarget("");
+                    setLeft(true);
+                  }}
                 >
                   Mở hộp chấm bài
                 </button>
@@ -1261,7 +1270,13 @@ function TeacherSession({
             <button className="button ghost" onClick={() => setLeft(false)}>
               Ở lại phòng
             </button>
-            <button className="button primary" onClick={() => go("grading")}>
+            <button
+              className="button primary"
+              onClick={() => {
+                setSelectedSubmissionId(gradingTarget);
+                go("grading");
+              }}
+            >
               Mở chấm bài
             </button>
           </div>
@@ -1452,7 +1467,11 @@ function StudentSession({
     return (
       <main className="waiting-room">
         <CallPreview name={student.name} camera={call.camera} mic={call.mic} />
-        <Status tone="amber">{session.status !== "live" ? "Đang chờ giáo viên mở phòng" : "Đang chờ giáo viên cho vào"}</Status>
+        <Status tone="amber">
+          {session.status !== "live"
+            ? "Đang chờ giáo viên mở phòng"
+            : "Đang chờ giáo viên cho vào"}
+        </Status>
         <h1>{session.title}</h1>
         <p>Giữ trang này mở. Bạn sẽ vào phòng ngay khi giáo viên xác nhận.</p>
         <button

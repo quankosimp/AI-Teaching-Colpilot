@@ -80,7 +80,26 @@ export function DocumentStage({
     };
     setData((prev) =>
       appendEvent(
-        { ...prev, annotations: [...prev.annotations, annotation], evidence: evidenceStudent ? [...prev.evidence, { id: uid("ev"), studentId: evidenceStudent, sessionId: session.id, activityId: activity.id, kind: "Chú thích đề", title: material.title, detail: annotation.text, sourceId: annotation.id, createdAt: annotation.createdAt }] : prev.evidence },
+        {
+          ...prev,
+          annotations: [...prev.annotations, annotation],
+          evidence: evidenceStudent
+            ? [
+                ...prev.evidence,
+                {
+                  id: uid("ev"),
+                  studentId: evidenceStudent,
+                  sessionId: session.id,
+                  activityId: activity.id,
+                  kind: "Chú thích đề",
+                  title: material.title,
+                  detail: annotation.text,
+                  sourceId: annotation.id,
+                  createdAt: annotation.createdAt,
+                },
+              ]
+            : prev.evidence,
+        },
         {
           sessionId: session.id,
           activityId: activity.id,
@@ -185,8 +204,19 @@ export function DocumentStage({
               autoFocus
             />
           </label>
-          <label>Gắn minh chứng cho học sinh (không bắt buộc)
-            <select value={evidenceStudent} onChange={(e) => setEvidenceStudent(e.target.value)}><option value="">Chỉ lưu chú thích</option>{sessionStudentIds(session).map((id) => <option key={id} value={id}>{data.students.find((s) => s.id === id)?.name}</option>)}</select>
+          <label>
+            Gắn minh chứng cho học sinh (không bắt buộc)
+            <select
+              value={evidenceStudent}
+              onChange={(e) => setEvidenceStudent(e.target.value)}
+            >
+              <option value="">Chỉ lưu chú thích</option>
+              {sessionStudentIds(session).map((id) => (
+                <option key={id} value={id}>
+                  {data.students.find((s) => s.id === id)?.name}
+                </option>
+              ))}
+            </select>
           </label>
           <div className="modal-actions">
             <button className="button ghost" onClick={() => setPin(null)}>
