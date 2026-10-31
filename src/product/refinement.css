@@ -380,3 +380,21 @@ body.dark .icon-button:hover, [data-theme="dark"] .icon-button:hover { backgroun
   .modal-actions { flex-wrap: wrap; }
   .modal-actions .button { white-space: normal; }
 }
+
+/* Surfaces that retain light backgrounds need dark equivalents in dark mode. */
+body.dark .recommendation-panel, [data-theme="dark"] .recommendation-panel,
+body.dark .recommendation-item, [data-theme="dark"] .recommendation-item,
+body.dark .suggested-item, [data-theme="dark"] .suggested-item,
+body.dark .submission-item, [data-theme="dark"] .submission-item,
+body.dark .answer-sheet, [data-theme="dark"] .answer-sheet {
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+  border-color: var(--ui-line-strong);
+}
+body.dark .submission-item:hover, body.dark .submission-item.active,
+[data-theme="dark"] .submission-item:hover, [data-theme="dark"] .submission-item.active {
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-brand);
+}
+body.dark .danger-text, [data-theme="dark"] .danger-text { color: #ff8798; }
+.button:hover:not(:disabled) { transform: none; }
