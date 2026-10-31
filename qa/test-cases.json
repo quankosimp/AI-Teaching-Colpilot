@@ -1,0 +1,2115 @@
+{
+  "manifestVersion": "1.0.0",
+  "contractVersion": "v1",
+  "description": "Test scenarios and evidence manifest for 60 P0 requirements. All entries are planned until validated against implemented code.",
+  "rules": {
+    "noFakes": "CI-Mock passed does not equal Real-HTTPS verified.",
+    "untestedNotPassed": "Manifest entries with status planned must not be counted as passed tests."
+  },
+  "totalP0Requirements": 60,
+  "totalScenarios": 132,
+  "scenarios": [
+    {
+      "testId": "T-AUTH-001-POS",
+      "srsId": "AUTH 001",
+      "type": "POS",
+      "title": "AUTH 001 - Positive execution scenario: Giáo viên đăng nhập bằng Google OAuth và hệ thống tạo hoặc tìm Teacher theo provider subject.",
+      "acceptanceCriteria": "Đăng nhập thành công trả access token ngắn hạn và refresh token an toàn; email không dùng làm khóa duy nhất của provider.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AUTH-001-NEG",
+      "srsId": "AUTH 001",
+      "type": "NEG",
+      "title": "AUTH 001 - Negative / Boundary rejection scenario: Giáo viên đăng nhập bằng Google OAuth và hệ thống tạo hoặc tìm Teacher theo provider subject.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AUTH-002-POS",
+      "srsId": "AUTH 002",
+      "type": "POS",
+      "title": "AUTH 002 - Positive execution scenario: Backend kiểm tra teacherId hoặc workspaceId trên mọi tài nguyên riêng.",
+      "acceptanceCriteria": "Yêu cầu đọc hoặc sửa tài nguyên của giáo viên khác trả 403 và ghi security event.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AUTH-002-NEG",
+      "srsId": "AUTH 002",
+      "type": "NEG",
+      "title": "AUTH 002 - Negative / Boundary rejection scenario: Backend kiểm tra teacherId hoặc workspaceId trên mọi tài nguyên riêng.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AUTH-003-POS",
+      "srsId": "AUTH 003",
+      "type": "POS",
+      "title": "AUTH 003 - Positive execution scenario: Giáo viên đăng xuất và thu hồi phiên hiện tại.",
+      "acceptanceCriteria": "Refresh token đã thu hồi không thể đổi access token mới.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AUTH-003-NEG",
+      "srsId": "AUTH 003",
+      "type": "NEG",
+      "title": "AUTH 003 - Negative / Boundary rejection scenario: Giáo viên đăng xuất và thu hồi phiên hiện tại.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AUTH-004-POS",
+      "srsId": "AUTH 004",
+      "type": "POS",
+      "title": "AUTH 004 - Positive execution scenario: Hệ thống hỗ trợ adapter xác thực giả lập trong môi trường demo.",
+      "acceptanceCriteria": "Adapter mock chỉ bật theo biến môi trường không production.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AUTH-004-NEG",
+      "srsId": "AUTH 004",
+      "type": "NEG",
+      "title": "AUTH 004 - Negative / Boundary rejection scenario: Hệ thống hỗ trợ adapter xác thực giả lập trong môi trường demo.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-STU-001-POS",
+      "srsId": "STU 001",
+      "type": "POS",
+      "title": "STU 001 - Positive execution scenario: Giáo viên tạo sửa lưu trữ và khôi phục hồ sơ học sinh.",
+      "acceptanceCriteria": "Tên và trạng thái là bắt buộc; archived student không được thêm vào session mới nhưng lịch sử vẫn đọc được.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-STU-001-NEG",
+      "srsId": "STU 001",
+      "type": "NEG",
+      "title": "STU 001 - Negative / Boundary rejection scenario: Giáo viên tạo sửa lưu trữ và khôi phục hồ sơ học sinh.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-STU-002-POS",
+      "srsId": "STU 002",
+      "type": "POS",
+      "title": "STU 002 - Positive execution scenario: Hồ sơ hiển thị mục tiêu điểm mạnh khoảng trống ghi chú và Claim approved gần đây.",
+      "acceptanceCriteria": "Không hiển thị Claim pending hoặc rejected trong phần lịch sử chính thức.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-STU-002-NEG",
+      "srsId": "STU 002",
+      "type": "NEG",
+      "title": "STU 002 - Negative / Boundary rejection scenario: Hồ sơ hiển thị mục tiêu điểm mạnh khoảng trống ghi chú và Claim approved gần đây.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-STU-004-POS",
+      "srsId": "STU 004",
+      "type": "POS",
+      "title": "STU 004 - Positive execution scenario: Một session nhóm giữ dữ liệu riêng theo từng studentId.",
+      "acceptanceCriteria": "Không có API danh sách evidence chung trả chi tiết của nhiều học sinh cho học sinh.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-STU-004-NEG",
+      "srsId": "STU 004",
+      "type": "NEG",
+      "title": "STU 004 - Negative / Boundary rejection scenario: Một session nhóm giữ dữ liệu riêng theo từng studentId.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-STU-005-POS",
+      "srsId": "STU 005",
+      "type": "POS",
+      "title": "STU 005 - Positive execution scenario: Hệ thống xuất tóm tắt lịch sử cho module lập kế hoạch.",
+      "acceptanceCriteria": "Payload chỉ gồm dữ liệu đã duyệt và giữ evidenceIds nguồn.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-STU-005-NEG",
+      "srsId": "STU 005",
+      "type": "NEG",
+      "title": "STU 005 - Negative / Boundary rejection scenario: Hệ thống xuất tóm tắt lịch sử cho module lập kế hoạch.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-MAT-001-POS",
+      "srsId": "MAT 001",
+      "type": "POS",
+      "title": "MAT 001 - Positive execution scenario: Giáo viên tải PDF JPG hoặc PNG và nhập metadata chủ đề lớp mức độ.",
+      "acceptanceCriteria": "File sai loại hoặc vượt giới hạn cấu hình bị từ chối trước khi lưu metadata hoàn tất.",
+      "qaTasks": [
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-MAT-001-NEG",
+      "srsId": "MAT 001",
+      "type": "NEG",
+      "title": "MAT 001 - Negative / Boundary rejection scenario: Giáo viên tải PDF JPG hoặc PNG và nhập metadata chủ đề lớp mức độ.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-MAT-002-POS",
+      "srsId": "MAT 002",
+      "type": "POS",
+      "title": "MAT 002 - Positive execution scenario: Hệ thống tạo signed upload URL và signed read URL có thời hạn.",
+      "acceptanceCriteria": "Secret storage không xuất hiện ở frontend; URL hết hạn không đọc được tệp.",
+      "qaTasks": [
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-MAT-002-NEG",
+      "srsId": "MAT 002",
+      "type": "NEG",
+      "title": "MAT 002 - Negative / Boundary rejection scenario: Hệ thống tạo signed upload URL và signed read URL có thời hạn.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-MAT-003-POS",
+      "srsId": "MAT 003",
+      "type": "POS",
+      "title": "MAT 003 - Positive execution scenario: Giáo viên xem trước học liệu và chọn trang dùng trong Activity.",
+      "acceptanceCriteria": "PDF có thumbnail hoặc viewer; lỗi preview không làm mất tệp gốc.",
+      "qaTasks": [
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-MAT-003-NEG",
+      "srsId": "MAT 003",
+      "type": "NEG",
+      "title": "MAT 003 - Negative / Boundary rejection scenario: Giáo viên xem trước học liệu và chọn trang dùng trong Activity.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-MAT-005-POS",
+      "srsId": "MAT 005",
+      "type": "POS",
+      "title": "MAT 005 - Positive execution scenario: Annotation lưu theo materialId version page và tọa độ chuẩn hóa.",
+      "acceptanceCriteria": "Annotation vẫn đúng vị trí khi viewer thay đổi kích thước.",
+      "qaTasks": [
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-MAT-005-NEG",
+      "srsId": "MAT 005",
+      "type": "NEG",
+      "title": "MAT 005 - Negative / Boundary rejection scenario: Annotation lưu theo materialId version page và tọa độ chuẩn hóa.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-PLAN-001-POS",
+      "srsId": "PLAN 001",
+      "type": "POS",
+      "title": "PLAN 001 - Positive execution scenario: Giáo viên tạo session với một đến năm học sinh ngày giờ thời lượng và mục tiêu.",
+      "acceptanceCriteria": "Không lưu session nếu không có học sinh hoặc vượt giới hạn năm học sinh.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-PLAN-001-NEG",
+      "srsId": "PLAN 001",
+      "type": "NEG",
+      "title": "PLAN 001 - Negative / Boundary rejection scenario: Giáo viên tạo session với một đến năm học sinh ngày giờ thời lượng và mục tiêu.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-PLAN-002-POS",
+      "srsId": "PLAN 002",
+      "type": "POS",
+      "title": "PLAN 002 - Positive execution scenario: Giáo viên thêm sửa xóa và sắp xếp Activity.",
+      "acceptanceCriteria": "Order liên tục; tổng thời lượng được hiển thị và cảnh báo nếu vượt thời lượng session.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-PLAN-002-NEG",
+      "srsId": "PLAN 002",
+      "type": "NEG",
+      "title": "PLAN 002 - Negative / Boundary rejection scenario: Giáo viên thêm sửa xóa và sắp xếp Activity.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-PLAN-003-POS",
+      "srsId": "PLAN 003",
+      "type": "POS",
+      "title": "PLAN 003 - Positive execution scenario: Activity có thể gắn Material và sourceEvidenceIds.",
+      "acceptanceCriteria": "Mở nguồn từ Activity dẫn về Evidence hoặc Claim đã duyệt tương ứng.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-PLAN-003-NEG",
+      "srsId": "PLAN 003",
+      "type": "NEG",
+      "title": "PLAN 003 - Negative / Boundary rejection scenario: Activity có thể gắn Material và sourceEvidenceIds.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-PLAN-004-POS",
+      "srsId": "PLAN 004",
+      "type": "POS",
+      "title": "PLAN 004 - Positive execution scenario: AI đề xuất mục tiêu hoặc Activity từ lịch sử đã duyệt.",
+      "acceptanceCriteria": "Giáo viên chấp nhận sửa hoặc bỏ từng đề xuất; đề xuất không tự ghi vào session.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-PLAN-004-NEG",
+      "srsId": "PLAN 004",
+      "type": "NEG",
+      "title": "PLAN 004 - Negative / Boundary rejection scenario: AI đề xuất mục tiêu hoặc Activity từ lịch sử đã duyệt.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-001-POS",
+      "srsId": "LIVE 001",
+      "type": "POS",
+      "title": "LIVE 001 - Positive execution scenario: Giáo viên bắt đầu session scheduled hoặc draft sau khi kiểm tra thiết bị.",
+      "acceptanceCriteria": "Backend chuyển trạng thái sang live một lần và phát event session.started.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-001-NEG",
+      "srsId": "LIVE 001",
+      "type": "NEG",
+      "title": "LIVE 001 - Negative / Boundary rejection scenario: Giáo viên bắt đầu session scheduled hoặc draft sau khi kiểm tra thiết bị.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-002-POS",
+      "srsId": "LIVE 002",
+      "type": "POS",
+      "title": "LIVE 002 - Positive execution scenario: Giáo viên chọn Activity hiện tại và đánh dấu hoàn tất.",
+      "acceptanceCriteria": "Mọi client trong room nhận activity.changed trong mục tiêu một giây rưỡi.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-002-NEG",
+      "srsId": "LIVE 002",
+      "type": "NEG",
+      "title": "LIVE 002 - Negative / Boundary rejection scenario: Giáo viên chọn Activity hiện tại và đánh dấu hoàn tất.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-003-POS",
+      "srsId": "LIVE 003",
+      "type": "POS",
+      "title": "LIVE 003 - Positive execution scenario: Main stage chuyển giữa video học liệu bảng và quick check mà không rời trang.",
+      "acceptanceCriteria": "State sharedView được lưu server và khôi phục sau refresh.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-003-NEG",
+      "srsId": "LIVE 003",
+      "type": "NEG",
+      "title": "LIVE 003 - Negative / Boundary rejection scenario: Main stage chuyển giữa video học liệu bảng và quick check mà không rời trang.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-004-POS",
+      "srsId": "LIVE 004",
+      "type": "POS",
+      "title": "LIVE 004 - Positive execution scenario: Teaching dock hiển thị học sinh đang chọn nút capture AI và evidence gần nhất.",
+      "acceptanceCriteria": "Giáo viên tạo note evidence từ dock bằng không quá hai thao tác chính.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-004-NEG",
+      "srsId": "LIVE 004",
+      "type": "NEG",
+      "title": "LIVE 004 - Negative / Boundary rejection scenario: Teaching dock hiển thị học sinh đang chọn nút capture AI và evidence gần nhất.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-005-POS",
+      "srsId": "LIVE 005",
+      "type": "POS",
+      "title": "LIVE 005 - Positive execution scenario: Kết thúc session dừng nhận hoạt động mới và chuyển sang ended.",
+      "acceptanceCriteria": "Học sinh không gửi thêm bài hoặc response; giáo viên được chuyển tới tổng kết.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-005-NEG",
+      "srsId": "LIVE 005",
+      "type": "NEG",
+      "title": "LIVE 005 - Negative / Boundary rejection scenario: Kết thúc session dừng nhận hoạt động mới và chuyển sang ended.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-006-POS",
+      "srsId": "LIVE 006",
+      "type": "POS",
+      "title": "LIVE 006 - Positive execution scenario: Mất kết nối realtime hoặc video hiển thị trạng thái và thử kết nối lại độc lập.",
+      "acceptanceCriteria": "Lỗi video không xóa currentActivity hoặc dữ liệu đang soạn; lỗi realtime có hàng đợi cục bộ giới hạn.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-LIVE-006-NEG",
+      "srsId": "LIVE 006",
+      "type": "NEG",
+      "title": "LIVE 006 - Negative / Boundary rejection scenario: Mất kết nối realtime hoặc video hiển thị trạng thái và thử kết nối lại độc lập.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-001-POS",
+      "srsId": "VID 001",
+      "type": "POS",
+      "title": "VID 001 - Positive execution scenario: Backend phát video token ngắn hạn cho teacher hoặc student đã được phép vào session.",
+      "acceptanceCriteria": "Token được ký ở server và chứa session role user identity cùng thời hạn tối thiểu cần thiết.",
+      "qaTasks": [
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-001-NEG",
+      "srsId": "VID 001",
+      "type": "NEG",
+      "title": "VID 001 - Negative / Boundary rejection scenario: Backend phát video token ngắn hạn cho teacher hoặc student đã được phép vào session.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-001-REAL",
+      "srsId": "VID 001",
+      "type": "REAL",
+      "title": "VID 001 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-002-POS",
+      "srsId": "VID 002",
+      "type": "POS",
+      "title": "VID 002 - Positive execution scenario: Client join hoặc leave video session trong container của Classroom.",
+      "acceptanceCriteria": "Không mở ứng dụng Zoom hoặc tab khác; trạng thái joining connected reconnecting error hiển thị rõ.",
+      "qaTasks": [
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-002-NEG",
+      "srsId": "VID 002",
+      "type": "NEG",
+      "title": "VID 002 - Negative / Boundary rejection scenario: Client join hoặc leave video session trong container của Classroom.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-002-REAL",
+      "srsId": "VID 002",
+      "type": "REAL",
+      "title": "VID 002 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-003-POS",
+      "srsId": "VID 003",
+      "type": "POS",
+      "title": "VID 003 - Positive execution scenario: Người dùng điều khiển mic camera và screen share theo capability thiết bị.",
+      "acceptanceCriteria": "Từ chối quyền thiết bị có hướng dẫn phục hồi và không chặn xem nội dung lớp.",
+      "qaTasks": [
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-003-NEG",
+      "srsId": "VID 003",
+      "type": "NEG",
+      "title": "VID 003 - Negative / Boundary rejection scenario: Người dùng điều khiển mic camera và screen share theo capability thiết bị.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-003-REAL",
+      "srsId": "VID 003",
+      "type": "REAL",
+      "title": "VID 003 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-004-POS",
+      "srsId": "VID 004",
+      "type": "POS",
+      "title": "VID 004 - Positive execution scenario: Adapter phát participant và active speaker events cho UI.",
+      "acceptanceCriteria": "Classroom cập nhật tile và roster mà không lưu media payload vào cơ sở dữ liệu.",
+      "qaTasks": [
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-004-NEG",
+      "srsId": "VID 004",
+      "type": "NEG",
+      "title": "VID 004 - Negative / Boundary rejection scenario: Adapter phát participant và active speaker events cho UI.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-004-REAL",
+      "srsId": "VID 004",
+      "type": "REAL",
+      "title": "VID 004 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-005-POS",
+      "srsId": "VID 005",
+      "type": "POS",
+      "title": "VID 005 - Positive execution scenario: Hệ thống có mock provider cho automated test và demo offline.",
+      "acceptanceCriteria": "Có thể chuyển mock sang Zoom bằng cấu hình; module khác không import trực tiếp Zoom SDK.",
+      "qaTasks": [
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-005-NEG",
+      "srsId": "VID 005",
+      "type": "NEG",
+      "title": "VID 005 - Negative / Boundary rejection scenario: Hệ thống có mock provider cho automated test và demo offline.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-VID-005-REAL",
+      "srsId": "VID 005",
+      "type": "REAL",
+      "title": "VID 005 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-001-POS",
+      "srsId": "ROOM 001",
+      "type": "POS",
+      "title": "ROOM 001 - Positive execution scenario: Giáo viên tạo link riêng cho từng học sinh với thời hạn cấu hình.",
+      "acceptanceCriteria": "Link cũ bị thu hồi khi tạo lại; token lưu dạng hash và không xuất hiện trong log.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-001-NEG",
+      "srsId": "ROOM 001",
+      "type": "NEG",
+      "title": "ROOM 001 - Negative / Boundary rejection scenario: Giáo viên tạo link riêng cho từng học sinh với thời hạn cấu hình.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-002-POS",
+      "srsId": "ROOM 002",
+      "type": "POS",
+      "title": "ROOM 002 - Positive execution scenario: Học sinh mở link hợp lệ xác nhận tên consent và xin vào lobby.",
+      "acceptanceCriteria": "Link expired revoked hoặc sai session trả trang lỗi không làm lộ tên lớp hay học sinh khác.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-002-NEG",
+      "srsId": "ROOM 002",
+      "type": "NEG",
+      "title": "ROOM 002 - Negative / Boundary rejection scenario: Học sinh mở link hợp lệ xác nhận tên consent và xin vào lobby.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-003-POS",
+      "srsId": "ROOM 003",
+      "type": "POS",
+      "title": "ROOM 003 - Positive execution scenario: Giáo viên admit hoặc từ chối từng học sinh.",
+      "acceptanceCriteria": "Chỉ member joined nhận video token và quyền gửi công cụ.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-003-NEG",
+      "srsId": "ROOM 003",
+      "type": "NEG",
+      "title": "ROOM 003 - Negative / Boundary rejection scenario: Giáo viên admit hoặc từ chối từng học sinh.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-004-POS",
+      "srsId": "ROOM 004",
+      "type": "POS",
+      "title": "ROOM 004 - Positive execution scenario: Giáo viên bật tắt board upload check và chat theo session hoặc member.",
+      "acceptanceCriteria": "Backend từ chối thao tác bị tắt ngay cả khi client cũ còn hiển thị nút.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-004-NEG",
+      "srsId": "ROOM 004",
+      "type": "NEG",
+      "title": "ROOM 004 - Negative / Boundary rejection scenario: Giáo viên bật tắt board upload check và chat theo session hoặc member.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-005-POS",
+      "srsId": "ROOM 005",
+      "type": "POS",
+      "title": "ROOM 005 - Positive execution scenario: Room state được đồng bộ theo thứ tự event và hỗ trợ reconnect.",
+      "acceptanceCriteria": "Client gửi lastEventId và nhận phần thiếu; duplicate event không tạo dữ liệu lặp.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-005-NEG",
+      "srsId": "ROOM 005",
+      "type": "NEG",
+      "title": "ROOM 005 - Negative / Boundary rejection scenario: Room state được đồng bộ theo thứ tự event và hỗ trợ reconnect.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-006-POS",
+      "srsId": "ROOM 006",
+      "type": "POS",
+      "title": "ROOM 006 - Positive execution scenario: Học sinh chỉ nhận nội dung chung và dữ liệu cá nhân của mình.",
+      "acceptanceCriteria": "Kiểm thử quyền chứng minh không thể đọc response board submission hoặc evidence của học sinh khác.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-ROOM-006-NEG",
+      "srsId": "ROOM 006",
+      "type": "NEG",
+      "title": "ROOM 006 - Negative / Boundary rejection scenario: Học sinh chỉ nhận nội dung chung và dữ liệu cá nhân của mình.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-04",
+        "QA-05",
+        "QA-06"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-001-POS",
+      "srsId": "TOOL 001",
+      "type": "POS",
+      "title": "TOOL 001 - Positive execution scenario: Board hỗ trợ pen line shape text undo clear và chia sẻ trạng thái.",
+      "acceptanceCriteria": "Stroke có authorId; học sinh chỉ sửa stroke của mình nếu không được cấp quyền khác.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-001-NEG",
+      "srsId": "TOOL 001",
+      "type": "NEG",
+      "title": "TOOL 001 - Negative / Boundary rejection scenario: Board hỗ trợ pen line shape text undo clear và chia sẻ trạng thái.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-002-POS",
+      "srsId": "TOOL 002",
+      "type": "POS",
+      "title": "TOOL 002 - Positive execution scenario: Học sinh giữ board cá nhân và chủ động chia sẻ cho giáo viên hoặc lớp.",
+      "acceptanceCriteria": "Board chưa chia sẻ không hiển thị cho học sinh khác; giáo viên được xem theo quyền hỗ trợ đã công bố.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-002-NEG",
+      "srsId": "TOOL 002",
+      "type": "NEG",
+      "title": "TOOL 002 - Negative / Boundary rejection scenario: Học sinh giữ board cá nhân và chủ động chia sẻ cho giáo viên hoặc lớp.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-003-POS",
+      "srsId": "TOOL 003",
+      "type": "POS",
+      "title": "TOOL 003 - Positive execution scenario: Giáo viên chú thích theo trang học liệu.",
+      "acceptanceCriteria": "Annotation có material version page vị trí và liên kết activity.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-003-NEG",
+      "srsId": "TOOL 003",
+      "type": "NEG",
+      "title": "TOOL 003 - Negative / Boundary rejection scenario: Giáo viên chú thích theo trang học liệu.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-004-POS",
+      "srsId": "TOOL 004",
+      "type": "POS",
+      "title": "TOOL 004 - Positive execution scenario: Giáo viên mở một quick check và học sinh trả lời một lần trong thời gian mở.",
+      "acceptanceCriteria": "Response trùng bị từ chối idempotent; giáo viên đóng check và xem kết quả theo học sinh.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-004-NEG",
+      "srsId": "TOOL 004",
+      "type": "NEG",
+      "title": "TOOL 004 - Negative / Boundary rejection scenario: Giáo viên mở một quick check và học sinh trả lời một lần trong thời gian mở.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-005-POS",
+      "srsId": "TOOL 005",
+      "type": "POS",
+      "title": "TOOL 005 - Positive execution scenario: Học sinh gửi text ảnh hoặc PDF làm bài.",
+      "acceptanceCriteria": "Upload thành công tạo Submission và SessionEvent; lỗi upload cho phép retry không tạo bản ghi trùng.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-005-NEG",
+      "srsId": "TOOL 005",
+      "type": "NEG",
+      "title": "TOOL 005 - Negative / Boundary rejection scenario: Học sinh gửi text ảnh hoặc PDF làm bài.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-007-POS",
+      "srsId": "TOOL 007",
+      "type": "POS",
+      "title": "TOOL 007 - Positive execution scenario: Giáo viên có thể gắn mức hỗ trợ khi review board response hoặc submission.",
+      "acceptanceCriteria": "Mức hỗ trợ dùng bốn giá trị: Độc lập; Có gợi ý; Được hướng dẫn; Chưa rõ.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-TOOL-007-NEG",
+      "srsId": "TOOL 007",
+      "type": "NEG",
+      "title": "TOOL 007 - Negative / Boundary rejection scenario: Giáo viên có thể gắn mức hỗ trợ khi review board response hoặc submission.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-EVD-001-POS",
+      "srsId": "EVD 001",
+      "type": "POS",
+      "title": "EVD 001 - Positive execution scenario: Giáo viên tạo note evidence từ Teaching Dock với student và activity mặc định hiện tại.",
+      "acceptanceCriteria": "Bản ghi chứa actor createdAt và sourceRef nếu có; giáo viên có thể sửa student trước khi lưu.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-EVD-001-NEG",
+      "srsId": "EVD 001",
+      "type": "NEG",
+      "title": "EVD 001 - Negative / Boundary rejection scenario: Giáo viên tạo note evidence từ Teaching Dock với student và activity mặc định hiện tại.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-EVD-002-POS",
+      "srsId": "EVD 002",
+      "type": "POS",
+      "title": "EVD 002 - Positive execution scenario: Hệ thống tạo evidence từ submission board attempt check response hoặc annotation được review.",
+      "acceptanceCriteria": "SourceRef trỏ đúng loại và ID; Source Viewer mở được nguồn gốc.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-EVD-002-NEG",
+      "srsId": "EVD 002",
+      "type": "NEG",
+      "title": "EVD 002 - Negative / Boundary rejection scenario: Hệ thống tạo evidence từ submission board attempt check response hoặc annotation được review.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-EVD-003-POS",
+      "srsId": "EVD 003",
+      "type": "POS",
+      "title": "EVD 003 - Positive execution scenario: Evidence hỗ trợ mức hỗ trợ và trạng thái deleted hoặc corrected có audit.",
+      "acceptanceCriteria": "Không sửa âm thầm nguồn của Claim approved; correction tạo version mới và đánh dấu Claim cần duyệt lại.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-EVD-003-NEG",
+      "srsId": "EVD 003",
+      "type": "NEG",
+      "title": "EVD 003 - Negative / Boundary rejection scenario: Evidence hỗ trợ mức hỗ trợ và trạng thái deleted hoặc corrected có audit.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-EVD-004-POS",
+      "srsId": "EVD 004",
+      "type": "POS",
+      "title": "EVD 004 - Positive execution scenario: Danh sách evidence lọc theo session student activity kind và thời gian.",
+      "acceptanceCriteria": "Kết quả tuân thủ phân quyền và phân trang ổn định.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-EVD-004-NEG",
+      "srsId": "EVD 004",
+      "type": "NEG",
+      "title": "EVD 004 - Negative / Boundary rejection scenario: Danh sách evidence lọc theo session student activity kind và thời gian.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-03",
+        "QA-05"
+      ],
+      "tier": "e2e",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-001-POS",
+      "srsId": "AI 001",
+      "type": "POS",
+      "title": "AI 001 - Positive execution scenario: Giáo viên yêu cầu giải thích lại câu hỏi dẫn dắt ví dụ tương tự hoặc điều chỉnh độ khó.",
+      "acceptanceCriteria": "Request gồm student activity mục tiêu và lịch sử approved tối thiểu; phản hồi hiển thị trong dock.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-001-NEG",
+      "srsId": "AI 001",
+      "type": "NEG",
+      "title": "AI 001 - Negative / Boundary rejection scenario: Giáo viên yêu cầu giải thích lại câu hỏi dẫn dắt ví dụ tương tự hoặc điều chỉnh độ khó.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-001-REAL",
+      "srsId": "AI 001",
+      "type": "REAL",
+      "title": "AI 001 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-002-POS",
+      "srsId": "AI 002",
+      "type": "POS",
+      "title": "AI 002 - Positive execution scenario: Giáo viên dùng sửa bỏ qua hoặc báo lỗi một gợi ý.",
+      "acceptanceCriteria": "Trạng thái ready used ignored reported được lưu để đánh giá chất lượng.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-002-NEG",
+      "srsId": "AI 002",
+      "type": "NEG",
+      "title": "AI 002 - Negative / Boundary rejection scenario: Giáo viên dùng sửa bỏ qua hoặc báo lỗi một gợi ý.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-002-REAL",
+      "srsId": "AI 002",
+      "type": "REAL",
+      "title": "AI 002 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-003-POS",
+      "srsId": "AI 003",
+      "type": "POS",
+      "title": "AI 003 - Positive execution scenario: Gợi ý được dùng có thể lưu thành Evidence loại Gợi ý giảng dạy.",
+      "acceptanceCriteria": "Lưu prompt response model version actor và thời điểm nhưng không đưa vào hồ sơ học sinh như kết luận.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-003-NEG",
+      "srsId": "AI 003",
+      "type": "NEG",
+      "title": "AI 003 - Negative / Boundary rejection scenario: Gợi ý được dùng có thể lưu thành Evidence loại Gợi ý giảng dạy.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-003-REAL",
+      "srsId": "AI 003",
+      "type": "REAL",
+      "title": "AI 003 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-004-POS",
+      "srsId": "AI 004",
+      "type": "POS",
+      "title": "AI 004 - Positive execution scenario: Sau session AI tạo Claim pending từ evidence theo từng học sinh.",
+      "acceptanceCriteria": "Mỗi Claim có ít nhất một evidenceId; nếu không có nguồn hệ thống không tạo Claim khẳng định năng lực.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-004-NEG",
+      "srsId": "AI 004",
+      "type": "NEG",
+      "title": "AI 004 - Negative / Boundary rejection scenario: Sau session AI tạo Claim pending từ evidence theo từng học sinh.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-004-REAL",
+      "srsId": "AI 004",
+      "type": "REAL",
+      "title": "AI 004 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-005-POS",
+      "srsId": "AI 005",
+      "type": "POS",
+      "title": "AI 005 - Positive execution scenario: Timeout hoặc provider error trả fallback không chặn lớp.",
+      "acceptanceCriteria": "Sau ngưỡng cấu hình UI cho phép retry và tiếp tục note thủ công; không mất prompt người dùng.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-005-NEG",
+      "srsId": "AI 005",
+      "type": "NEG",
+      "title": "AI 005 - Negative / Boundary rejection scenario: Timeout hoặc provider error trả fallback không chặn lớp.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-005-REAL",
+      "srsId": "AI 005",
+      "type": "REAL",
+      "title": "AI 005 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-006-POS",
+      "srsId": "AI 006",
+      "type": "POS",
+      "title": "AI 006 - Positive execution scenario: Dữ liệu gửi AI được giảm thiểu và lọc theo consent cùng policy.",
+      "acceptanceCriteria": "Không gửi token invite secret URL tệp hoặc dữ liệu học sinh khác ngoài ngữ cảnh cần thiết.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-006-NEG",
+      "srsId": "AI 006",
+      "type": "NEG",
+      "title": "AI 006 - Negative / Boundary rejection scenario: Dữ liệu gửi AI được giảm thiểu và lọc theo consent cùng policy.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-006-REAL",
+      "srsId": "AI 006",
+      "type": "REAL",
+      "title": "AI 006 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-007-POS",
+      "srsId": "AI 007",
+      "type": "POS",
+      "title": "AI 007 - Positive execution scenario: Provider và model được cấu hình qua adapter phía server.",
+      "acceptanceCriteria": "Frontend không giữ API key và module nghiệp vụ không phụ thuộc trực tiếp một nhà cung cấp.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-007-NEG",
+      "srsId": "AI 007",
+      "type": "NEG",
+      "title": "AI 007 - Negative / Boundary rejection scenario: Provider và model được cấu hình qua adapter phía server.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-AI-007-REAL",
+      "srsId": "AI 007",
+      "type": "REAL",
+      "title": "AI 007 - Real provider staging verification on HTTPS (Hardware/Live)",
+      "acceptanceCriteria": "Verified against live provider API on HTTPS staging environment without mock bypass.",
+      "qaTasks": [
+        "QA-08"
+      ],
+      "tier": "manual",
+      "environment": "Real-HTTPS",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-001-POS",
+      "srsId": "REV 001",
+      "type": "POS",
+      "title": "REV 001 - Positive execution scenario: Màn tổng kết tách nội dung hoàn tất việc còn dở evidence và Claim theo từng học sinh.",
+      "acceptanceCriteria": "Chuyển tab học sinh không trộn dữ liệu; số lượng nguồn và trạng thái pending cập nhật đúng.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-001-NEG",
+      "srsId": "REV 001",
+      "type": "NEG",
+      "title": "REV 001 - Negative / Boundary rejection scenario: Màn tổng kết tách nội dung hoàn tất việc còn dở evidence và Claim theo từng học sinh.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-002-POS",
+      "srsId": "REV 002",
+      "type": "POS",
+      "title": "REV 002 - Positive execution scenario: Giáo viên mở nguồn từ mỗi Claim và sửa text hoặc evidenceIds.",
+      "acceptanceCriteria": "Không thể approve Claim không có evidence; sửa Claim approved tạo revision pending.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-002-NEG",
+      "srsId": "REV 002",
+      "type": "NEG",
+      "title": "REV 002 - Negative / Boundary rejection scenario: Giáo viên mở nguồn từ mỗi Claim và sửa text hoặc evidenceIds.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-003-POS",
+      "srsId": "REV 003",
+      "type": "POS",
+      "title": "REV 003 - Positive execution scenario: Giáo viên approve hoặc reject từng Claim.",
+      "acceptanceCriteria": "Lưu reviewedBy reviewedAt và revision; thao tác được audit.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-003-NEG",
+      "srsId": "REV 003",
+      "type": "NEG",
+      "title": "REV 003 - Negative / Boundary rejection scenario: Giáo viên approve hoặc reject từng Claim.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-004-POS",
+      "srsId": "REV 004",
+      "type": "POS",
+      "title": "REV 004 - Positive execution scenario: Session chỉ chuyển reviewed khi không còn Claim pending và giáo viên xác nhận hoàn tất.",
+      "acceptanceCriteria": "Nếu chưa có evidence hệ thống cho phép hoàn tất với ghi chú không đủ dữ liệu thay vì tạo Claim giả.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-004-NEG",
+      "srsId": "REV 004",
+      "type": "NEG",
+      "title": "REV 004 - Negative / Boundary rejection scenario: Session chỉ chuyển reviewed khi không còn Claim pending và giáo viên xác nhận hoàn tất.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-005-POS",
+      "srsId": "REV 005",
+      "type": "POS",
+      "title": "REV 005 - Positive execution scenario: Approved Claim xuất hiện trong hồ sơ học sinh.",
+      "acceptanceCriteria": "Rejected hoặc pending Claim không xuất hiện trong ngữ cảnh lập kế hoạch.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-005-NEG",
+      "srsId": "REV 005",
+      "type": "NEG",
+      "title": "REV 005 - Negative / Boundary rejection scenario: Approved Claim xuất hiện trong hồ sơ học sinh.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-006-POS",
+      "srsId": "REV 006",
+      "type": "POS",
+      "title": "REV 006 - Positive execution scenario: Giáo viên tạo session kế tiếp từ Claim approved.",
+      "acceptanceCriteria": "Activity mới giữ sourceEvidenceIds và không sao chép member state response hoặc video token.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-REV-006-NEG",
+      "srsId": "REV 006",
+      "type": "NEG",
+      "title": "REV 006 - Negative / Boundary rejection scenario: Giáo viên tạo session kế tiếp từ Claim approved.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-02",
+        "QA-04",
+        "QA-05"
+      ],
+      "tier": "authz",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-OPS-001-POS",
+      "srsId": "OPS 001",
+      "type": "POS",
+      "title": "OPS 001 - Positive execution scenario: Mỗi request có requestId actorId và module tag.",
+      "acceptanceCriteria": "Có thể truy vết lỗi qua API realtime worker và webhook mà không log token hoặc nội dung tệp.",
+      "qaTasks": [
+        "QA-03",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "integration",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-OPS-001-NEG",
+      "srsId": "OPS 001",
+      "type": "NEG",
+      "title": "OPS 001 - Negative / Boundary rejection scenario: Mỗi request có requestId actorId và module tag.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "integration",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-OPS-002-POS",
+      "srsId": "OPS 002",
+      "type": "POS",
+      "title": "OPS 002 - Positive execution scenario: AuditLog lưu thao tác quyền invite evidence claim consent và recording.",
+      "acceptanceCriteria": "Audit bất biến với actor action target timestamp và metadata tối thiểu.",
+      "qaTasks": [
+        "QA-03",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "integration",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-OPS-002-NEG",
+      "srsId": "OPS 002",
+      "type": "NEG",
+      "title": "OPS 002 - Negative / Boundary rejection scenario: AuditLog lưu thao tác quyền invite evidence claim consent và recording.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "integration",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-OPS-003-POS",
+      "srsId": "OPS 003",
+      "type": "POS",
+      "title": "OPS 003 - Positive execution scenario: Health check phản ánh database object storage realtime AI và video token service.",
+      "acceptanceCriteria": "Dependency không thiết yếu như AI có thể degraded mà lớp vẫn vào được.",
+      "qaTasks": [
+        "QA-03",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "integration",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-OPS-003-NEG",
+      "srsId": "OPS 003",
+      "type": "NEG",
+      "title": "OPS 003 - Negative / Boundary rejection scenario: Health check phản ánh database object storage realtime AI và video token service.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "integration",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-OPS-004-POS",
+      "srsId": "OPS 004",
+      "type": "POS",
+      "title": "OPS 004 - Positive execution scenario: Feature flag bật tắt AI recording và provider theo môi trường.",
+      "acceptanceCriteria": "Tắt feature không làm lỗi route; UI hiển thị trạng thái không khả dụng.",
+      "qaTasks": [
+        "QA-03",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "integration",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    },
+    {
+      "testId": "T-OPS-004-NEG",
+      "srsId": "OPS 004",
+      "type": "NEG",
+      "title": "OPS 004 - Negative / Boundary rejection scenario: Feature flag bật tắt AI recording và provider theo môi trường.",
+      "acceptanceCriteria": "Negative check: invalid input, unauthorized access, or boundary violation rejected properly.",
+      "qaTasks": [
+        "QA-03",
+        "QA-06",
+        "QA-08"
+      ],
+      "tier": "integration",
+      "environment": "CI-Mock",
+      "contractVersion": "v1",
+      "status": "planned"
+    }
+  ]
+}
