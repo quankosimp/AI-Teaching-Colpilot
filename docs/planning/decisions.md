@@ -1,0 +1,16 @@
+# Binding supervisor decisions
+
+- D01: server/**, contracts/** and prisma/** are canonical. ARCH designs, PRODUCT authors runtime. UI only owns ui.tsx/CSS/presentation. QA test namespaces exclude tests/unit/product/**. Only PRODUCT edits package/lock/release workflow; QA owns test.yml. Supervisor owns planning/RTM.
+- D02: ARCH spec -> Product compiled contracts -> independent audit/freeze -> UI/QA consumers. No circular wait for code before its author may create it.
+- D03: Session draft or scheduled may start live; ended/reviewed never returns live. Correction may reopen reviewed -> ended with audit, preserving endedAt and disabled live tools.
+- D04: AI aids are stored with isObservation=false and cannot alone substantiate competence. Claims validate real observation sources for same teacher/student/session and current revisions.
+- D05: Live board is mutable under author policy. Captured BoardAttempt/source snapshots and revisions are immutable.
+- D06: Archive blocks adding a student to a new session and preserves history; it does not silently eject an active student or mass-revoke invitations. Explicit revoke is distinct.
+- D07: Rotate invite revokes old link, preserves joined membership; explicit revoke invalidates membership/socket access. Tokens are CSPRNG generated only in write commands, hashed in DB and excluded from audit/plaintext response caches.
+- D08: No raw AppData to students; private goals/reviews/source references never enter shared group goals/activity descriptions.
+- D09: Basic existing chat has server allow/deny and rate limit for ROOM 004; formal TOOL 006 remains P1. Do not make chat permanently denied to claim the toggle works.
+- D10: Reconnect queue: max 50 commands/1 MiB/5-minute TTL; idempotent replay only after server revalidation. Never auto-send after ended or discard the user draft on queue full.
+- D11: Google/Zoom/Gemini real staging requires actual providers. Auth/video mocks only local/CI. Provider failures cannot fabricate success or block manual teaching/evidence.
+- D12: PDF/JPG/PNG max 10 MiB; private/versioned uploads validated at finalization, short-lived authorized signed URLs. Annotation coordinates are normalized.
+- D13: Runtime Node22 and pnpm committed lockfile, strict compatible peers; no legacy-peer-deps as the delivery installation path.
+- D14: Existing local demo storage is not silently uploaded/imported into online data. Preserve user storage; server demo fixtures are separate and synthetic.
