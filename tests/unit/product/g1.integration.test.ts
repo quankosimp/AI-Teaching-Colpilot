@@ -40,6 +40,9 @@ test(
           cookie: r.headers.get("set-cookie")!.split(";")[0],
         };
       };
+      const health = await call("/health");
+      assert.equal(health.status, 200);
+      assert.equal((await health.json()).status, "degraded");
       const a = await login("teacher-a"),
         b = await login("teacher-b");
       const studentsA = (await (await call("/students", a.token)).json())
@@ -93,6 +96,15 @@ test(
         403,
       );
       assert.equal((await call("/auth/google/start")).status, 503);
+      assert.equal(
+        (
+          await call(`/sessions/${session.id}/ai/plan-suggestions`, a.token, {
+            method: "POST",
+            body: JSON.stringify({ studentId: studentsA[0].id }),
+          })
+        ).status,
+        503,
+      );
       assert.ok(
         (await (await call("/sessions", a.token)).json()).sessions.some(
           (x: { id: string }) => x.id === session.id,

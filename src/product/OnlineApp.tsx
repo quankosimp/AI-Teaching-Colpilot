@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   AsyncPanel,
   FormFeedback,
+  AISuggestionReview,
   type AsyncState,
   type Feedback,
 } from "./presentation";
@@ -106,6 +107,12 @@ export default function OnlineApp() {
   const [preview, setPreview] = useState<{ title: string; url: string } | null>(
     null,
   );
+  const [suggestion, setSuggestion] = useState<{
+    id: string;
+    text: string;
+    sources: { claimId: string; revision: number; evidenceIds: string[] }[];
+  } | null>(null);
+  const [editingSuggestion, setEditingSuggestion] = useState(false);
   const [activity, setActivity] = useState("");
   const [activityDescription, setActivityDescription] = useState("");
   const [activityDuration, setActivityDuration] = useState(15);
@@ -1160,6 +1167,107 @@ export default function OnlineApp() {
                         )}
                       </div>
                     ))}
+                    <button
+                      className="button ghost"
+                      disabled={
+                        busy || !session.RoomMember_sessionId_items.length
+                      }
+                      onClick={() =>
+                        void run(async () => {
+                          const studentId =
+                            session.RoomMember_sessionId_items.some(
+                              (m) => m.studentId === selectedStudent,
+                            )
+                              ? selectedStudent
+                              : session.RoomMember_sessionId_items[0].studentId;
+                          const response = await api<{
+                            suggestion: {
+                              id: string;
+                              text: string;
+                              sources: {
+                                claimId: string;
+                                revision: number;
+                                evidenceIds: string[];
+                              }[];
+                            };
+                          }>(`/sessions/${session.id}/ai/plan-suggestions`, {
+                            method: "POST",
+                            body: body({ studentId }),
+                          });
+                          setSuggestion(response.suggestion);
+                          setEditingSuggestion(false);
+                        })
+                      }
+                    >
+                      Đề xuất hoạt động từ lịch sử đã duyệt
+                    </button>
+                    {suggestion && (
+                      <>
+                        <AISuggestionReview
+                          text={suggestion.text}
+                          busy={busy}
+                          onEdit={() => setEditingSuggestion(true)}
+                          onDismiss={() =>
+                            void run(async () => {
+                              await api(`/ai-requests/${suggestion.id}`, {
+                                method: "PATCH",
+                                body: body({ status: "ignored" }),
+                              });
+                              setSuggestion(null);
+                            })
+                          }
+                          onAccept={() =>
+                            void run(async () => {
+                              await saveActivities([
+                                ...session.Activity_sessionId_items,
+                                {
+                                  id: "",
+                                  title: "Củng cố từ lịch sử đã duyệt",
+                                  description: "",
+                                  teacherNotes: suggestion.text,
+                                  duration: 15,
+                                  type: "KiemTra",
+                                  materialId: null,
+                                  materialVersion: null,
+                                  sourceEvidenceIds: [
+                                    ...new Set(
+                                      suggestion.sources.flatMap(
+                                        (source) => source.evidenceIds,
+                                      ),
+                                    ),
+                                  ],
+                                  sourceClaimRefs: suggestion.sources.map(
+                                    ({ claimId, revision }) => ({
+                                      claimId,
+                                      revision,
+                                    }),
+                                  ),
+                                },
+                              ]);
+                              await api(`/ai-requests/${suggestion.id}`, {
+                                method: "PATCH",
+                                body: body({ status: "used" }),
+                              });
+                              setSuggestion(null);
+                            })
+                          }
+                        />
+                        {editingSuggestion && (
+                          <label>
+                            Sửa gợi ý riêng cho giáo viên
+                            <textarea
+                              value={suggestion.text}
+                              onChange={(e) =>
+                                setSuggestion({
+                                  ...suggestion,
+                                  text: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        )}
+                      </>
+                    )}
                     {session.Activity_sessionId_items.reduce(
                       (n, a) => n + a.duration,
                       0,

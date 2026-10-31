@@ -1,6 +1,7 @@
 import express, { type ErrorRequestHandler } from "express";
 import cookieParser from "cookie-parser";
 import { requestId, originGuard, fail, db, type AppConfig } from "./context.js";
+import { aiRouter } from "./routes/ai.js";
 import { authRouter } from "./routes/auth.js";
 import { materialsRouter, storage } from "./routes/materials.js";
 import { teacherRouter } from "./routes/teacher.js";
@@ -27,23 +28,33 @@ export function createApp(config?: AppConfig) {
       ]);
       const ready =
         database.status === "fulfilled" && objectStorage.status === "fulfilled";
-      res
-        .status(ready ? 200 : 503)
-        .json({
-          status: ready ? "ready" : "unavailable",
-          dependencies: {
-            database: database.status === "fulfilled" ? "ready" : "unavailable",
-            storage:
-              objectStorage.status === "fulfilled" ? "ready" : "unavailable",
-            realtime: "not_configured",
-            ai: "not_probed",
-            video: "not_probed",
+      res.status(ready ? 200 : 503).json({
+        status: ready ? "degraded" : "unavailable",
+        dependencies: {
+          database: database.status === "fulfilled" ? "ready" : "unavailable",
+          storage:
+            objectStorage.status === "fulfilled" ? "ready" : "unavailable",
+          realtime: "not_configured",
+          ai: {
+            enabled: process.env.ENABLE_AI === "true",
+            configured: !!(
+              process.env.GEMINI_API_KEY && process.env.GEMINI_MODEL
+            ),
+            probe: "not_run",
           },
-        });
+          video: {
+            configured: !!(
+              process.env.ZOOM_SDK_KEY && process.env.ZOOM_SDK_SECRET
+            ),
+            probe: "not_run",
+          },
+        },
+      });
     });
     app.use("/api/v1/auth", authRouter(config));
     app.use("/api/v1", teacherRouter(config));
     app.use("/api/v1", materialsRouter(config));
+    app.use("/api/v1", aiRouter(config));
   }
   const errorHandler: ErrorRequestHandler = (_error, _req, res, _next) => {
     fail(res, 500, "INTERNAL_ERROR", "Không thể hoàn thành yêu cầu");

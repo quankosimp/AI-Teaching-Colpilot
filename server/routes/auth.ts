@@ -131,7 +131,13 @@ export function authRouter(config: AppConfig) {
       });
       return res.json({
         teacher,
-        featureFlags: { ai: false, recording: false },
+        featureFlags: {
+          ai:
+            process.env.ENABLE_AI === "true" &&
+            !!process.env.GEMINI_API_KEY &&
+            !!process.env.GEMINI_MODEL,
+          recording: false,
+        },
       });
     }),
   );
