@@ -17,6 +17,7 @@ import {
   type TeacherActor,
 } from "../context.js";
 import { createOnce } from "../idempotency.js";
+import { ClaimRef } from "../../contracts/domain.js";
 import type { Request, Response } from "express";
 
 async function ownedStudent(id: string, actor: TeacherActor, res: Response) {
@@ -50,6 +51,63 @@ const version = (req: Request) => {
   return Number.isInteger(value) && value > 0 ? value : null;
 };
 const safeId = z.uuid();
+type SessionDetails = Prisma.SessionGetPayload<{
+  include: { Activity_sessionId_items: true; RoomMember_sessionId_items: true };
+}>;
+async function markStale(sessions: SessionDetails[], teacherId: string) {
+  const activities = sessions.flatMap(
+    (session) => session.Activity_sessionId_items,
+  );
+  const claimIds = activities.flatMap((activity) => {
+    const result = z.array(ClaimRef).safeParse(activity.sourceClaimRefs);
+    return result.success
+      ? result.data
+          .map((ref) => ref.claimId)
+          .filter((id) => safeId.safeParse(id).success)
+      : [];
+  });
+  const evidenceIds = activities.flatMap((activity) =>
+    activity.sourceEvidenceIds.filter((id) => safeId.safeParse(id).success),
+  );
+  const [claims, evidence] = await Promise.all([
+    db.claim.findMany({
+      where: { id: { in: claimIds }, sessionIdRef: { teacherId } },
+      select: { id: true, status: true, revision: true },
+    }),
+    db.evidence.findMany({
+      where: { id: { in: evidenceIds }, sessionIdRef: { teacherId } },
+      select: { id: true, status: true },
+    }),
+  ]);
+  return sessions.map((session) => ({
+    ...session,
+    Activity_sessionId_items: session.Activity_sessionId_items.map(
+      (activity) => {
+        const refs = z.array(ClaimRef).safeParse(activity.sourceClaimRefs);
+        return {
+          ...activity,
+          isSourceStale:
+            !refs.success ||
+            activity.sourceEvidenceIds.some(
+              (id) =>
+                !evidence.some(
+                  (item) => item.id === id && item.status === "active",
+                ),
+            ) ||
+            refs.data.some(
+              (ref) =>
+                !claims.some(
+                  (claim) =>
+                    claim.id === ref.claimId &&
+                    claim.status === "approved" &&
+                    claim.revision === ref.revision,
+                ),
+            ),
+        };
+      },
+    ),
+  }));
+}
 const studentCreate = StudentInput.extend({
   initials: z.string().min(1).max(6),
   color: z.string().max(40),
@@ -194,19 +252,84 @@ export function teacherRouter(config: AppConfig) {
     }),
   );
   r.get(
+    "/evidence/:id",
+    asyncRoute(async (req, res) => {
+      if (!safeId.safeParse(req.params.id).success)
+        return fail(res, 400, "VALIDATION_ERROR", "ID không hợp lệ");
+      const evidence = await db.evidence.findUnique({
+        where: { id: req.params.id },
+        include: { sessionIdRef: { select: { teacherId: true } } },
+      });
+      if (!evidence)
+        return fail(res, 404, "NOT_FOUND", "Không tìm thấy minh chứng");
+      if (evidence.sessionIdRef.teacherId !== res.locals.actor.id) {
+        await audit(
+          res.locals.actor,
+          "security.denied",
+          "evidence",
+          evidence.id,
+          res.locals.requestId,
+        );
+        return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập");
+      }
+      const sourceId = evidence.sourceId ?? evidence.submissionId;
+      let source: unknown = null;
+      if (sourceId && safeId.safeParse(sourceId).success) {
+        if (evidence.sourceType === "submission")
+          source = await db.submission.findFirst({
+            where: {
+              id: sourceId,
+              sessionId: evidence.sessionId,
+              studentId: evidence.studentId,
+            },
+            select: {
+              id: true,
+              title: true,
+              answer: true,
+              fileName: true,
+              version: true,
+            },
+          });
+        if (evidence.sourceType === "board_attempt")
+          source = await db.boardAttempt.findFirst({
+            where: {
+              id: sourceId,
+              sessionId: evidence.sessionId,
+              studentId: evidence.studentId,
+            },
+          });
+        if (evidence.sourceType === "check_response")
+          source = await db.checkResponse.findFirst({
+            where: {
+              id: sourceId,
+              sessionId: evidence.sessionId,
+              studentId: evidence.studentId,
+            },
+          });
+        if (evidence.sourceType === "annotation")
+          source = await db.annotation.findFirst({
+            where: { id: sourceId, sessionId: evidence.sessionId },
+          });
+      }
+      const { sessionIdRef: _owner, ...item } = evidence;
+      return res.json({ evidence: item, source });
+    }),
+  );
+  r.get(
     "/sessions",
-    asyncRoute(async (_req, res) =>
-      res.json({
-        sessions: await db.session.findMany({
-          where: { teacherId: res.locals.actor.id },
-          include: {
-            Activity_sessionId_items: { orderBy: { order: "asc" } },
-            RoomMember_sessionId_items: true,
-          },
-          orderBy: { createdAt: "desc" },
-        }),
-      }),
-    ),
+    asyncRoute(async (_req, res) => {
+      const sessions = await db.session.findMany({
+        where: { teacherId: res.locals.actor.id },
+        include: {
+          Activity_sessionId_items: { orderBy: { order: "asc" } },
+          RoomMember_sessionId_items: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      return res.json({
+        sessions: await markStale(sessions, res.locals.actor.id),
+      });
+    }),
   );
   r.get(
     "/sessions/:id",
@@ -215,14 +338,15 @@ export function teacherRouter(config: AppConfig) {
         return fail(res, 400, "VALIDATION_ERROR", "ID không hợp lệ");
       const session = await ownedSession(req.params.id, res.locals.actor, res);
       if (!session) return;
+      const full = await db.session.findUniqueOrThrow({
+        where: { id: session.id },
+        include: {
+          Activity_sessionId_items: { orderBy: { order: "asc" } },
+          RoomMember_sessionId_items: true,
+        },
+      });
       return res.json({
-        session: await db.session.findUniqueOrThrow({
-          where: { id: session.id },
-          include: {
-            Activity_sessionId_items: { orderBy: { order: "asc" } },
-            RoomMember_sessionId_items: true,
-          },
-        }),
+        session: (await markStale([full], res.locals.actor.id))[0],
       });
     }),
   );

@@ -135,7 +135,7 @@ export function aiRouter(config: AppConfig) {
       ).map((student) => student.name);
       const prompt = [
         "Đề xuất một hoạt động ngắn cho giáo viên. Không đưa tên riêng, thông tin cá nhân hoặc kết luận mới. Trả lời ngắn bằng tiếng Việt.",
-        `Môn: ${minimize(member.studentIdRef.subject)}; lớp: ${minimize(member.studentIdRef.grade)}.`,
+        `Môn: ${minimize(member.studentIdRef.subject, studentNames)}; lớp: ${minimize(member.studentIdRef.grade, studentNames)}.`,
         ...eligible.map(
           (c) => `Nhận định đã duyệt: ${minimize(c.text, studentNames)}`,
         ),

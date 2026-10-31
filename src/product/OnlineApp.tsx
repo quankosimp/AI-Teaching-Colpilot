@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useRef,
+  type FormEvent,
+} from "react";
 import {
   AsyncPanel,
   FormFeedback,
@@ -7,6 +13,7 @@ import {
   type Feedback,
 } from "./presentation";
 import { api, ApiError, googleCallback, signIn, signOut } from "./onlineApi";
+import { Modal } from "./ui";
 import "./product.css";
 import "./classroom.css";
 import "./refinement.css";
@@ -44,6 +51,7 @@ type Activity = {
   teacherNotes: string | null;
   sourceEvidenceIds: string[];
   sourceClaimRefs: { claimId: string; revision: number }[];
+  isSourceStale?: boolean;
 };
 type Session = {
   id: string;
@@ -59,6 +67,21 @@ type Session = {
   RoomMember_sessionId_items: { studentId: string }[];
 };
 type Teacher = { id: string; name: string; email: string };
+type ApprovedClaim = {
+  id: string;
+  text: string;
+  revision: number;
+  evidenceIds: string[];
+};
+type Annotation = {
+  id: string;
+  activityId: string;
+  page: number;
+  x: number;
+  y: number;
+  text: string;
+  materialVersion: number;
+};
 type Page = "students" | "materials" | "plans";
 const message = (e: unknown): Feedback =>
   e instanceof ApiError
@@ -85,6 +108,7 @@ function initializeOAuth() {
 }
 
 export default function OnlineApp() {
+  const workspaceEpoch = useRef(0);
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [state, setState] = useState<AsyncState>("loading");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -128,9 +152,43 @@ export default function OnlineApp() {
   const [editNotes, setEditNotes] = useState("");
   const [editStrengths, setEditStrengths] = useState("");
   const [editGaps, setEditGaps] = useState("");
-  const [history, setHistory] = useState<{ id: string; text: string }[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [history, setHistory] = useState<ApprovedClaim[]>([]);
+  const [openedSource, setOpenedSource] = useState<{
+    evidence: { title: string; detail: string };
+    source: unknown;
+  } | null>(null);
   const [theme, setTheme] = useState(false);
+  const clearWorkspace = useCallback(() => {
+    workspaceEpoch.current += 1;
+    setTeacher(null);
+    setPage("students");
+    setStudents([]);
+    setMaterials([]);
+    setSessions([]);
+    setHistory([]);
+    setAnnotations([]);
+    setPreview(null);
+    setOpenedSource(null);
+    setSuggestion(null);
+    setSelectedStudent("");
+    setSelectedSession("");
+    setMemberIds([]);
+    setFile(null);
+    setName("");
+    setGoal("");
+    setTitle("");
+    setActivity("");
+    setActivityDescription("");
+    setMaterialTopic("");
+    setMaterialDescription("");
+    setEditGoal("");
+    setEditNotes("");
+    setEditStrengths("");
+    setEditGaps("");
+  }, []);
   const reload = useCallback(async () => {
+    const epoch = workspaceEpoch.current;
     setState("loading");
     setFeedback(null);
     try {
@@ -140,6 +198,7 @@ export default function OnlineApp() {
         api<{ materials: Material[] }>("/materials"),
         api<{ sessions: Session[] }>("/sessions"),
       ]);
+      if (epoch !== workspaceEpoch.current) return;
       setTeacher(who.teacher);
       setStudents(pupils.students);
       setMaterials(library.materials);
@@ -156,15 +215,16 @@ export default function OnlineApp() {
           : plans.sessions[0]?.id || "",
       );
     } catch (e) {
+      if (epoch !== workspaceEpoch.current) return;
       if (e instanceof ApiError && e.status === 401) {
-        setTeacher(null);
+        clearWorkspace();
         setState("ready");
       } else {
         setFeedback(message(e));
         setState("error");
       }
     }
-  }, []);
+  }, [clearWorkspace]);
   useEffect(() => {
     let active = true;
     const start = async () => {
@@ -237,9 +297,7 @@ export default function OnlineApp() {
   useEffect(() => {
     if (!selectedStudent) return;
     let active = true;
-    api<{ claims: { id: string; text: string }[] }>(
-      `/students/${selectedStudent}/history`,
-    )
+    api<{ claims: ApprovedClaim[] }>(`/students/${selectedStudent}/history`)
       .then((r) => {
         if (active) setHistory(r.claims);
       })
@@ -250,6 +308,25 @@ export default function OnlineApp() {
       active = false;
     };
   }, [selectedStudent]);
+  useEffect(() => {
+    if (!selectedSession) {
+      setAnnotations([]);
+      return;
+    }
+    let active = true;
+    api<{ annotations: Annotation[] }>(
+      `/sessions/${selectedSession}/annotations`,
+    )
+      .then((result) => {
+        if (active) setAnnotations(result.annotations);
+      })
+      .catch((error) => {
+        if (active) setFeedback(message(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedSession]);
   const updateStudent = (patch: Partial<Student>) => {
     if (!student) return;
     void run(async () => {
@@ -391,7 +468,9 @@ export default function OnlineApp() {
       <header className="page-header">
         <div>
           <h1>AI Teaching Copilot</h1>
-          <p>Không gian dạy học trực tuyến</p>
+          <p>
+            Không gian dạy học trực tuyến{teacher ? ` · ${teacher.name}` : ""}
+          </p>
         </div>
         <div className="row-actions">
           <button
@@ -408,8 +487,11 @@ export default function OnlineApp() {
               className="button ghost"
               onClick={() =>
                 void run(async () => {
-                  await signOut();
-                  setTeacher(null);
+                  try {
+                    await signOut();
+                  } finally {
+                    clearWorkspace();
+                  }
                 })
               }
             >
@@ -493,12 +575,6 @@ export default function OnlineApp() {
                     className="button ghost full"
                     onClick={() => {
                       setSelectedStudent(s.id);
-                      void run(async () => {
-                        const result = await api<{
-                          claims: { id: string; text: string }[];
-                        }>(`/students/${s.id}/history`);
-                        setHistory(result.claims);
-                      });
                     }}
                   >
                     {s.name} ·{" "}
@@ -607,7 +683,22 @@ export default function OnlineApp() {
                     </button>
                     <h3>Nhận định đã duyệt</h3>
                     {history.map((c) => (
-                      <p key={c.id}>{c.text}</p>
+                      <div key={c.id}>
+                        <p>{c.text}</p>
+                        {c.evidenceIds.map((id) => (
+                          <button
+                            className="text-button"
+                            key={id}
+                            onClick={() =>
+                              void run(async () => {
+                                setOpenedSource(await api(`/evidence/${id}`));
+                              })
+                            }
+                          >
+                            Xem minh chứng
+                          </button>
+                        ))}
+                      </div>
                     ))}
                   </>
                 ) : (
@@ -933,6 +1024,11 @@ export default function OnlineApp() {
                         <p>
                           {a.title} · {a.duration} phút
                         </p>
+                        {a.isSourceStale && (
+                          <p role="alert">
+                            Nguồn đã thay đổi, cần kiểm tra lại.
+                          </p>
+                        )}
                         <form
                           className="form-stack"
                           key={`${a.id}-${session.version}`}
@@ -1073,6 +1169,72 @@ export default function OnlineApp() {
                             </option>
                           ))}
                         </select>
+                        {a.sourceEvidenceIds.map((id) => (
+                          <button
+                            className="text-button"
+                            key={id}
+                            onClick={() =>
+                              void run(async () => {
+                                setOpenedSource(await api(`/evidence/${id}`));
+                              })
+                            }
+                          >
+                            Xem nguồn đã duyệt
+                          </button>
+                        ))}
+                        {history
+                          .filter((claim) =>
+                            session.RoomMember_sessionId_items.some(
+                              (member) => member.studentId === selectedStudent,
+                            ),
+                          )
+                          .map((claim) => (
+                            <button
+                              className="text-button"
+                              key={claim.id}
+                              onClick={() =>
+                                void run(async () => {
+                                  await saveActivities(
+                                    session.Activity_sessionId_items.map(
+                                      (item) =>
+                                        item.id === a.id
+                                          ? {
+                                              ...item,
+                                              sourceEvidenceIds: [
+                                                ...new Set([
+                                                  ...item.sourceEvidenceIds,
+                                                  ...claim.evidenceIds,
+                                                ]),
+                                              ],
+                                              sourceClaimRefs: [
+                                                ...item.sourceClaimRefs.filter(
+                                                  (ref) =>
+                                                    ref.claimId !== claim.id,
+                                                ),
+                                                {
+                                                  claimId: claim.id,
+                                                  revision: claim.revision,
+                                                },
+                                              ],
+                                            }
+                                          : item,
+                                    ),
+                                  );
+                                })
+                              }
+                            >
+                              Gắn nguồn: {claim.text}
+                            </button>
+                          ))}
+                        {annotations
+                          .filter((item) => item.activityId === a.id)
+                          .map((item) => (
+                            <p key={item.id}>
+                              Chú thích trang {item.page + 1} · vị trí {item.x}
+                              %, {item.y}% · phiên bản {item.materialVersion}:{" "}
+                              {item.text}
+                            </p>
+                          ))}
                         {a.materialId && (
                           <form
                             className="form-stack"
@@ -1083,22 +1245,25 @@ export default function OnlineApp() {
                                 fields.get("studentId") || "",
                               );
                               void run(async () => {
-                                await api(
-                                  `/sessions/${session.id}/annotations`,
-                                  {
-                                    method: "POST",
-                                    body: body({
-                                      activityId: a.id,
-                                      materialId: a.materialId,
-                                      materialVersion: a.materialVersion,
-                                      page: Number(fields.get("page")) - 1,
-                                      x: Number(fields.get("x")),
-                                      y: Number(fields.get("y")),
-                                      text: String(fields.get("text")),
-                                      ...(studentId ? { studentId } : {}),
-                                    }),
-                                  },
-                                );
+                                const result = await api<{
+                                  annotation: Annotation;
+                                }>(`/sessions/${session.id}/annotations`, {
+                                  method: "POST",
+                                  body: body({
+                                    activityId: a.id,
+                                    materialId: a.materialId,
+                                    materialVersion: a.materialVersion,
+                                    page: Number(fields.get("page")) - 1,
+                                    x: Number(fields.get("x")),
+                                    y: Number(fields.get("y")),
+                                    text: String(fields.get("text")),
+                                    ...(studentId ? { studentId } : {}),
+                                  }),
+                                });
+                                setAnnotations((items) => [
+                                  ...items,
+                                  result.annotation,
+                                ]);
                               });
                             }}
                           >
@@ -1340,6 +1505,19 @@ export default function OnlineApp() {
             này được lưu trên máy chủ.
           </p>
         </>
+      )}
+      {openedSource && (
+        <Modal
+          title={openedSource.evidence.title}
+          onClose={() => setOpenedSource(null)}
+        >
+          <p>{openedSource.evidence.detail}</p>
+          <pre>
+            {openedSource.source
+              ? JSON.stringify(openedSource.source, null, 2)
+              : "Nguồn gốc không khả dụng."}
+          </pre>
+        </Modal>
       )}
     </main>
   );

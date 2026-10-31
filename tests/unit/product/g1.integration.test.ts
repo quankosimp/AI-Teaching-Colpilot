@@ -263,6 +263,59 @@ test(
         where: { sourceId: saved.id, sourceType: "annotation" },
       });
       assert.equal(ev?.studentId, studentsA[0].id);
+      assert.equal((await call(`/evidence/${ev!.id}`, b.token)).status, 403);
+      const sourceResponse = await call(`/evidence/${ev!.id}`, a.token);
+      assert.equal(sourceResponse.status, 200);
+      assert.equal((await sourceResponse.json()).source.id, saved.id);
+      const claim = await db.claim.create({
+        data: {
+          sessionId: session.id,
+          studentId: studentsA[0].id,
+          text: "Nhận định mẫu",
+          evidenceIds: [ev!.id],
+          status: "approved",
+        },
+      });
+      const withSource = await call(
+        `/sessions/${session.id}/activities`,
+        a.token,
+        {
+          method: "PUT",
+          headers: { "If-Match-Version": String(updated.version) },
+          body: JSON.stringify([
+            {
+              id: activityId,
+              title: "Quan sát",
+              description: "",
+              duration: 20,
+              type: "LuyenTap",
+              materialId: material.id,
+              materialVersion: 1,
+              sourceEvidenceIds: [ev!.id],
+              sourceClaimRefs: [
+                { claimId: claim.id, revision: claim.revision },
+              ],
+            },
+          ]),
+        },
+      );
+      assert.equal(withSource.status, 200);
+      let detail = await (
+        await call(`/sessions/${session.id}`, a.token)
+      ).json();
+      assert.equal(
+        detail.session.Activity_sessionId_items[0].isSourceStale,
+        false,
+      );
+      await db.claim.update({
+        where: { id: claim.id },
+        data: { status: "pending" },
+      });
+      detail = await (await call(`/sessions/${session.id}`, a.token)).json();
+      assert.equal(
+        detail.session.Activity_sessionId_items[0].isSourceStale,
+        true,
+      );
       const read = await call(`/materials/${material.id}/read-url`, a.token);
       assert.equal(read.status, 200);
       assert.deepEqual(
