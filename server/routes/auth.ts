@@ -3,6 +3,7 @@ import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { SignJWT } from "jose";
 import { OAuth2Client } from "google-auth-library";
 import { z } from "zod";
+import { AuthMockInput } from "../../contracts/api.js";
 import {
   asyncRoute,
   db,
@@ -55,9 +56,7 @@ export function authRouter(config: AppConfig) {
     asyncRoute(async (req, res) => {
       if (config.mode !== "local_mock" && config.mode !== "test")
         return fail(res, 404, "NOT_FOUND", "Không khả dụng");
-      const parsed = z
-        .strictObject({ account: z.enum(["teacher-a", "teacher-b"]) })
-        .safeParse(req.body);
+      const parsed = AuthMockInput.safeParse(req.body);
       if (!parsed.success)
         return fail(res, 400, "VALIDATION_ERROR", "Tài khoản không hợp lệ");
       const identity = await db.teacherOAuthIdentity.findUnique({
@@ -116,12 +115,30 @@ export function authRouter(config: AppConfig) {
   r.post(
     "/logout",
     requireTeacher(config),
-    asyncRoute(async (_req, res) => {
+    asyncRoute(async (req, res) => {
+      const raw = req.cookies?.copilot_refresh;
+      const cookieSession =
+        typeof raw === "string"
+          ? await db.teacherAuthSession.findUnique({
+              where: { refreshTokenHash: digest(raw) },
+              select: { teacherId: true },
+            })
+          : null;
+      const match =
+        typeof raw === "string" &&
+        cookieSession?.teacherId === res.locals.actor.id
+          ? [{ refreshTokenHash: digest(raw) }]
+          : [];
       await db.teacherAuthSession.updateMany({
-        where: { id: res.locals.actor.sessionId, revokedAt: null },
+        where: {
+          teacherId: res.locals.actor.id,
+          revokedAt: null,
+          OR: [{ id: res.locals.actor.sessionId }, ...match],
+        },
         data: { revokedAt: new Date() },
       });
-      res.clearCookie("copilot_refresh", clearCookieOptions(config));
+      if (!cookieSession || cookieSession.teacherId === res.locals.actor.id)
+        res.clearCookie("copilot_refresh", clearCookieOptions(config));
       return res.status(204).end();
     }),
   );

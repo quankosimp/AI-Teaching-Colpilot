@@ -14,6 +14,7 @@ import {
 } from "./presentation";
 import { api, ApiError, googleCallback, signIn, signOut } from "./onlineApi";
 import { Modal } from "./ui";
+import { MaterialViewer } from "./MaterialViewer";
 import "./product.css";
 import "./classroom.css";
 import "./refinement.css";
@@ -39,6 +40,8 @@ type Material = {
   grade: string;
   subject: string;
   level: string;
+  kind: "PDF" | "Anh" | "BaiTap" | "GhiChu";
+  currentVersion: number;
 };
 type Activity = {
   id: string;
@@ -72,10 +75,12 @@ type ApprovedClaim = {
   text: string;
   revision: number;
   evidenceIds: string[];
+  observationEvidenceIds: string[];
 };
 type Annotation = {
   id: string;
   activityId: string;
+  materialId: string;
   page: number;
   x: number;
   y: number;
@@ -128,9 +133,8 @@ export default function OnlineApp() {
   const [materialTopic, setMaterialTopic] = useState("");
   const [materialLevel, setMaterialLevel] = useState("TrungBinh");
   const [materialDescription, setMaterialDescription] = useState("");
-  const [preview, setPreview] = useState<{ title: string; url: string } | null>(
-    null,
-  );
+  const [preview, setPreview] = useState<Material | null>(null);
+  const [viewerActivity, setViewerActivity] = useState("");
   const [suggestion, setSuggestion] = useState<{
     id: string;
     text: string;
@@ -169,6 +173,7 @@ export default function OnlineApp() {
     setHistory([]);
     setAnnotations([]);
     setPreview(null);
+    setViewerActivity("");
     setOpenedSource(null);
     setSuggestion(null);
     setSelectedStudent("");
@@ -447,8 +452,8 @@ export default function OnlineApp() {
         {
           id: "",
           title: activity,
-          description: "",
-          duration: 15,
+          description: activityDescription,
+          duration: activityDuration,
           type: "LuyenTap",
           materialId: null,
           materialVersion: null,
@@ -460,7 +465,6 @@ export default function OnlineApp() {
       setActivity("");
       setActivityDescription("");
       setActivityDuration(15);
-      await reload();
     });
   };
   return (
@@ -561,9 +565,27 @@ export default function OnlineApp() {
       ) : (
         <>
           <nav className="room-tabs">
-            <button onClick={() => setPage("students")}>Học sinh</button>
-            <button onClick={() => setPage("materials")}>Học liệu</button>
-            <button onClick={() => setPage("plans")}>Soạn buổi học</button>
+            <button
+              aria-pressed={page === "students"}
+              className={page === "students" ? "active" : ""}
+              onClick={() => setPage("students")}
+            >
+              Học sinh
+            </button>
+            <button
+              aria-pressed={page === "materials"}
+              className={page === "materials" ? "active" : ""}
+              onClick={() => setPage("materials")}
+            >
+              Học liệu
+            </button>
+            <button
+              aria-pressed={page === "plans"}
+              className={page === "plans" ? "active" : ""}
+              onClick={() => setPage("plans")}
+            >
+              Soạn buổi học
+            </button>
           </nav>
           {page === "students" && (
             <div className="two-column">
@@ -716,31 +738,19 @@ export default function OnlineApp() {
                     <strong>{m.title}</strong> · {m.grade}{" "}
                     <button
                       className="text-button"
-                      onClick={() =>
-                        void run(async () => {
-                          const item = await api<{ readUrl: string }>(
-                            `/materials/${m.id}/read-url`,
-                          );
-                          setPreview({ title: m.title, url: item.readUrl });
-                        })
-                      }
+                      onClick={() => setPreview(m)}
                     >
                       Xem tệp
                     </button>
                   </div>
                 ))}
                 {preview && (
-                  <div>
-                    <h3>{preview.title}</h3>
-                    <iframe
-                      className="pdf-frame"
-                      title={preview.title}
-                      src={preview.url}
-                    />
-                    <a href={preview.url} target="_blank" rel="noreferrer">
-                      Mở tệp trong tab mới
-                    </a>
-                  </div>
+                  <MaterialViewer
+                    materialId={preview.id}
+                    version={preview.currentVersion}
+                    kind={preview.kind}
+                    title={preview.title}
+                  />
                 )}
               </section>
               <form className="card form-stack" onSubmit={saveMaterial}>
@@ -1154,7 +1164,11 @@ export default function OnlineApp() {
                                     ? {
                                         ...item,
                                         materialId,
-                                        materialVersion: materialId ? 1 : null,
+                                        materialVersion: materialId
+                                          ? (materials.find(
+                                              (m) => m.id === materialId,
+                                            )?.currentVersion ?? null)
+                                          : null,
                                       }
                                     : item,
                                 ),
@@ -1203,7 +1217,7 @@ export default function OnlineApp() {
                                               sourceEvidenceIds: [
                                                 ...new Set([
                                                   ...item.sourceEvidenceIds,
-                                                  ...claim.evidenceIds,
+                                                  ...claim.observationEvidenceIds,
                                                 ]),
                                               ],
                                               sourceClaimRefs: [
@@ -1226,6 +1240,52 @@ export default function OnlineApp() {
                               Gắn nguồn: {claim.text}
                             </button>
                           ))}
+                        {a.materialId && (
+                          <button
+                            className="button ghost small"
+                            onClick={() =>
+                              setViewerActivity(
+                                viewerActivity === a.id ? "" : a.id,
+                              )
+                            }
+                          >
+                            {viewerActivity === a.id
+                              ? "Đóng xem đề"
+                              : "Xem và chú thích đề"}
+                          </button>
+                        )}
+                        {viewerActivity === a.id &&
+                          a.materialId &&
+                          a.materialVersion &&
+                          materials.find((m) => m.id === a.materialId) && (
+                            <MaterialViewer
+                              materialId={a.materialId}
+                              version={a.materialVersion}
+                              title={
+                                materials.find((m) => m.id === a.materialId)!
+                                  .title
+                              }
+                              kind={
+                                materials.find((m) => m.id === a.materialId)!
+                                  .kind
+                              }
+                              annotations={annotations}
+                              sessionId={session.id}
+                              activityId={a.id}
+                              students={session.RoomMember_sessionId_items.map(
+                                (member) => ({
+                                  id: member.studentId,
+                                  name:
+                                    students.find(
+                                      (pupil) => pupil.id === member.studentId,
+                                    )?.name || "Học sinh",
+                                }),
+                              )}
+                              onSaved={(saved) =>
+                                setAnnotations((items) => [...items, saved])
+                              }
+                            />
+                          )}
                         {annotations
                           .filter((item) => item.activityId === a.id)
                           .map((item) => (
@@ -1235,101 +1295,6 @@ export default function OnlineApp() {
                               {item.text}
                             </p>
                           ))}
-                        {a.materialId && (
-                          <form
-                            className="form-stack"
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              const fields = new FormData(event.currentTarget);
-                              const studentId = String(
-                                fields.get("studentId") || "",
-                              );
-                              void run(async () => {
-                                const result = await api<{
-                                  annotation: Annotation;
-                                }>(`/sessions/${session.id}/annotations`, {
-                                  method: "POST",
-                                  body: body({
-                                    activityId: a.id,
-                                    materialId: a.materialId,
-                                    materialVersion: a.materialVersion,
-                                    page: Number(fields.get("page")) - 1,
-                                    x: Number(fields.get("x")),
-                                    y: Number(fields.get("y")),
-                                    text: String(fields.get("text")),
-                                    ...(studentId ? { studentId } : {}),
-                                  }),
-                                });
-                                setAnnotations((items) => [
-                                  ...items,
-                                  result.annotation,
-                                ]);
-                              });
-                            }}
-                          >
-                            <label>
-                              Chú thích đề
-                              <input name="text" required />
-                            </label>
-                            <label>
-                              Trang
-                              <input
-                                name="page"
-                                type="number"
-                                min="1"
-                                defaultValue="1"
-                                required
-                              />
-                            </label>
-                            <label>
-                              Vị trí ngang (%)
-                              <input
-                                name="x"
-                                type="number"
-                                min="0"
-                                max="100"
-                                defaultValue="50"
-                                required
-                              />
-                            </label>
-                            <label>
-                              Vị trí dọc (%)
-                              <input
-                                name="y"
-                                type="number"
-                                min="0"
-                                max="100"
-                                defaultValue="50"
-                                required
-                              />
-                            </label>
-                            <label>
-                              Gắn học sinh
-                              <select name="studentId">
-                                <option value="">Chỉ chú thích</option>
-                                {session.RoomMember_sessionId_items.map(
-                                  (member) => (
-                                    <option
-                                      key={member.studentId}
-                                      value={member.studentId}
-                                    >
-                                      {students.find(
-                                        (pupil) =>
-                                          pupil.id === member.studentId,
-                                      )?.name || "Học sinh"}
-                                    </option>
-                                  ),
-                                )}
-                              </select>
-                            </label>
-                            <button
-                              className="button ghost small"
-                              disabled={busy}
-                            >
-                              Lưu chú thích
-                            </button>
-                          </form>
-                        )}
                       </div>
                     ))}
                     <button

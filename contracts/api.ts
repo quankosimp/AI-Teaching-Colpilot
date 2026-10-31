@@ -310,3 +310,44 @@ export const AIStatusUpdate = z.strictObject({
   editedText: z.string().optional(),
   saveAsEvidence: z.boolean().optional(),
 });
+
+// Additive G1 v1 DTOs; mutations require Origin and optimistic version headers where specified.
+export const AuthMockInput = z.strictObject({
+  account: z.enum(["teacher-a", "teacher-b"]),
+});
+export const AuthResponse = z.strictObject({ accessToken: z.string().min(1) });
+export const TeacherMeResponse = z.strictObject({
+  teacher: z.strictObject({
+    id: Id,
+    name: z.string(),
+    email: z.email(),
+    workspaceId: Id,
+  }),
+  featureFlags: z.record(z.string(), z.boolean()),
+});
+export const StudentRecord = StudentInput.extend({
+  id: Id,
+  teacherId: Id,
+  initials: z.string(),
+  color: z.string(),
+  version: z.number().int().positive(),
+  archivedAt: z.iso.datetime({ offset: true }).nullable(),
+  createdAt: z.iso.datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
+});
+export const StudentResponse = z.strictObject({ student: StudentRecord });
+export const StudentListResponse = z.strictObject({
+  students: z.array(StudentRecord),
+});
+export const VersionHeader = z.string().regex(/^[1-9]\d*$/);
+export const REPLAY_ROUTES = [
+  "POST /api/v1/students",
+  "POST /api/v1/sessions",
+  "POST /api/v1/materials",
+  "POST /api/v1/sessions/:id/annotations",
+] as const;
+export type AuthMockInput = z.infer<typeof AuthMockInput>;
+export type AuthResponse = z.infer<typeof AuthResponse>;
+export type TeacherMeResponse = z.infer<typeof TeacherMeResponse>;
+export type StudentResponse = z.infer<typeof StudentResponse>;
+export type StudentListResponse = z.infer<typeof StudentListResponse>;

@@ -125,132 +125,159 @@ export function materialsRouter(config: AppConfig) {
       const upload = await db.uploadIntent.findUnique({
         where: { id: parsed.data.uploadId },
       });
-      if (
-        !upload ||
-        upload.teacherId !== res.locals.actor.id ||
-        upload.usedAt ||
-        upload.expiresAt <= new Date()
-      )
+      if (!upload || upload.teacherId !== res.locals.actor.id)
         return fail(res, 403, "PERMISSION_DENIED", "Upload không khả dụng");
+      if (upload.usedAt || upload.expiresAt <= new Date())
+        return fail(
+          res,
+          409,
+          "VERSION_CONFLICT",
+          "Upload đã được sử dụng hoặc hết hạn",
+        );
+      const { client, bucket } = storage();
       if (
         (upload.mimeType === "application/pdf" && parsed.data.kind !== "PDF") ||
         (upload.mimeType !== "application/pdf" && parsed.data.kind !== "Anh")
-      )
+      ) {
+        await client.removeObject(bucket, upload.storageKey).catch(() => {});
         return fail(
           res,
           400,
           "VALIDATION_ERROR",
           "Loại học liệu không khớp tệp",
         );
-      const { client, bucket } = storage();
+      }
       const staged = await client
         .statObject(bucket, upload.storageKey)
         .catch(() => null);
-      if (
-        !staged ||
-        staged.size !== upload.sizeBytes ||
-        staged.size > MAX_UPLOAD_BYTES
-      )
+      if (!staged)
         return fail(
           res,
-          400,
-          "UPLOAD_FAILED",
-          "Tệp chưa tải lên hoặc sai kích thước",
+          409,
+          "VERSION_CONFLICT",
+          "Upload không còn khả dụng hoặc chưa tải lên",
         );
+      if (staged.size !== upload.sizeBytes || staged.size > MAX_UPLOAD_BYTES) {
+        await client.removeObject(bucket, upload.storageKey).catch(() => {});
+        return fail(res, 400, "UPLOAD_FAILED", "Tệp sai kích thước");
+      }
       // Copy to a new server-only key first: the signed PUT can still mutate the staging key.
       const finalKey = `${res.locals.actor.id}/verified/${randomUUID()}`;
-      await client.copyObject(
-        bucket,
-        finalKey,
-        `/${bucket}/${upload.storageKey}`,
-      );
-      const stat = await client.statObject(bucket, finalKey).catch(() => null);
-      if (
-        !stat ||
-        stat.size !== upload.sizeBytes ||
-        stat.size > MAX_UPLOAD_BYTES
-      )
-        return fail(
-          res,
-          400,
-          "UPLOAD_FAILED",
-          "Tệp chưa tải lên hoặc sai kích thước",
-        );
-      const stream = await client.getObject(bucket, finalKey);
-      const hash = createHash("sha256");
-      let bytes = 0;
-      let prefix = Buffer.alloc(0);
-      for await (const chunk of stream) {
-        const part = Buffer.from(chunk);
-        bytes += part.length;
-        if (bytes > MAX_UPLOAD_BYTES) {
-          stream.destroy();
-          return fail(res, 400, "UPLOAD_FAILED", "Tệp quá lớn");
+      let committed = false;
+      try {
+        try {
+          await client.copyObject(
+            bucket,
+            finalKey,
+            `/${bucket}/${upload.storageKey}`,
+          );
+        } catch {
+          return fail(
+            res,
+            409,
+            "VERSION_CONFLICT",
+            "Upload không còn khả dụng; hãy tải lại",
+          );
         }
-        if (prefix.length < 8)
-          prefix = Buffer.concat([prefix, part]).subarray(0, 8);
-        hash.update(part);
-      }
-      if (
-        bytes !== upload.sizeBytes ||
-        hash.digest("hex") !== upload.sha256 ||
-        !signature(upload.mimeType, prefix)
-      )
-        return fail(
-          res,
-          400,
-          "UPLOAD_FAILED",
-          "Nội dung tệp không khớp loại hoặc mã kiểm tra",
-        );
-      const { uploadId: _uploadId, ...metadata } = parsed.data;
-      const result = await createOnce(req, res, "/materials", async (tx) => {
-        const claimed = await tx.uploadIntent.updateMany({
-          where: {
-            id: upload.id,
-            teacherId: res.locals.actor.id,
-            usedAt: null,
-            expiresAt: { gt: new Date() },
-          },
-          data: { usedAt: new Date() },
-        });
-        if (!claimed.count) throw new Error("Upload already used");
-        const material = await tx.material.create({
-          data: {
-            ...metadata,
-            teacherId: res.locals.actor.id,
-            MaterialVersion_materialId_items: {
-              create: {
-                version: 1,
-                storageKey: finalKey,
-                mimeType: upload.mimeType,
-                sizeBytes: bytes,
-                sha256: upload.sha256,
-                pages: [],
-                uploadStatus: "ready",
+        await client.removeObject(bucket, upload.storageKey).catch(() => {});
+        const stat = await client
+          .statObject(bucket, finalKey)
+          .catch(() => null);
+        if (
+          !stat ||
+          stat.size !== upload.sizeBytes ||
+          stat.size > MAX_UPLOAD_BYTES
+        )
+          return fail(
+            res,
+            400,
+            "UPLOAD_FAILED",
+            "Tệp chưa tải lên hoặc sai kích thước",
+          );
+        const stream = await client.getObject(bucket, finalKey);
+        const hash = createHash("sha256");
+        let bytes = 0;
+        let prefix = Buffer.alloc(0);
+        for await (const chunk of stream) {
+          const part = Buffer.from(chunk);
+          bytes += part.length;
+          if (bytes > MAX_UPLOAD_BYTES) {
+            stream.destroy();
+            return fail(res, 400, "UPLOAD_FAILED", "Tệp quá lớn");
+          }
+          if (prefix.length < 8)
+            prefix = Buffer.concat([prefix, part]).subarray(0, 8);
+          hash.update(part);
+        }
+        if (
+          bytes !== upload.sizeBytes ||
+          hash.digest("hex") !== upload.sha256 ||
+          !signature(upload.mimeType, prefix)
+        )
+          return fail(
+            res,
+            400,
+            "UPLOAD_FAILED",
+            "Nội dung tệp không khớp loại hoặc mã kiểm tra",
+          );
+        const { uploadId: _uploadId, ...metadata } = parsed.data;
+        const result = await createOnce(req, res, "/materials", async (tx) => {
+          const claimed = await tx.uploadIntent.updateMany({
+            where: {
+              id: upload.id,
+              teacherId: res.locals.actor.id,
+              usedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+            data: { usedAt: new Date() },
+          });
+          if (!claimed.count) throw new Error("Upload already used");
+          const material = await tx.material.create({
+            data: {
+              ...metadata,
+              teacherId: res.locals.actor.id,
+              MaterialVersion_materialId_items: {
+                create: {
+                  version: 1,
+                  storageKey: finalKey,
+                  mimeType: upload.mimeType,
+                  sizeBytes: bytes,
+                  sha256: upload.sha256,
+                  pages: [],
+                  uploadStatus: "ready",
+                },
               },
             },
-          },
+          });
+          await tx.auditLog.create({
+            data: {
+              workspaceId: res.locals.actor.workspaceId,
+              actorId: res.locals.actor.id,
+              actorRole: "teacher",
+              action: "material.created",
+              targetType: "material",
+              targetId: material.id,
+              requestId: res.locals.requestId,
+              metadata: {},
+            },
+          });
+          return material.id;
         });
-        await tx.auditLog.create({
-          data: {
-            workspaceId: res.locals.actor.workspaceId,
-            actorId: res.locals.actor.id,
-            actorRole: "teacher",
-            action: "material.created",
-            targetType: "material",
-            targetId: material.id,
-            requestId: res.locals.requestId,
-            metadata: {},
-          },
+        if (!result) return;
+        committed = !result.replay;
+        return res.status(201).json({
+          material: await db.material.findUniqueOrThrow({
+            where: { id: result.resourceId },
+          }),
         });
-        return material.id;
-      });
-      if (!result) return;
-      return res.status(201).json({
-        material: await db.material.findUniqueOrThrow({
-          where: { id: result.resourceId },
-        }),
-      });
+      } catch (error) {
+        if (error instanceof Error && error.message === "Upload already used")
+          return fail(res, 409, "VERSION_CONFLICT", "Upload đã được sử dụng");
+        throw error;
+      } finally {
+        if (!committed)
+          await client.removeObject(bucket, finalKey).catch(() => {});
+      }
     }),
   );
   r.get(
@@ -258,15 +285,15 @@ export function materialsRouter(config: AppConfig) {
     asyncRoute(async (req, res) => {
       if (!z.uuid().safeParse(req.params.id).success)
         return fail(res, 400, "VALIDATION_ERROR", "ID không hợp lệ");
+      const requestedVersion =
+        req.query.version === undefined ? undefined : Number(req.query.version);
+      if (
+        requestedVersion !== undefined &&
+        (!Number.isInteger(requestedVersion) || requestedVersion < 1)
+      )
+        return fail(res, 400, "VALIDATION_ERROR", "Phiên bản không hợp lệ");
       const material = await db.material.findUnique({
         where: { id: req.params.id },
-        include: {
-          MaterialVersion_materialId_items: {
-            where: { uploadStatus: "ready" },
-            orderBy: { version: "desc" },
-            take: 1,
-          },
-        },
       });
       if (!material)
         return fail(res, 404, "NOT_FOUND", "Không tìm thấy học liệu");
@@ -280,11 +307,21 @@ export function materialsRouter(config: AppConfig) {
         );
         return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập");
       }
-      const key = material.MaterialVersion_materialId_items[0]?.storageKey;
-      if (!key) return fail(res, 404, "NOT_FOUND", "Tệp chưa sẵn sàng");
+      const file = await db.materialVersion.findUnique({
+        where: {
+          materialId_version: {
+            materialId: material.id,
+            version: requestedVersion ?? material.currentVersion,
+          },
+        },
+      });
+      if (!file?.storageKey || file.uploadStatus !== "ready")
+        return fail(res, 404, "NOT_FOUND", "Tệp chưa sẵn sàng");
       const { client, bucket } = storage();
       return res.json({
-        readUrl: await client.presignedGetObject(bucket, key, 300),
+        readUrl: await client.presignedGetObject(bucket, file.storageKey, 300),
+        version: file.version,
+        mimeType: file.mimeType,
       });
     }),
   );

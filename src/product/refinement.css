@@ -456,3 +456,21 @@ body.dark .danger-text, [data-theme="dark"] .danger-text { color: #ff8798; }
   border-color: var(--ui-line-strong);
 }
 :is(body.dark, [data-theme="dark"]) :is(.presentation-notice, .presentation-suggestion) .button.ghost:hover:not(:disabled) { background: var(--ui-brand-soft); }
+
+.annotation-layer { display: grid; gap: 8px; min-width: 0; }
+.annotation-center { justify-self: start; }
+.annotation-page { position: relative; width: 100%; line-height: 0; }
+.annotation-page > canvas, .annotation-page > img { display: block; width: 100%; height: auto; }
+.annotation-pin { position: absolute; z-index: 1; transform: translate(-50%, -50%); min-width: 32px; height: 32px; padding: 0 5px; border: 2px solid white; border-radius: 50%; background: #5849c5; color: white; line-height: 1; font-weight: 700; box-shadow: 0 1px 5px #17213e80; }
+.annotation-pin:hover, .annotation-pin-highlighted { background: #34228f; box-shadow: 0 0 0 3px #b9adff; }
+
+/* Online management workspace: keep controls readable and away from viewport edges. */
+.main-content { max-width: 1500px; min-height: 100vh; margin: 0 auto; padding: 24px 30px 48px; color: var(--ui-ink); }
+.main-content .button.full { white-space: normal; overflow-wrap: anywhere; }
+.main-content .two-column { align-items: start; }
+.main-content .room-tabs { overflow-x: auto; }
+.main-content[data-theme="dark"] { color-scheme: dark; }
+.main-content[data-theme="dark"] .button.secondary { background: var(--ui-brand-soft); color: #d5cdff; border-color: var(--ui-line-strong); }
+.main-content[data-theme="dark"] .button.secondary:hover:not(:disabled) { background: #38315e; }
+.main-content[data-theme="dark"] .text-button { color: #bfb4ff; }
+@media (max-width: 650px) { .main-content { padding: 20px 15px 36px; } }
