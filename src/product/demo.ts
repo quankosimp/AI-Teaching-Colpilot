@@ -101,6 +101,21 @@ export function normalizeData(input: Partial<AppData>): AppData {
           consent: false,
         });
     }
+  for (const s of data.sessions)
+    for (const studentId of sessionStudentIds(s))
+      if (
+        !data.invites.some(
+          (i) => i.sessionId === s.id && i.studentId === studentId,
+        )
+      )
+        data.invites.push({
+          id: `invite:${s.id}:${studentId}`,
+          token: crypto.randomUUID(),
+          sessionId: s.id,
+          studentId,
+          expiresAt: iso(60 * 24 * 7),
+          revoked: false,
+        });
   return data;
 }
 

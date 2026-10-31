@@ -365,3 +365,74 @@ label { color: #3b4760; font-size: 12px; gap: 7px; font-weight: 650; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+/* Keep form labels and dialog controls legible on dark surfaces. */
+body.dark label, [data-theme="dark"] label { color: var(--ui-ink); }
+body.dark .icon-button, [data-theme="dark"] .icon-button {
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+  border-color: var(--ui-line-strong);
+}
+body.dark .icon-button:hover, [data-theme="dark"] .icon-button:hover { background: var(--ui-hover); }
+.modal-head { gap: 12px; }
+.modal-head h2 { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 540px) {
+  .modal-actions { flex-wrap: wrap; }
+  .modal-actions .button { white-space: normal; }
+}
+
+/* Surfaces that retain light backgrounds need dark equivalents in dark mode. */
+body.dark .recommendation-panel, [data-theme="dark"] .recommendation-panel,
+body.dark .recommendation-item, [data-theme="dark"] .recommendation-item,
+body.dark .suggested-item, [data-theme="dark"] .suggested-item,
+body.dark .submission-item, [data-theme="dark"] .submission-item,
+body.dark .answer-sheet, [data-theme="dark"] .answer-sheet {
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+  border-color: var(--ui-line-strong);
+}
+body.dark .submission-item:hover, body.dark .submission-item.active,
+[data-theme="dark"] .submission-item:hover, [data-theme="dark"] .submission-item.active {
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-brand);
+}
+body.dark .danger-text, [data-theme="dark"] .danger-text { color: #ff8798; }
+.button:hover:not(:disabled) { transform: none; }
+
+/* Dark surfaces for student, review and lesson context cards. */
+:is(body.dark, [data-theme="dark"]) :is(.student-goal, .hint-card, .portal-activities > div) {
+  background: var(--ui-hover);
+  border-color: var(--ui-line-strong);
+  color: var(--ui-ink);
+}
+:is(body.dark, [data-theme="dark"]) :is(.student-card:hover, .material-card:hover) {
+  background: var(--ui-hover);
+  border-color: var(--ui-brand);
+}
+:is(body.dark, [data-theme="dark"]) .claim-approved {
+  background: #172c27;
+  border-color: #315d4b;
+  color: var(--ui-ink);
+}
+:is(body.dark, [data-theme="dark"]) :is(.hint-strip, .date-tile) {
+  background: var(--ui-brand-soft);
+  color: #b9adff;
+}
+:is(body.dark, [data-theme="dark"]) .claim-source span {
+  background: var(--ui-hover);
+  color: var(--ui-ink);
+}
+:is(body.dark, [data-theme="dark"]) .report-preview {
+  background: var(--ui-hover);
+  border-color: var(--ui-line-strong);
+  color: var(--ui-ink);
+}
+:is(body.dark, [data-theme="dark"]) .approved-claim {
+  background: #172c27;
+  color: #a4e2bd;
+}
+:is(body.dark, [data-theme="dark"]) .prompt-grid button {
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-line-strong);
+  color: #c9bfff;
+}

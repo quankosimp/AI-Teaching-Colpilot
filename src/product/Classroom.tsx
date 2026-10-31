@@ -282,7 +282,14 @@ function SharedStage({
   const activity =
     session.activities.find((a) => a.id === session.currentActivityId) ||
     session.activities[0];
-  const owner = session.sharedBoardOwnerId || "common";
+  const requestedOwner = session.sharedBoardOwnerId || "common";
+  const requestedBoard = data.boards.find(
+    (b) => b.id === boardKey(session.id, activity?.id || "", requestedOwner),
+  );
+  const owner =
+    requestedOwner !== "common" && !requestedBoard?.shared
+      ? "common"
+      : requestedOwner;
   const board = data.boards.find(
     (b) => b.id === boardKey(session.id, activity?.id || "", owner),
   );
@@ -375,7 +382,7 @@ function TeacherSession({
   session: Session;
   select: (id: string) => void;
 }) {
-  const { data, setData, go, toast } = useStore();
+  const { data, setData, go, toast, setSelectedSubmissionId } = useStore();
   const call = useCall(session.id);
   const [entered, setEntered] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -391,6 +398,7 @@ function TeacherSession({
   const [source, setSource] = useState("");
   const [draft, setDraft] = useState("");
   const [left, setLeft] = useState(false);
+  const [gradingTarget, setGradingTarget] = useState("");
   useEffect(() => {
     if (entered) window.scrollTo({ top: 0, behavior: "auto" });
   }, [entered]);
@@ -403,6 +411,9 @@ function TeacherSession({
       m.sessionId === session.id &&
       sessionStudentIds(session).includes(m.studentId),
   );
+  useEffect(() => {
+    if (!sessionStudentIds(session).includes(studentId)) setStudentId(sessionStudentIds(session)[0]);
+  }, [session, studentId]);
   const sessionReactions = (data.reactions || []).filter(
     (r) => r.sessionId === session.id,
   );
@@ -1037,11 +1048,8 @@ function TeacherSession({
                       <button
                         className="text-button"
                         onClick={() => {
-                          const ev = data.evidence.find(
-                            (e) => e.submissionId === s.id,
-                          );
-                          if (ev) setSource(ev.id);
-                          else setLeft(true);
+                          setGradingTarget(s.id);
+                          setLeft(true);
                         }}
                       >
                         Xem & chấm bài
@@ -1057,7 +1065,10 @@ function TeacherSession({
                 )}
                 <button
                   className="button ghost full"
-                  onClick={() => setLeft(true)}
+                  onClick={() => {
+                    setGradingTarget("");
+                    setLeft(true);
+                  }}
                 >
                   Mở hộp chấm bài
                 </button>
@@ -1259,7 +1270,13 @@ function TeacherSession({
             <button className="button ghost" onClick={() => setLeft(false)}>
               Ở lại phòng
             </button>
-            <button className="button primary" onClick={() => go("grading")}>
+            <button
+              className="button primary"
+              onClick={() => {
+                setSelectedSubmissionId(gradingTarget);
+                go("grading");
+              }}
+            >
               Mở chấm bài
             </button>
           </div>
@@ -1446,11 +1463,15 @@ function StudentSession({
         />
       </main>
     );
-  if (member?.state === "waiting" || !member)
+  if (session.status !== "live" || member?.state === "waiting" || !member)
     return (
       <main className="waiting-room">
         <CallPreview name={student.name} camera={call.camera} mic={call.mic} />
-        <Status tone="amber">Đang chờ giáo viên cho vào</Status>
+        <Status tone="amber">
+          {session.status !== "live"
+            ? "Đang chờ giáo viên mở phòng"
+            : "Đang chờ giáo viên cho vào"}
+        </Status>
         <h1>{session.title}</h1>
         <p>Giữ trang này mở. Bạn sẽ vào phòng ngay khi giáo viên xác nhận.</p>
         <button
@@ -1557,9 +1578,10 @@ function StudentSession({
                 key={r.label}
                 type="button"
                 className={"reaction-pill " + (active ? "active" : "")}
-                disabled={!connected}
+                disabled={!connected || !canStudentAct(data, session.id, studentId, undefined, token)}
                 onClick={() => {
                   setData((prev) => {
+                    if (!canStudentAct(prev, session.id, studentId, undefined, token)) return prev;
                     const existing = (prev.reactions || []).filter(
                       (x) =>
                         !(

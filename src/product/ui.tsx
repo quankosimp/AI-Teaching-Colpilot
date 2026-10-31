@@ -42,10 +42,16 @@ export function Modal({
     const focusable = () =>
       Array.from(
         ref.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input, select, textarea, a[href], [tabindex="0"]',
+          'button:not(:disabled), input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
         ) || [],
+      ).filter((element) =>
+        element.tabIndex >= 0 &&
+        !element.matches(':disabled') &&
+        element.getClientRects().length > 0 &&
+        getComputedStyle(element).visibility === 'visible' &&
+        !element.closest('[inert], [aria-hidden="true"]'),
       );
-    focusable()[0]?.focus();
+    (focusable()[0] || ref.current)?.focus();
     const handle = (e: KeyboardEvent) => {
       const dialogs = document.querySelectorAll('[role="dialog"]');
       if (dialogs[dialogs.length - 1] !== ref.current) return;
@@ -54,7 +60,10 @@ export function Modal({
         const items = focusable();
         const first = items[0];
         const last = items.at(-1);
-        if (e.shiftKey && document.activeElement === first) {
+        if (!items.includes(document.activeElement as HTMLElement)) {
+          e.preventDefault();
+          ((e.shiftKey ? last : first) || ref.current)?.focus();
+        } else if (e.shiftKey && document.activeElement === first) {
           e.preventDefault();
           last?.focus();
         } else if (!e.shiftKey && document.activeElement === last) {
@@ -85,6 +94,7 @@ export function Modal({
         ref={ref}
         className={"modal-panel" + (wide ? " modal-wide" : "")}
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-label={title}
         onMouseDown={(e) => {

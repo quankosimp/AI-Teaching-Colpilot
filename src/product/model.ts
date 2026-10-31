@@ -557,25 +557,40 @@ export const formatTime = (value: string) =>
     minute: "2-digit",
   }).format(new Date(value));
 
-export const pickMaterials = (student: Student, materials: Material[]) => {
-  const gaps = student.gaps.join(" ").toLowerCase();
+export const pickMaterials = (
+  student: Student,
+  materials: Material[],
+  claims: Claim[] = [],
+) => {
+  const approved = claims.filter(
+    (c) => c.studentId === student.id && c.status === "approved",
+  );
+  const manual = [...student.gaps, ...student.strengths, student.goal];
+  const matches = (text: string, topic: string, title: string) => {
+    const lower = text.toLowerCase();
+    return (
+      (!!topic && lower.includes(topic)) ||
+      lower.split(/\s+/).some((word) => word.length > 4 && title.includes(word))
+    );
+  };
   return materials
     .filter((material) => material.subject === student.subject)
     .map((material) => {
       const topic = material.topic.toLowerCase();
       const title = material.title.toLowerCase();
+      const sources = approved.filter((c) => matches(c.text, topic, title));
+      const manualText = manual.join(" ").toLowerCase();
+      const claimText = approved
+        .map((c) => c.text)
+        .join(" ")
+        .toLowerCase();
       const score =
         (material.grade === student.grade ? 3 : 0) +
-        (gaps.includes(topic) ? 4 : 0) +
-        (student.gaps.some((gap) =>
-          gap
-            .toLowerCase()
-            .split(" ")
-            .some((word) => word.length > 4 && title.includes(word)),
-        )
-          ? 2
-          : 0);
-      return { material, score };
+        (topic && manualText.includes(topic) ? 4 : 0) +
+        (manual.some((text) => matches(text, "", title)) ? 2 : 0) +
+        (topic && claimText.includes(topic) ? 4 : 0) +
+        (approved.some((c) => matches(c.text, "", title)) ? 2 : 0);
+      return { material, score, sources };
     })
     .sort((a, b) => b.score - a.score);
 };
@@ -593,3 +608,6 @@ export const boardKey = (
   activityId: string,
   ownerId: string,
 ) => `${sessionId}:${activityId}:${ownerId}`;
+
+// G0 contract aliases coexist with the legacy local demo model until migration.
+export type { StudentRoomViewModel as OnlineStudentRoomViewModel, TeacherWorkspaceViewModel as OnlineTeacherWorkspaceViewModel } from "../../contracts/ui";
