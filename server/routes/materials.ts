@@ -21,26 +21,51 @@ export function storage() {
   const endpoint = process.env.MINIO_ENDPOINT,
     accessKey = process.env.MINIO_ACCESS_KEY,
     secretKey = process.env.MINIO_SECRET_KEY,
-    bucket = process.env.MINIO_BUCKET;
-  if (!endpoint || !accessKey || !secretKey || !bucket)
+    bucket = process.env.MINIO_BUCKET,
+    region = process.env.MINIO_REGION || "us-east-1";
+  const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT || endpoint;
+  const port = Number(process.env.MINIO_PORT || 9000);
+  const publicPort = Number(
+    process.env.MINIO_PUBLIC_PORT || process.env.MINIO_PORT || 9000,
+  );
+  const useSSL = process.env.MINIO_USE_SSL === "true";
+  const publicUseSSL =
+    (process.env.MINIO_PUBLIC_USE_SSL ?? process.env.MINIO_USE_SSL) === "true";
+  if (!endpoint || !publicEndpoint || !accessKey || !secretKey || !bucket)
     throw new Error("Storage is not configured");
   if (
     ["production", "staging"].includes(process.env.APP_MODE || "") &&
-    process.env.MINIO_USE_SSL !== "true"
+    (!useSSL || !publicUseSSL)
   )
     throw new Error("Storage must use TLS outside local environments");
+  const client = new Client({
+    endPoint: endpoint,
+    port,
+    useSSL,
+    accessKey,
+    secretKey,
+    region,
+  });
+  const publicClient =
+    publicEndpoint === endpoint &&
+    publicPort === port &&
+    publicUseSSL === useSSL
+      ? client
+      : new Client({
+          endPoint: publicEndpoint,
+          port: publicPort,
+          useSSL: publicUseSSL,
+          accessKey,
+          secretKey,
+          region,
+        });
   return {
     bucket,
-    client: new Client({
-      endPoint: endpoint,
-      port: Number(process.env.MINIO_PORT || 9000),
-      useSSL: process.env.MINIO_USE_SSL === "true",
-      accessKey,
-      secretKey,
-    }),
+    client,
+    publicClient,
   };
 }
-function signature(mime: string, b: Buffer) {
+export function signature(mime: string, b: Buffer) {
   if (mime === "application/pdf")
     return b.subarray(0, 5).toString("ascii") === "%PDF-";
   if (mime === "image/jpeg")
@@ -82,7 +107,7 @@ export function materialsRouter(config: AppConfig) {
           "VALIDATION_ERROR",
           "Tệp không hợp lệ hoặc vượt 10 MiB",
         );
-      const { client, bucket } = storage();
+      const { publicClient, bucket } = storage();
       const key = `${res.locals.actor.id}/${randomUUID()}`;
       const intent = await db.uploadIntent.create({
         data: {
@@ -94,7 +119,7 @@ export function materialsRouter(config: AppConfig) {
       });
       return res.status(201).json({
         uploadId: intent.id,
-        uploadUrl: await client.presignedPutObject(bucket, key, 600),
+        uploadUrl: await publicClient.presignedPutObject(bucket, key, 600),
         expiresAt: intent.expiresAt,
       });
     }),
@@ -317,9 +342,9 @@ export function materialsRouter(config: AppConfig) {
       });
       if (!file?.storageKey || file.uploadStatus !== "ready")
         return fail(res, 404, "NOT_FOUND", "Tệp chưa sẵn sàng");
-      const { client, bucket } = storage();
+      const { publicClient, bucket } = storage();
       return res.json({
-        readUrl: await client.presignedGetObject(bucket, file.storageKey, 300),
+        readUrl: await publicClient.presignedGetObject(bucket, file.storageKey, 300),
         version: file.version,
         mimeType: file.mimeType,
       });
