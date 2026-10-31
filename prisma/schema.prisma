@@ -152,6 +152,7 @@ model Teacher {
   name                                 String
   avatarUrl                            String?
   workspaceId                          String                 @db.Uuid
+  UploadIntent_items                   UploadIntent[]
   status                               TeacherStatus          @default(active)
   createdAt                            DateTime               @default(now())
   updatedAt                            DateTime               @updatedAt
@@ -464,7 +465,7 @@ model CheckResponse {
   sessionId    String       @db.Uuid
   studentId    String       @db.Uuid
   answer       String       @db.Text
-  support      SupportLevel
+  support      SupportLevel @default(ChuaRo)
   feedback     String?      @db.Text
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
@@ -682,4 +683,19 @@ model IdempotencyRecord {
   expiresAt    DateTime
 
   @@id([actorId, route, key])
+}
+
+model UploadIntent {
+  id         String   @id @default(uuid()) @db.Uuid
+  teacherId  String   @db.Uuid
+  storageKey String   @unique
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  sha256     String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+  teacher    Teacher  @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  @@index([teacherId, expiresAt])
 }
