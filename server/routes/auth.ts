@@ -22,6 +22,10 @@ const cookieOptions = (config: AppConfig) => ({
   path: "/api/v1/auth",
   maxAge: 7 * 86400_000,
 });
+const clearCookieOptions = (config: AppConfig) => {
+  const { maxAge: _maxAge, ...options } = cookieOptions(config);
+  return options;
+};
 async function access(config: AppConfig, teacherId: string, sessionId: string) {
   return new SignJWT({ sid: sessionId })
     .setProtectedHeader({ alg: "HS256" })
@@ -117,7 +121,7 @@ export function authRouter(config: AppConfig) {
         where: { id: res.locals.actor.sessionId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
-      res.clearCookie("copilot_refresh", cookieOptions(config));
+      res.clearCookie("copilot_refresh", clearCookieOptions(config));
       return res.status(204).end();
     }),
   );
@@ -196,7 +200,7 @@ export function authRouter(config: AppConfig) {
       if (!verifier || a.length !== b.length || !timingSafeEqual(a, b))
         return fail(res, 400, "VALIDATION_ERROR", "OAuth state không hợp lệ");
       res.clearCookie("oauth_state", {
-        ...cookieOptions(config),
+        ...clearCookieOptions(config),
         sameSite: "lax",
       });
       const { tokens } = await client.getToken({

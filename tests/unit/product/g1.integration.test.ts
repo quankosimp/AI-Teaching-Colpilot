@@ -340,6 +340,26 @@ test(
         headers: { Cookie: a.cookie },
       });
       assert.equal(refresh.status, 200);
+      const rotatedCookie = refresh.headers.get("set-cookie")!.split(";")[0];
+      const rotatedToken = (await refresh.json()).accessToken as string;
+      assert.equal(
+        (
+          await call("/auth/logout", rotatedToken, {
+            method: "POST",
+            headers: { Cookie: rotatedCookie },
+          })
+        ).status,
+        204,
+      );
+      assert.equal(
+        (
+          await call("/auth/refresh", undefined, {
+            method: "POST",
+            headers: { Cookie: rotatedCookie },
+          })
+        ).status,
+        401,
+      );
       assert.equal(
         (
           await call("/auth/refresh", undefined, {
