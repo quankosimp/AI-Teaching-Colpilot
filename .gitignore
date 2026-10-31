@@ -10,3 +10,6 @@ coverage/
 # Local UI verification artifacts
 verification/
 UI-demo/verification/
+
+# Server build output
+dist-server/
