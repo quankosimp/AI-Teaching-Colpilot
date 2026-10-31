@@ -557,8 +557,9 @@ export const formatTime = (value: string) =>
     minute: "2-digit",
   }).format(new Date(value));
 
-export const pickMaterials = (student: Student, materials: Material[]) => {
-  const gaps = student.gaps.join(" ").toLowerCase();
+export const pickMaterials = (student: Student, materials: Material[], claims: Claim[] = []) => {
+  const approved = claims.filter((c) => c.studentId === student.id && c.status === "approved");
+  const gaps = approved.map((c) => c.text).join(" ").toLowerCase();
   return materials
     .filter((material) => material.subject === student.subject)
     .map((material) => {
@@ -567,15 +568,15 @@ export const pickMaterials = (student: Student, materials: Material[]) => {
       const score =
         (material.grade === student.grade ? 3 : 0) +
         (gaps.includes(topic) ? 4 : 0) +
-        (student.gaps.some((gap) =>
-          gap
+        (approved.some((claim) =>
+          claim.text
             .toLowerCase()
             .split(" ")
             .some((word) => word.length > 4 && title.includes(word)),
         )
           ? 2
           : 0);
-      return { material, score };
+      return { material, score, sources: approved.filter((c) => c.text.toLowerCase().includes(topic) || c.text.toLowerCase().split(" ").some((word) => word.length > 4 && title.includes(word))) };
     })
     .sort((a, b) => b.score - a.score);
 };
