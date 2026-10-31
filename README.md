@@ -1,45 +1,31 @@
-# AI Teaching Copilot — UI phòng học tích hợp
+# AI Teaching Copilot
 
-Prototype React/Vite cho gia sư dạy 1–1 và nhóm tối đa 5 học sinh. Giáo viên và học sinh dùng hai giao diện riêng trong cùng một buổi học. Có chế độ sáng và tối.
+Ứng dụng React/Vite và API Express cho gia sư. Phiên bản hiện tại đang triển khai G1: đăng nhập giáo viên, hồ sơ, học liệu riêng tư và kế hoạch dùng PostgreSQL/MinIO. Phòng học đa thiết bị, video Zoom và Gemini chưa được nối hoàn chỉnh; không dùng dữ liệu giả để khẳng định các phần này đã hoạt động.
 
-## Chạy tại máy
+## Chạy cục bộ
 
-Dùng Node.js 22.13 trở lên trong nhánh 22 và pnpm 11.25.0. Chạy `pnpm install --frozen-lockfile` và `pnpm dev`, mở địa chỉ Vite hiển thị (mặc định http://localhost:3000/). Chọn **Tiếp tục với Google** và tài khoản demo Hoàng Nam. Giao diện đăng nhập/đăng ký này là mô phỏng.
+Yêu cầu Node 22.13+ trong nhánh 22, pnpm 11.25.0 và Docker Compose. Các tài khoản, mật khẩu trong `.env.example` chỉ dành cho máy cục bộ. Không dùng cấu hình đó trên staging hoặc production.
 
-## Dùng thử hai vai trò
+1. `pnpm install --frozen-lockfile --strict-peer-dependencies`
+2. `cp .env.example .env`
+3. `docker compose -f compose.local.yml up -d`
+4. `pnpm exec prisma migrate deploy && pnpm exec prisma generate`
+5. `pnpm seed:local` tạo hai giáo viên và hai học sinh mẫu cùng bucket MinIO private. Chạy lại không tạo bản sao.
+6. `pnpm dev:server`, sau đó ở terminal khác chạy `pnpm dev` và mở `http://localhost:3000`. Vite chuyển `/api` tới API `http://127.0.0.1:3100`.
 
-1. Mở **Soạn buổi học**, chọn hoặc tạo buổi. Chọn học sinh/nhóm, mục tiêu, hoạt động, học liệu và công cụ được phép dùng.
-2. Trong **Học sinh & quyền tham gia**, mở liên kết của từng em ở tab khác trong cùng trình duyệt. Link riêng theo người học, có hạn dùng, tạo lại và thu hồi được.
-3. Giáo viên chọn **Bắt đầu dạy → Mở phòng dạy**. Học sinh xác nhận tên, xem thông báo ghi hình và **Xin vào phòng học**. Giáo viên **Cho vào** ở danh sách thành viên.
-4. Dùng **Đề bài**, **Bảng chung**, **Kiểm tra**. Đổi hoạt động/trang đề đồng bộ sang học sinh chọn **Theo giáo viên**. Gia sư chủ động đánh dấu hoạt động hoàn tất.
-5. Học sinh có **Nháp của tôi**, **Bài làm**, **Chat**, **Giơ tay**. Chia sẻ nháp là thao tác riêng. Các em không xem bài nộp, câu trả lời và nháp chưa chia sẻ của nhau; gia sư có quyền xem nháp riêng để hỗ trợ.
-6. Ghi chú, Copilot, mức hỗ trợ và nhận định ở panel riêng của giáo viên. **Chấm bài** nhận bài gốc và cho sửa nhãn; nhận định liên quan phải duyệt lại sau khi đổi nhãn.
-7. **Ghi hình** lưu sự kiện công khai cho bản phát lại mô phỏng. Dừng ghi chuyển sang xử lý; kết thúc buổi tự dừng bản ghi. **Bản ghi buổi học** có trình phát, mốc hoạt động, nguồn gốc và trạng thái lỗi/thử lại.
-8. **Tổng kết & duyệt** tách nhận định theo học sinh. Chỉ phần đã duyệt vào hồ sơ và được dùng để soạn buổi tiếp với liên kết nguồn.
+Các cổng PostgreSQL `55432` và MinIO `59000` chỉ bind `127.0.0.1`. Nếu cổng giao diện 3000 đã được dùng, chọn cổng khác cho Vite và sửa `APP_ORIGIN` tương ứng trong `.env` trước khi khởi động lại API. Dùng cùng hostname cho origin và URL trình duyệt.
 
-## Dữ liệu và giới hạn
-
-- Dữ liệu giả gồm lớp 1–1, buổi nhóm, học liệu Toán lớp 8–9, nháp nhiều lần thử, bài làm SVG mẫu, minh chứng, kiểm tra và bản ghi.
-- localStorage v2 chuyển dữ liệu v1 sang danh sách thành viên, giữ hồ sơ, buổi, bài nộp, minh chứng và nhận định cũ; không xóa khóa v1.
-- BroadcastChannel thông báo cập nhật; Web Locks tuần tự hóa đọc/sửa/lưu giữa các tab. Cập nhật đọc dữ liệu mới nhất trước khi lưu.
-- Đồng bộ áp dụng **cùng trình duyệt và cùng origin**. localhost:3000 và 127.0.0.1:3000 là hai nguồn dữ liệu khác nhau. Chưa đồng bộ hai thiết bị.
-- Vai trò, link và quyền công cụ mô phỏng trên frontend; chưa có phân quyền máy chủ. Ảnh JPG/PNG hoặc PDF tối đa 1 MB do dung lượng trình duyệt.
-- Mic, camera, cuộc gọi, Google OAuth, AI và ghi hình là mô phỏng. Bản phát lại dựng sự kiện vùng chung; chưa ghi track âm thanh/video hay tạo MP4.
-- **Tài khoản → Khôi phục mẫu** thay dữ liệu demo hiện tại sau khi xác nhận, dùng để mở lại trọn bộ kịch bản.
-- Mở **Tình huống demo** để thử mất kết nối, AI lỗi, tải bài lỗi và xử lý bản ghi lỗi. Bộ mẫu có link ?invite=demo-expired và ?invite=demo-revoked.
-
-## Cấu trúc
-
-- src/product/store.tsx: dữ liệu, migration và bộ điều phối cộng tác trong trình duyệt; cung cấp thao tác có kết quả lưu.
-- src/product/adapters.ts: hợp đồng đăng nhập, cuộc gọi, ghi hình và adapter mock. LiveKit, Google OAuth và lưu trữ máy chủ sẽ kết nối tại lớp này và backend phân quyền.
-- src/product/Classroom.tsx: lobby, phòng giáo viên, guest portal và phòng học sinh. Các công cụ bảng nháp, đề/chú thích, kiểm tra, bài nộp, nguồn minh chứng, tổng kết và bản ghi nằm trong module riêng.
-- src/product/refinement.css: token thương hiệu và typography. classroom.css bổ sung login, phòng học và responsive.
+Trong `APP_MODE=local_mock`, chọn **Demo Hoàng Nam** hoặc **Demo Mai An**. Mock bị chặn khi `NODE_ENV` là production hoặc staging. Google OAuth cần `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` và origin HTTPS phù hợp; khi chưa cấu hình, API trả 503. Refresh token được lưu trong cookie HttpOnly; access token giữ trong bộ nhớ tab. API kiểm tra Origin đối với lệnh ghi.
 
 ## Kiểm tra
 
-Chạy `pnpm test`, `pnpm lint`, `pnpm typecheck:server`, `pnpm build` và `pnpm build:server`. Nếu npm không có trong PATH:
+- `pnpm test`, `pnpm lint`, `pnpm typecheck:server`, `pnpm build`, `pnpm build:server`.
+- Cơ sở dữ liệu QA riêng: sau khi `cp .env.example .env` và bật Docker như trên, chạy `APP_MODE=test pnpm testdb:reset`. Lệnh chỉ reset `copilot_test` trên `127.0.0.1:55432`, sau đó seed hai giáo viên/học sinh và khởi tạo bucket `copilot-private-test`.
+- Chạy integration với cơ sở QA, không dùng dữ liệu demo: `set -a; source .env; set +a; APP_MODE=test DATABASE_URL="$TEST_DATABASE_URL" MINIO_BUCKET="$MINIO_TEST_BUCKET" RUN_G1_INTEGRATION=1 pnpm test`. `pnpm exec prisma validate` kiểm tra schema.
+- `GET /health/live` chỉ kiểm tra tiến trình; `GET /api/v1/health` kiểm tra PostgreSQL và bucket, không gọi Gemini hoặc Zoom.
 
-- `node node_modules/typescript/bin/tsc --noEmit`
-- `node node_modules/vite/bin/vite.js build`
+## Phạm vi và giới hạn hiện tại
 
-Kiểm tra thủ công trên desktop và mobile theo luồng ở trên. Khi kiểm tra nhiều tab, dùng cùng browser context và cùng origin để chia sẻ dữ liệu.
+Server hỗ trợ mock login, Google OAuth callback, refresh/logout, danh sách/tạo/sửa học sinh và lịch sử đã duyệt, danh sách/tạo/sửa session và activity, upload PDF/JPEG/PNG tối đa 10 MiB và signed read URL. Tệp được kiểm kích thước, chữ ký loại và SHA-256 trước khi hoàn tất học liệu. Google, Zoom và Gemini thật chưa được nghiệm thu vì chưa có credentials. Các chức năng phòng học, đồng bộ realtime, chấm bài và tổng kết vẫn cần G2; không được xem là hoạt động online chỉ vì UI cũ còn nằm trong repo.
+
+Để dừng các dịch vụ cục bộ: `docker compose -f compose.local.yml stop`. Không xóa volume nếu cần giữ dữ liệu.
