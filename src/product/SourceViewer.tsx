@@ -3,6 +3,7 @@ import type { Evidence } from "./model";
 import { formatTime } from "./model";
 import { useStore } from "./store";
 import { appendEvent } from "./adapters";
+import { updateEvidence } from "./reviewLogic";
 import { BoardPreview } from "./Board";
 import { MaterialContent } from "./DocumentStage";
 import { Banner, Modal, Status } from "./ui";
@@ -119,34 +120,22 @@ export function SourceViewer({
           disabled={!detail.trim()}
           onClick={() => {
             setData((prev) => {
-              const current = prev.evidence.find((e) => e.id === item.id);
-              if (!current || (current.detail === detail.trim() && (current.support || "Chưa rõ") === support)) return prev;
-              const affected = prev.claims.filter((c) => c.status === "approved" && c.evidenceIds.includes(item.id));
-              return appendEvent(
-                {
-                  ...prev,
-                  claims: prev.claims.map((c) => affected.some((a) => a.id === c.id) ? { ...c, status: "pending" } : c),
-                  sessions: prev.sessions.map((s) => s.status === "reviewed" && affected.some((c) => c.sessionId === s.id) ? { ...s, status: "ended" } : s),
-                  evidence: prev.evidence.map((e) =>
-                    e.id === item.id
-                      ? {
-                          ...e,
-                          detail: detail.trim(),
-                          support,
-                          updatedAt: new Date().toISOString(),
-                        }
-                      : e,
-                  ),
-                },
-                {
-                  sessionId: item.sessionId,
-                  activityId: item.activityId,
-                  kind: "member",
-                  label: "Gia sư sửa ghi nhận/mức hỗ trợ",
-                  sourceId: item.id,
-                  shared: false,
-                },
+              const updated = updateEvidence(
+                prev,
+                item.id,
+                detail,
+                support,
+                new Date().toISOString(),
               );
+              if (updated === prev) return prev;
+              return appendEvent(updated, {
+                sessionId: item.sessionId,
+                activityId: item.activityId,
+                kind: "member",
+                label: "Gia sư sửa ghi nhận/mức hỗ trợ",
+                sourceId: item.id,
+                shared: false,
+              });
             });
             toast("Đã cập nhật minh chứng, giữ nguyên bài gốc.");
             onClose();

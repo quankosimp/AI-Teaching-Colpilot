@@ -557,26 +557,40 @@ export const formatTime = (value: string) =>
     minute: "2-digit",
   }).format(new Date(value));
 
-export const pickMaterials = (student: Student, materials: Material[], claims: Claim[] = []) => {
-  const approved = claims.filter((c) => c.studentId === student.id && c.status === "approved");
-  const gaps = approved.map((c) => c.text).join(" ").toLowerCase();
+export const pickMaterials = (
+  student: Student,
+  materials: Material[],
+  claims: Claim[] = [],
+) => {
+  const approved = claims.filter(
+    (c) => c.studentId === student.id && c.status === "approved",
+  );
+  const manual = [...student.gaps, ...student.strengths, student.goal];
+  const matches = (text: string, topic: string, title: string) => {
+    const lower = text.toLowerCase();
+    return (
+      (!!topic && lower.includes(topic)) ||
+      lower.split(/\s+/).some((word) => word.length > 4 && title.includes(word))
+    );
+  };
   return materials
     .filter((material) => material.subject === student.subject)
     .map((material) => {
       const topic = material.topic.toLowerCase();
       const title = material.title.toLowerCase();
+      const sources = approved.filter((c) => matches(c.text, topic, title));
+      const manualText = manual.join(" ").toLowerCase();
+      const claimText = approved
+        .map((c) => c.text)
+        .join(" ")
+        .toLowerCase();
       const score =
         (material.grade === student.grade ? 3 : 0) +
-        (gaps.includes(topic) ? 4 : 0) +
-        (approved.some((claim) =>
-          claim.text
-            .toLowerCase()
-            .split(" ")
-            .some((word) => word.length > 4 && title.includes(word)),
-        )
-          ? 2
-          : 0);
-      return { material, score, sources: approved.filter((c) => c.text.toLowerCase().includes(topic) || c.text.toLowerCase().split(" ").some((word) => word.length > 4 && title.includes(word))) };
+        (topic && manualText.includes(topic) ? 4 : 0) +
+        (manual.some((text) => matches(text, "", title)) ? 2 : 0) +
+        (topic && claimText.includes(topic) ? 4 : 0) +
+        (approved.some((c) => matches(c.text, "", title)) ? 2 : 0);
+      return { material, score, sources };
     })
     .sort((a, b) => b.score - a.score);
 };

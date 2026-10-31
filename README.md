@@ -4,7 +4,7 @@ Prototype React/Vite cho gia sư dạy 1–1 và nhóm tối đa 5 học sinh. G
 
 ## Chạy tại máy
 
-Dùng Node.js 22 (hoặc Node 20.19 trở lên; Vite 8 yêu cầu Node 20.19+ hoặc 22.12+). Chạy `npm install --legacy-peer-deps` và `npm run dev`, mở địa chỉ Vite hiển thị (mặc định http://localhost:3000/). Chọn **Tiếp tục với Google** và tài khoản demo Hoàng Nam. Giao diện đăng nhập/đăng ký này là mô phỏng.
+Dùng Node.js 22.12 trở lên hoặc Node 20.19 trở lên trong nhánh 20. Chạy `npm install --legacy-peer-deps` và `npm run dev`, mở địa chỉ Vite hiển thị (mặc định http://localhost:3000/). Chọn **Tiếp tục với Google** và tài khoản demo Hoàng Nam. Giao diện đăng nhập/đăng ký này là mô phỏng.
 
 ## Dùng thử hai vai trò
 
@@ -37,9 +37,9 @@ Dùng Node.js 22 (hoặc Node 20.19 trở lên; Vite 8 yêu cầu Node 20.19+ ho
 
 ## Kiểm tra
 
-Chạy `npm run lint` và `npm run build`. Nếu npm không có trong PATH:
+Chạy `npm test`, `npm run lint` và `npm run build`. Nếu npm không có trong PATH:
 
 - `node node_modules/typescript/bin/tsc --noEmit`
 - `node node_modules/vite/bin/vite.js build`
 
-Bằng chứng trong verification/: ảnh desktop/mobile, báo cáo probe và kết quả kiểm tra nhiều tab. Khi kiểm tra nhiều tab, dùng cùng browser context và cùng origin để chia sẻ dữ liệu.
+Kiểm tra thủ công trên desktop và mobile theo luồng ở trên. Khi kiểm tra nhiều tab, dùng cùng browser context và cùng origin để chia sẻ dữ liệu.

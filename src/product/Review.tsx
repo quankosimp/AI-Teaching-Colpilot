@@ -20,6 +20,7 @@ import {
   Status,
 } from "./ui";
 import { SourceViewer } from "./SourceViewer";
+import { completeReview } from "./reviewLogic";
 
 export function SummaryWorkflow() {
   const { data, setData, selectedSessionId, setSelectedSessionId, go, toast } =
@@ -151,18 +152,14 @@ export function SummaryWorkflow() {
         action={
           <button
             className="button primary"
-            disabled={
-              session.status === "reviewed" ||
-              pending.length > 0
-            }
+            disabled={session.status === "reviewed" || pending.length > 0}
             onClick={() => {
-              setData((prev) => ({
-                ...prev,
-                sessions: prev.sessions.map((s) =>
-                  s.id === session.id ? { ...s, status: "reviewed" } : s,
-                ),
-              }));
-              toast(allClaims.some((c) => c.status === "approved") ? "Đã hoàn tất tổng kết." : "Đã hoàn tất tổng kết. Chưa đủ dữ liệu kết luận.");
+              setData((prev) => completeReview(prev, session.id));
+              toast(
+                allClaims.some((c) => c.status === "approved")
+                  ? "Đã hoàn tất tổng kết."
+                  : "Đã hoàn tất tổng kết. Chưa đủ dữ liệu kết luận.",
+              );
             }}
           >
             <Check size={17} />
