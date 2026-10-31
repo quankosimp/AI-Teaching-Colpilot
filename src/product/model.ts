@@ -608,3 +608,6 @@ export const boardKey = (
   activityId: string,
   ownerId: string,
 ) => `${sessionId}:${activityId}:${ownerId}`;
+
+// G0 contract aliases coexist with the legacy local demo model until migration.
+export type { StudentRoomViewModel as OnlineStudentRoomViewModel, TeacherWorkspaceViewModel as OnlineTeacherWorkspaceViewModel } from "../../contracts/ui";
