@@ -35,10 +35,7 @@ jobs:
           pnpm exec prisma generate
 
       - name: Verify Planning Traceability
-        run: |
-          if [ -f scripts/check_plans.py ]; then
-            python3 scripts/check_plans.py
-          fi
+        run: python3 scripts/check_plans.py
 
       - name: Typecheck Frontend
         run: pnpm run lint
