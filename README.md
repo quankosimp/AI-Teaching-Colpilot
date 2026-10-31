@@ -4,7 +4,7 @@ Prototype React/Vite cho gia sư dạy 1–1 và nhóm tối đa 5 học sinh. G
 
 ## Chạy tại máy
 
-Dùng Node.js 22.12 trở lên hoặc Node 20.19 trở lên trong nhánh 20. Chạy `npm install --legacy-peer-deps` và `npm run dev`, mở địa chỉ Vite hiển thị (mặc định http://localhost:3000/). Chọn **Tiếp tục với Google** và tài khoản demo Hoàng Nam. Giao diện đăng nhập/đăng ký này là mô phỏng.
+Dùng Node.js 22.13 trở lên trong nhánh 22 và pnpm 11.25.0. Chạy `pnpm install --frozen-lockfile` và `pnpm dev`, mở địa chỉ Vite hiển thị (mặc định http://localhost:3000/). Chọn **Tiếp tục với Google** và tài khoản demo Hoàng Nam. Giao diện đăng nhập/đăng ký này là mô phỏng.
 
 ## Dùng thử hai vai trò
 
@@ -37,7 +37,7 @@ Dùng Node.js 22.12 trở lên hoặc Node 20.19 trở lên trong nhánh 20. Ch�
 
 ## Kiểm tra
 
-Chạy `npm test`, `npm run lint` và `npm run build`. Nếu npm không có trong PATH:
+Chạy `pnpm test`, `pnpm lint`, `pnpm typecheck:server`, `pnpm build` và `pnpm build:server`. Nếu npm không có trong PATH:
 
 - `node node_modules/typescript/bin/tsc --noEmit`
 - `node node_modules/vite/bin/vite.js build`
