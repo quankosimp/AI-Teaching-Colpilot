@@ -1,10 +1,10 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import ProductApp from './product/App.tsx';
+import OnlineApp from './product/OnlineApp.tsx';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ProductApp />
+    <OnlineApp />
   </StrictMode>,
 );
