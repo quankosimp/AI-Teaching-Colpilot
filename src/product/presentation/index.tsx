@@ -36,3 +36,31 @@ export function SourceRevision({ title, revision, stale, onOpen }: { title: stri
 export function AISuggestionReview({ text, busy, onAccept, onEdit, onDismiss }: { text: string; busy?: boolean; onAccept: () => void; onEdit: () => void; onDismiss: () => void }) {
   return <section className="presentation-suggestion" aria-label="Gợi ý AI"><strong>Gợi ý AI · Chưa áp dụng</strong><p>{text}</p><div className="presentation-actions"><button type="button" className="button primary small" disabled={busy} onClick={onAccept}>Chấp nhận</button><button type="button" className="button ghost small" disabled={busy} onClick={onEdit}>Chỉnh sửa</button><button type="button" className="button ghost small" disabled={busy} onClick={onDismiss}>Bỏ qua</button></div></section>;
 }
+
+export type AnnotationPin = { id: string; page: number; x: number; y: number; text: string };
+export type AnnotationLayerProps = {
+  children: ReactNode;
+  annotations: readonly AnnotationPin[];
+  currentPage: number;
+  readOnly: boolean;
+  highlightedId?: string | null;
+  onCreatePin: (position: { x: number; y: number }) => void;
+  onOpenAnnotation: (id: string) => void;
+};
+
+/** The child must render exactly one page without surrounding padding or an iframe. */
+export function AnnotationLayer({ children, annotations, currentPage, readOnly, highlightedId, onCreatePin, onOpenAnnotation }: AnnotationLayerProps) {
+  const pins = annotations.filter(pin => pin.page === currentPage && Number.isFinite(pin.x) && Number.isFinite(pin.y) && pin.x >= 0 && pin.x <= 100 && pin.y >= 0 && pin.y <= 100);
+  return <div className="annotation-layer">
+    {!readOnly && <button className="button ghost small annotation-center" type="button" onClick={() => onCreatePin({ x: 50, y: 50 })}>Thêm chú thích giữa trang</button>}
+    <div className="annotation-page" onClick={event => {
+      if (readOnly || !(event.target === event.currentTarget || event.target instanceof HTMLCanvasElement || event.target instanceof HTMLImageElement)) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      onCreatePin({ x: Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100)), y: Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100)) });
+    }}>
+      {children}
+      {pins.map((pin, index) => <button key={pin.id} type="button" className={"annotation-pin" + (pin.id === highlightedId ? " annotation-pin-highlighted" : "")} style={{ left: `${pin.x}%`, top: `${pin.y}%` }} aria-label={`Mở chú thích ${index + 1} trên trang ${currentPage}`} onClick={event => { event.stopPropagation(); onOpenAnnotation(pin.id); }}>{index + 1}</button>)}
+    </div>
+  </div>;
+}
