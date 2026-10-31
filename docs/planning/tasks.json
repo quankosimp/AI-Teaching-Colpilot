@@ -281,177 +281,209 @@
       "id": "ARCH-01",
       "owner": "ARCH",
       "title": "Domain/source revisions and state machines",
-      "status": "planned",
+      "status": "done",
       "srs_ids": [],
       "gate": "G0",
       "depends_on": [],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "378b634fbb0b6a6e642373295b76e8cf1d6563f6",
+      "evidence": [
+        "docs/planning/g0-contract-spec.md",
+        "docs/planning/evidence/g0-integrated.json"
+      ]
     },
     {
       "id": "ARCH-02",
       "owner": "ARCH",
       "title": "Actor/tenant permissions, OAuth and invites",
-      "status": "planned",
+      "status": "done",
       "srs_ids": [],
       "gate": "G0",
       "depends_on": [],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "378b634fbb0b6a6e642373295b76e8cf1d6563f6",
+      "evidence": [
+        "docs/planning/g0-contract-spec.md",
+        "docs/planning/evidence/g0-integrated.json"
+      ]
     },
     {
       "id": "ARCH-03",
       "owner": "ARCH",
       "title": "REST, events, errors, idempotency and files",
-      "status": "planned",
+      "status": "done",
       "srs_ids": [],
       "gate": "G0",
       "depends_on": [],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "378b634fbb0b6a6e642373295b76e8cf1d6563f6",
+      "evidence": [
+        "docs/planning/g0-contract-spec.md",
+        "docs/planning/evidence/g0-integrated.json"
+      ]
     },
     {
       "id": "ARCH-04",
       "owner": "ARCH",
       "title": "Media/AI adapters and presentation view-models",
-      "status": "planned",
+      "status": "done",
       "srs_ids": [],
       "gate": "G0",
       "depends_on": [],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "378b634fbb0b6a6e642373295b76e8cf1d6563f6",
+      "evidence": [
+        "docs/planning/g0-contract-spec.md",
+        "docs/planning/evidence/g0-integrated.json"
+      ]
     },
     {
       "id": "ARCH-05",
       "owner": "ARCH",
       "title": "Migration, audit, health, flags and environment",
-      "status": "planned",
+      "status": "done",
       "srs_ids": [],
       "gate": "G0",
       "depends_on": [],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "378b634fbb0b6a6e642373295b76e8cf1d6563f6",
+      "evidence": [
+        "docs/planning/g0-contract-spec.md",
+        "docs/planning/evidence/g0-integrated.json"
+      ]
     },
     {
       "id": "ARCH-06",
       "owner": "ARCH",
       "title": "Contract freeze, ownership and change impact review",
-      "status": "planned",
+      "status": "done",
       "srs_ids": [],
       "gate": "G0",
       "depends_on": [],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "378b634fbb0b6a6e642373295b76e8cf1d6563f6",
+      "evidence": [
+        "docs/planning/g0-contract-spec.md",
+        "docs/planning/evidence/g0-integrated.json"
+      ]
     },
     {
       "id": "UI-01",
       "owner": "UI",
       "title": "Shared components, accessible modal/focus and async states",
-      "status": "planned",
+      "status": "in_review",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "f4a55a9",
+      "evidence": [
+        "Fixture presentation checks reported by UI worker; integrated wiring still pending."
+      ]
     },
     {
       "id": "UI-02",
       "owner": "UI",
       "title": "Account/student/material/planning presentation",
-      "status": "planned",
+      "status": "in_review",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "f4a55a9",
+      "evidence": [
+        "Fixture presentation checks reported by UI worker; integrated wiring still pending."
+      ]
     },
     {
       "id": "UI-03",
       "owner": "UI",
       "title": "Invite, consent, lobby, denial and expired/revoked states",
-      "status": "planned",
+      "status": "in_review",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "f4a55a9",
+      "evidence": [
+        "Fixture presentation checks reported by UI worker; integrated wiring still pending."
+      ]
     },
     {
       "id": "UI-04",
       "owner": "UI",
       "title": "Classroom/media and separate realtime/video status",
-      "status": "planned",
+      "status": "in_review",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "f4a55a9",
+      "evidence": [
+        "Fixture presentation checks reported by UI worker; integrated wiring still pending."
+      ]
     },
     {
       "id": "UI-05",
       "owner": "UI",
       "title": "Board/annotation/check/submission/support presentation",
-      "status": "planned",
+      "status": "in_review",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "f4a55a9",
+      "evidence": [
+        "Fixture presentation checks reported by UI worker; integrated wiring still pending."
+      ]
     },
     {
       "id": "UI-06",
       "owner": "UI",
       "title": "Source/AI/per-student review and approved-vs-draft presentation",
-      "status": "planned",
+      "status": "in_review",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "f4a55a9",
+      "evidence": [
+        "Fixture presentation checks reported by UI worker; integrated wiring still pending."
+      ]
     },
     {
       "id": "UI-07",
       "owner": "UI",
       "title": "360px responsive, light/dark, keyboard, contrast and unavailable features",
-      "status": "planned",
+      "status": "in_review",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "f4a55a9",
+      "evidence": [
+        "Fixture presentation checks reported by UI worker; integrated wiring still pending."
+      ]
     },
     {
       "id": "PRODUCT-01",
       "owner": "PRODUCT",
       "title": "Identity, authorization and foundations",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "AUTH 001",
         "AUTH 002",
@@ -474,7 +506,7 @@
       "id": "PRODUCT-02",
       "owner": "PRODUCT",
       "title": "Student profiles and approved history",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "STU 001",
         "STU 002",
@@ -498,7 +530,7 @@
       "id": "PRODUCT-03",
       "owner": "PRODUCT",
       "title": "Private materials and versioned annotations",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "MAT 001",
         "MAT 002",
@@ -522,7 +554,7 @@
       "id": "PRODUCT-04",
       "owner": "PRODUCT",
       "title": "Planning and next-session provenance",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "PLAN 001",
         "PLAN 002",
@@ -716,7 +748,7 @@
       "id": "PRODUCT-12",
       "owner": "PRODUCT",
       "title": "Operations and release",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "OPS 001",
         "OPS 002",
@@ -739,15 +771,18 @@
       "id": "QA-01",
       "owner": "QA",
       "title": "Per-requirement traceability and contract checks",
-      "status": "planned",
+      "status": "done",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "608fcc71bd25ca77e9d5f3389c5cb81324bee5e0",
+      "evidence": [
+        "qa/test-cases.json",
+        "docs/planning/evidence/g0-integrated.json"
+      ]
     },
     {
       "id": "QA-02",
@@ -851,15 +886,17 @@
       "id": "REVIEW-01",
       "owner": "REVIEW",
       "title": "Contracts, ownership, dependency and SRS completeness",
-      "status": "planned",
+      "status": "done",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": null,
-      "evidence": []
+      "commit": "378b634fbb0b6a6e642373295b76e8cf1d6563f6",
+      "evidence": [
+        "docs/planning/evidence/g0-integrated.json"
+      ]
     },
     {
       "id": "REVIEW-02",

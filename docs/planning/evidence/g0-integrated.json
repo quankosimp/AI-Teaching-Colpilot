@@ -1,0 +1,50 @@
+{
+  "gate": "G0",
+  "contractVersion": "v1",
+  "result": "passed",
+  "reviewedProductCommit": "378b634fbb0b6a6e642373295b76e8cf1d6563f6",
+  "integratedSourceCommit": "426e9713b8d58cedea07fd49ea931d5a62bba8d1",
+  "environment": "local-contracts/CI-Mock",
+  "checks": [
+    {
+      "command": "pnpm test (explicit Node22, local HTTP permission)",
+      "result": "passed",
+      "tests": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "command": "pnpm lint",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm typecheck:server",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm build",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm build:server",
+      "result": "passed"
+    },
+    {
+      "command": "prisma generate",
+      "result": "passed",
+      "clientVersion": "6.19.3"
+    },
+    {
+      "command": "python3 scripts/check_plans.py",
+      "result": "passed",
+      "P0Assigned": 60,
+      "P1Tracked": 13
+    }
+  ],
+  "limitations": [
+    "G0 validates contracts/schema and prototype regressions, not online functional SRS acceptance.",
+    "Real OAuth/Zoom/Gemini and public HTTPS not configured by user; no real-provider acceptance.",
+    "G1 endpoints and data persistence not yet integrated.",
+    "Initial restricted test invocation could not bind local HTTP; rerun with authorized local-network permissions passed all 22."
+  ]
+}

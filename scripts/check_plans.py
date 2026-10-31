@@ -77,6 +77,41 @@ def check(root: Path) -> list[str]:
             errors.append(f"{task['id']}: unknown prerequisite task")
         if task["status"] == "done" and (not task["evidence"] or not task["commit"]):
             errors.append(f"{task['id']}: done requires commit and evidence")
+    visited, visiting = set(), set()
+
+    def visit(task_id):
+        if task_id in visiting:
+            errors.append(f"Task dependency cycle at {task_id}")
+            return
+        if task_id in visited or task_id not in tasks:
+            return
+        visiting.add(task_id)
+        for dependency in tasks[task_id]["depends_on"]:
+            visit(dependency)
+        visiting.remove(task_id)
+        visited.add(task_id)
+
+    for task_id in tasks:
+        visit(task_id)
+    scenarios_file = root / "qa/test-cases.json"
+    if scenarios_file.exists():
+        scenarios = json.loads(scenarios_file.read_text())["scenarios"]
+        scenario_ids = [scenario["testId"] for scenario in scenarios]
+        if len(scenario_ids) != len(set(scenario_ids)):
+            errors.append("QA scenario manifest contains duplicate IDs")
+        expected = {
+            row[field]
+            for row in rows if row["priority"] == "P0"
+            for field in ("positive_test", "negative_test")
+        }
+        if not expected.issubset(scenario_ids):
+            errors.append("QA scenario manifest is missing required P0 POS/NEG scenarios")
+        for scenario in scenarios:
+            requirement = requirements.get(scenario["srsId"])
+            if requirement is None or requirement["priority"] != "P0":
+                errors.append(f"Unknown P0 scenario requirement: {scenario['srsId']}")
+            if scenario["status"] == "passed" and not scenario.get("evidence"):
+                errors.append(f"{scenario['testId']}: scenario pass requires execution evidence")
     return errors
 
 
