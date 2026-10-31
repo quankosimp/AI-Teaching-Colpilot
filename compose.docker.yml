@@ -1,0 +1,133 @@
+name: teaching-copilot-local
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: teaching-copilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-copilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-copilot_local_only}
+      POSTGRES_DB: ${POSTGRES_DB:-copilot}
+    ports:
+      - "127.0.0.1:${DB_PORT:-55433}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-copilot} -d ${POSTGRES_DB:-copilot}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks:
+      - internal_net
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: teaching-copilot-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-copilotlocal}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-copilot_local_only}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_API_CORS_ALLOW_ORIGIN:-"http://127.0.0.1:4170,http://localhost:4170,*"}
+    ports:
+      - "127.0.0.1:${MINIO_BROWSER_PORT:-59002}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-59003}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 4s
+      timeout: 3s
+      retries: 15
+    networks:
+      - internal_net
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    container_name: teaching-copilot-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./deploy/scripts/init-minio.sh:/usr/local/bin/init-minio.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/init-minio.sh"]
+    environment:
+      MINIO_HOST: minio
+      MINIO_PORT: 9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-copilotlocal}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-copilot_local_only}
+      MINIO_BUCKET: ${MINIO_BUCKET:-copilot-private}
+    networks:
+      - internal_net
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: teaching-copilot-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      APP_MODE: ${APP_MODE:-local_mock}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3100
+      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:4170}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-copilot}:${POSTGRES_PASSWORD:-copilot_local_only}@postgres:5432/${POSTGRES_DB:-copilot}
+      JWT_SECRET: ${JWT_SECRET:-local-only-change-before-any-shared-use-0123456789}
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-copilotlocal}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-copilot_local_only}
+      MINIO_BUCKET: ${MINIO_BUCKET:-copilot-private}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-127.0.0.1}
+      MINIO_PUBLIC_PORT: ${MINIO_BROWSER_PORT:-59002}
+      MINIO_PUBLIC_USE_SSL: "false"
+      BIND_HOST: ${BIND_HOST:-0.0.0.0}
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
+      AUTO_SEED: ${AUTO_SEED:-true}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:3100/health/live || exit 1"]
+      interval: 4s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+    networks:
+      - internal_net
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gateway
+    container_name: teaching-copilot-gateway
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-4170}:4170"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:4170/ || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - internal_net
+
+volumes:
+  pg_data:
+    name: teaching-copilot-local-pg-data
+  minio_data:
+    name: teaching-copilot-local-minio-data
+
+networks:
+  internal_net:
+    driver: bridge
