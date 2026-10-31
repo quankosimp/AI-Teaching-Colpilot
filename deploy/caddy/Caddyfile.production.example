@@ -1,0 +1,43 @@
+# ==============================================================================
+# Caddy Gateway — Production Template (Reference Only — Do Not Deploy Locally)
+# Automatically handles HTTPS and TLS certificates for public domain
+# ==============================================================================
+
+{$DOMAIN:demo.teaching-copilot.example.com} {
+    root * /srv
+    encode zstd gzip
+
+    # Production Security Headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(self), microphone=(self), display-capture=(self)"
+    }
+
+    # API endpoints reverse proxy
+    handle /api/* {
+        reverse_proxy api:3100 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # Health check endpoints
+    handle /health/* {
+        reverse_proxy api:3100
+    }
+
+    # WebSocket connections (Socket.IO)
+    handle /socket.io/* {
+        reverse_proxy api:3100
+    }
+
+    # Frontend Single Page Application fallback
+    handle {
+        try_files {path} {path}/ /index.html
+        file_server
+    }
+}

@@ -1,0 +1,38 @@
+# ==============================================================================
+# Docker build ignore rules for Teaching Copilot
+# ==============================================================================
+
+# Git and version control
+.git/
+.gitignore
+
+# Environment files with secrets (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# Local dependencies
+node_modules/
+.pnpm-store/
+
+# Build artifacts
+dist/
+dist-server/
+
+# Test coverage, reports and verification evidence
+coverage/
+verification/
+backups/
+*.log
+
+# Documentation binaries
+*.docx
+*.DOCX
+userdocs/
+
+# IDE and tooling metadata
+.gemini/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
