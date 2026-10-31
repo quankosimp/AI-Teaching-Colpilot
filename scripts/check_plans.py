@@ -64,7 +64,10 @@ def check(root: Path) -> list[str]:
                 errors.append(f"{key}: acceptance requires passing evidence on an exact commit")
             if not row["evidence"] or not row["contract_version"] or not row["environment"]:
                 errors.append(f"{key}: acceptance evidence is incomplete")
-            if key in {"AUTH 001", "AUTH 003"} or key.startswith(("VID ", "AI ")):
+            # AUTH 004 / VID 005 explicitly specify mock behavior, so CI is
+            # their proper acceptance environment. Real provider interactions
+            # remain mandatory for the other integration requirements.
+            if key in {"AUTH 001", "AUTH 003"} or key.startswith("AI ") or (key.startswith("VID ") and key != "VID 005"):
                 if "Real-HTTPS" not in row["environment"]:
                     errors.append(f"{key}: mock checks cannot establish real provider acceptance")
     for task in tasks.values():
