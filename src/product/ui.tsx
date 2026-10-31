@@ -42,9 +42,9 @@ export function Modal({
     const focusable = () =>
       Array.from(
         ref.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input, select, textarea, a[href], [tabindex="0"]',
+          'button:not(:disabled), input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
         ) || [],
-      );
+      ).filter((element) => element.getClientRects().length > 0 && !element.closest('[inert], [aria-hidden="true"]'));
     focusable()[0]?.focus();
     const handle = (e: KeyboardEvent) => {
       const dialogs = document.querySelectorAll('[role="dialog"]');
@@ -54,7 +54,10 @@ export function Modal({
         const items = focusable();
         const first = items[0];
         const last = items.at(-1);
-        if (e.shiftKey && document.activeElement === first) {
+        if (!items.includes(document.activeElement as HTMLElement)) {
+          e.preventDefault();
+          (e.shiftKey ? last : first)?.focus();
+        } else if (e.shiftKey && document.activeElement === first) {
           e.preventDefault();
           last?.focus();
         } else if (!e.shiftKey && document.activeElement === last) {
