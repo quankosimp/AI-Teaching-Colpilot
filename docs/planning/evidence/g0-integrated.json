@@ -46,5 +46,16 @@
     "Real OAuth/Zoom/Gemini and public HTTPS not configured by user; no real-provider acceptance.",
     "G1 endpoints and data persistence not yet integrated.",
     "Initial restricted test invocation could not bind local HTTP; rerun with authorized local-network permissions passed all 22."
-  ]
+  ],
+  "harnessFollowup": {
+    "testedCommitSHA": "c78d2417dba7fbba5751e9e263930cfa01582480",
+    "checks": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 6
+    },
+    "environment": "local-contracts/CI-Mock",
+    "reason": "G1 function checks explicitly blocked until auth/data/tool endpoints and dedicated PostgreSQL/MinIO environment exist; liveness tested separately.",
+    "noFunctionalG1Acceptance": true
+  }
 }
