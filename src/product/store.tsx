@@ -26,6 +26,8 @@ export type Store = {
   go: (page: Page) => void;
   selectedStudentId: string;
   setSelectedStudentId: (id: string) => void;
+  selectedSubmissionId: string;
+  setSelectedSubmissionId: (id: string) => void;
   selectedSessionId: string;
   setSelectedSessionId: (id: string) => void;
   toast: (text: string, kind?: Toast["kind"]) => void;

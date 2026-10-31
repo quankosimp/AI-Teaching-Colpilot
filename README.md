@@ -1,10 +1,10 @@
 # AI Teaching Copilot — UI phòng học tích hợp
 
-Prototype React/Vite cho gia sư dạy 1–1 và nhóm tối đa 5 học sinh. Giáo viên và học sinh dùng hai giao diện riêng trong cùng một buổi học. Giữ phong cách sáng và màu tím hiện tại; chưa có dark mode.
+Prototype React/Vite cho gia sư dạy 1–1 và nhóm tối đa 5 học sinh. Giáo viên và học sinh dùng hai giao diện riêng trong cùng một buổi học. Có chế độ sáng và tối.
 
 ## Chạy tại máy
 
-Chạy `npm install` và `npm run dev`, mở địa chỉ Vite hiển thị (mặc định http://localhost:3000/). Chọn **Tiếp tục với Google** và tài khoản demo Hoàng Nam. Giao diện đăng nhập/đăng ký này là mô phỏng.
+Dùng Node.js 22.13 trở lên trong nhánh 22 và pnpm 11.25.0. Chạy `pnpm install --frozen-lockfile` và `pnpm dev`, mở địa chỉ Vite hiển thị (mặc định http://localhost:3000/). Chọn **Tiếp tục với Google** và tài khoản demo Hoàng Nam. Giao diện đăng nhập/đăng ký này là mô phỏng.
 
 ## Dùng thử hai vai trò
 
@@ -37,9 +37,9 @@ Chạy `npm install` và `npm run dev`, mở địa chỉ Vite hiển thị (m�
 
 ## Kiểm tra
 
-Chạy `npm run lint` và `npm run build`. Nếu npm không có trong PATH:
+Chạy `pnpm test`, `pnpm lint`, `pnpm typecheck:server`, `pnpm build` và `pnpm build:server`. Nếu npm không có trong PATH:
 
 - `node node_modules/typescript/bin/tsc --noEmit`
 - `node node_modules/vite/bin/vite.js build`
 
-Bằng chứng trong verification/: ảnh desktop/mobile, báo cáo probe và kết quả kiểm tra nhiều tab. Các phiên kiểm tra dùng trình duyệt độc lập, không thay dữ liệu tab người dùng.
+Kiểm tra thủ công trên desktop và mobile theo luồng ở trên. Khi kiểm tra nhiều tab, dùng cùng browser context và cùng origin để chia sẻ dữ liệu.

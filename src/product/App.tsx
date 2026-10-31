@@ -698,6 +698,7 @@ function StudentPage() {
   const [goal, setGoal] = useState(student?.goal || "");
   const [notes, setNotes] = useState(student?.notes || "");
   const [gapInput, setGapInput] = useState("");
+  const [strengthInput, setStrengthInput] = useState("");
   const [tab, setTab] = useState<"overview" | "history" | "evidence">(
     "overview",
   );
@@ -757,6 +758,18 @@ function StudentPage() {
           </div>
         </div>
         <div className="profile-hero-actions">
+          <button
+            className="button ghost"
+            onClick={() =>
+              update({
+                status: student.status === "archived" ? "active" : "archived",
+              })
+            }
+          >
+            {student.status === "archived"
+              ? "Khôi phục học sinh"
+              : "Lưu trữ học sinh"}
+          </button>
           <button className="button ghost" onClick={() => setEditOpen(true)}>
             <Pencil size={16} /> Chỉnh sửa
           </button>
@@ -853,6 +866,26 @@ function StudentPage() {
               ) : (
                 <p className="muted">Chưa có điểm mạnh được ghi.</p>
               )}
+            </div>
+            <div className="inline-add">
+              <input
+                value={strengthInput}
+                onChange={(e) => setStrengthInput(e.target.value)}
+                placeholder="Thêm điểm mạnh"
+              />
+              <button
+                aria-label="Thêm điểm mạnh"
+                onClick={() => {
+                  if (strengthInput.trim()) {
+                    update({
+                      strengths: [...student.strengths, strengthInput.trim()],
+                    });
+                    setStrengthInput("");
+                  }
+                }}
+              >
+                <Plus size={17} />
+              </button>
             </div>
             <div className="trait-block">
               <h3 className="trait-attention">
@@ -1105,7 +1138,7 @@ function MaterialsPage() {
   const student =
     data.students.find((s) => s.id === selectedStudentId) || data.students[0];
   const recommended = student
-    ? pickMaterials(student, data.materials).slice(0, 3)
+    ? pickMaterials(student, data.materials, data.claims).slice(0, 3)
     : [];
   const filtered = data.materials.filter(
     (m) =>
@@ -1190,7 +1223,7 @@ function MaterialsPage() {
           />
         </div>
         <div className="recommendation-list">
-          {recommended.map(({ material, score }) => (
+          {recommended.map(({ material, score, sources }) => (
             <div className="recommendation-item" key={material.id}>
               <span className="file-icon">
                 <BookOpen size={20} />
@@ -1200,6 +1233,12 @@ function MaterialsPage() {
                 <small>
                   {material.grade} · {material.topic} · {material.level}
                 </small>
+                {sources.map((c) => (
+                  <p key={c.id}>
+                    Nguồn đã duyệt: {c.text} ·{" "}
+                    {data.sessions.find((s) => s.id === c.sessionId)?.title}
+                  </p>
+                ))}
                 <p>
                   {score >= 5
                     ? "Phù hợp với lớp và nội dung cần củng cố."
@@ -1431,9 +1470,15 @@ function PlanPage() {
     data.sessions.find((s) => s.id === selectedSessionId) ||
     data.sessions.find((s) => s.studentId === selectedStudentId) ||
     data.sessions[0];
-  const student = data.students.find((s) => s.id === session?.studentId);
+  const student = data.students.find(
+    (s) =>
+      s.id ===
+      (session && sessionStudentIds(session).includes(selectedStudentId)
+        ? selectedStudentId
+        : session?.studentId),
+  );
   const recommendations = student
-    ? pickMaterials(student, data.materials).slice(0, 3)
+    ? pickMaterials(student, data.materials, data.claims).slice(0, 3)
     : [];
   const updateSession = (patch: Partial<Session>) => {
     if (!session) return;
@@ -1604,6 +1649,19 @@ function PlanPage() {
                 <Clock3 size={15} /> {total}/{session.duration} phút
               </span>
             </div>
+            {total > session.duration && (
+              <p role="alert">
+                Tổng thời lượng hoạt động vượt thời lượng buổi học.
+              </p>
+            )}
+            {session.status === "draft" && (
+              <button
+                className="button secondary"
+                onClick={() => updateSession({ status: "scheduled" })}
+              >
+                Lên lịch buổi học
+              </button>
+            )}
             <div className="form-row">
               <label>
                 Chọn buổi học
@@ -1792,6 +1850,17 @@ function PlanPage() {
               <GraduationCap size={18} />
             </div>
             <h2>Bối cảnh học sinh</h2>
+            <select
+              aria-label="Xem bối cảnh học sinh"
+              value={student?.id || ""}
+              onChange={(e) => setSelectedStudentId(e.target.value)}
+            >
+              {sessionStudentIds(session).map((id) => (
+                <option key={id} value={id}>
+                  {data.students.find((s) => s.id === id)?.name}
+                </option>
+              ))}
+            </select>
             {student ? (
               <>
                 <div className="context-student">
@@ -1823,7 +1892,7 @@ function PlanPage() {
               meta="Gợi ý dựa trên hồ sơ và chủ đề."
             />
             <div className="suggested-list">
-              {recommendations.map(({ material }) => (
+              {recommendations.map(({ material, sources }) => (
                 <div className="suggested-item" key={material.id}>
                   <span className="file-icon">
                     <FileText size={17} />
@@ -1833,6 +1902,15 @@ function PlanPage() {
                     <small>
                       {material.grade} · {material.level}
                     </small>
+                    {sources.map((claim) => (
+                      <small key={claim.id}>
+                        Nguồn đã duyệt: {claim.text} ·{" "}
+                        {
+                          data.sessions.find((s) => s.id === claim.sessionId)
+                            ?.title
+                        }
+                      </small>
+                    ))}
                   </div>
                   <button
                     className="icon-button"
@@ -2026,8 +2104,15 @@ function PlanPage() {
 }
 
 function GradingPage() {
-  const { data, setData, selectedStudentId, toast } = useStore();
-  const [activeId, setActiveId] = useState(data.submissions[0]?.id || "");
+  const { data, setData, selectedStudentId, selectedSubmissionId, toast } =
+    useStore();
+  const [activeId, setActiveId] = useState(
+    selectedSubmissionId || data.submissions[0]?.id || "",
+  );
+  const [supportChoice, setSupportChoice] = useState<{
+    submissionId: string;
+    value: NonNullable<Evidence["support"]>;
+  }>({ submissionId: "", value: "Chưa rõ" });
   const [addOpen, setAddOpen] = useState(false);
   const [studentFilter, setStudentFilter] = useState("Tất cả");
   const [feedback, setFeedback] = useState("");
@@ -2042,8 +2127,10 @@ function GradingPage() {
   const list = data.submissions
     .filter((s) => studentFilter === "Tất cả" || s.studentId === studentFilter)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const active = list.find((s) => s.id === activeId) || list[0];
+  const active = list.find((s) => s.id === activeId);
   const student = data.students.find((s) => s.id === active?.studentId);
+  const support =
+    supportChoice.submissionId === active?.id ? supportChoice.value : "Chưa rõ";
   useEffect(() => {
     setFeedback(active?.finalFeedback || active?.suggestedFeedback || "");
     setScore(active?.score || "");
@@ -2132,6 +2219,7 @@ function GradingPage() {
       title: active.title,
       detail: feedback.trim(),
       submissionId: active.id,
+      support,
       createdAt: new Date().toISOString(),
     };
     const claim: Claim = {
@@ -2182,7 +2270,10 @@ function GradingPage() {
           />
           <select
             value={studentFilter}
-            onChange={(e) => setStudentFilter(e.target.value)}
+            onChange={(e) => {
+              setStudentFilter(e.target.value);
+              setSupportChoice({ submissionId: "", value: "Chưa rõ" });
+            }}
             aria-label="Lọc học sinh"
           >
             <option>Tất cả</option>
@@ -2199,7 +2290,10 @@ function GradingPage() {
                 className={
                   "submission-item" + (active?.id === item.id ? " active" : "")
                 }
-                onClick={() => setActiveId(item.id)}
+                onClick={() => {
+                  setActiveId(item.id);
+                  setSupportChoice({ submissionId: "", value: "Chưa rõ" });
+                }}
               >
                 <span className="submission-symbol">
                   <FileText size={18} />
@@ -2324,6 +2418,24 @@ function GradingPage() {
                   placeholder="Ghi rõ bước đúng, lỗi cần kiểm tra và hướng sửa..."
                   disabled={active.status === "reviewed"}
                 />
+              </label>
+              <label>
+                Mức hỗ trợ
+                <select
+                  value={support}
+                  onChange={(e) =>
+                    setSupportChoice({
+                      submissionId: active.id,
+                      value: e.target.value as NonNullable<Evidence["support"]>,
+                    })
+                  }
+                >
+                  {["Độc lập", "Có gợi ý", "Được hướng dẫn", "Chưa rõ"].map(
+                    (x) => (
+                      <option key={x}>{x}</option>
+                    ),
+                  )}
+                </select>
               </label>
               <div className="grading-footer">
                 <label>
@@ -2452,6 +2564,7 @@ export default function ProductApp() {
       data.sessions[0]?.id ||
       "",
   );
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toast = (text: string, kind: Toast["kind"] = "success") => {
     const id = uid("toast");
@@ -2462,6 +2575,7 @@ export default function ProductApp() {
     );
   };
   const go = (target: Page) => {
+    if (target !== "grading") setSelectedSubmissionId("");
     setPage(target);
     location.hash = target;
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -2494,9 +2608,11 @@ export default function ProductApp() {
       setSelectedStudentId,
       selectedSessionId,
       setSelectedSessionId,
+      selectedSubmissionId,
+      setSelectedSubmissionId,
       toast,
     }),
-    [data, page, selectedStudentId, selectedSessionId],
+    [data, page, selectedStudentId, selectedSessionId, selectedSubmissionId],
   );
   const query = new URLSearchParams(location.search);
   const studentView = query.has("invite") || query.get("view") === "student";

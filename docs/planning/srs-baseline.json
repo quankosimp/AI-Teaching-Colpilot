@@ -1,0 +1,445 @@
+{
+  "version": "SRS v0.1",
+  "source": "docs/SRS_AI_Teaching_Copilot_Modules_v0.1.docx",
+  "sha256": "efecfce249df2a7384119629445684e80f0201def9cd52b6ffb71f23bc30f104",
+  "requirements": [
+    {
+      "id": "AUTH 001",
+      "requirement": "Giáo viên đăng nhập bằng Google OAuth và hệ thống tạo hoặc tìm Teacher theo provider subject.",
+      "priority": "P0",
+      "acceptance": "Đăng nhập thành công trả access token ngắn hạn và refresh token an toàn; email không dùng làm khóa duy nhất của provider."
+    },
+    {
+      "id": "AUTH 002",
+      "requirement": "Backend kiểm tra teacherId hoặc workspaceId trên mọi tài nguyên riêng.",
+      "priority": "P0",
+      "acceptance": "Yêu cầu đọc hoặc sửa tài nguyên của giáo viên khác trả 403 và ghi security event."
+    },
+    {
+      "id": "AUTH 003",
+      "requirement": "Giáo viên đăng xuất và thu hồi phiên hiện tại.",
+      "priority": "P0",
+      "acceptance": "Refresh token đã thu hồi không thể đổi access token mới."
+    },
+    {
+      "id": "AUTH 004",
+      "requirement": "Hệ thống hỗ trợ adapter xác thực giả lập trong môi trường demo.",
+      "priority": "P0",
+      "acceptance": "Adapter mock chỉ bật theo biến môi trường không production."
+    },
+    {
+      "id": "AUTH 005",
+      "requirement": "Quyền quản trị hỗ trợ được tách khỏi quyền giáo viên.",
+      "priority": "P1",
+      "acceptance": "Tài khoản support không đọc nội dung học tập nếu chưa có quyền hỗ trợ được cấp và audit."
+    },
+    {
+      "id": "STU 001",
+      "requirement": "Giáo viên tạo sửa lưu trữ và khôi phục hồ sơ học sinh.",
+      "priority": "P0",
+      "acceptance": "Tên và trạng thái là bắt buộc; archived student không được thêm vào session mới nhưng lịch sử vẫn đọc được."
+    },
+    {
+      "id": "STU 002",
+      "requirement": "Hồ sơ hiển thị mục tiêu điểm mạnh khoảng trống ghi chú và Claim approved gần đây.",
+      "priority": "P0",
+      "acceptance": "Không hiển thị Claim pending hoặc rejected trong phần lịch sử chính thức."
+    },
+    {
+      "id": "STU 003",
+      "requirement": "Giáo viên lọc học sinh theo trạng thái lớp khối và từ khóa.",
+      "priority": "P1",
+      "acceptance": "Kết quả chỉ thuộc teacher hiện tại và trả trong giới hạn phân trang."
+    },
+    {
+      "id": "STU 004",
+      "requirement": "Một session nhóm giữ dữ liệu riêng theo từng studentId.",
+      "priority": "P0",
+      "acceptance": "Không có API danh sách evidence chung trả chi tiết của nhiều học sinh cho học sinh."
+    },
+    {
+      "id": "STU 005",
+      "requirement": "Hệ thống xuất tóm tắt lịch sử cho module lập kế hoạch.",
+      "priority": "P0",
+      "acceptance": "Payload chỉ gồm dữ liệu đã duyệt và giữ evidenceIds nguồn."
+    },
+    {
+      "id": "MAT 001",
+      "requirement": "Giáo viên tải PDF JPG hoặc PNG và nhập metadata chủ đề lớp mức độ.",
+      "priority": "P0",
+      "acceptance": "File sai loại hoặc vượt giới hạn cấu hình bị từ chối trước khi lưu metadata hoàn tất."
+    },
+    {
+      "id": "MAT 002",
+      "requirement": "Hệ thống tạo signed upload URL và signed read URL có thời hạn.",
+      "priority": "P0",
+      "acceptance": "Secret storage không xuất hiện ở frontend; URL hết hạn không đọc được tệp."
+    },
+    {
+      "id": "MAT 003",
+      "requirement": "Giáo viên xem trước học liệu và chọn trang dùng trong Activity.",
+      "priority": "P0",
+      "acceptance": "PDF có thumbnail hoặc viewer; lỗi preview không làm mất tệp gốc."
+    },
+    {
+      "id": "MAT 004",
+      "requirement": "Xóa học liệu đang được tham chiếu yêu cầu xác nhận và giữ snapshot tham chiếu.",
+      "priority": "P1",
+      "acceptance": "Session cũ vẫn hiển thị tên và nguồn của học liệu đã dùng hoặc trạng thái unavailable rõ ràng."
+    },
+    {
+      "id": "MAT 005",
+      "requirement": "Annotation lưu theo materialId version page và tọa độ chuẩn hóa.",
+      "priority": "P0",
+      "acceptance": "Annotation vẫn đúng vị trí khi viewer thay đổi kích thước."
+    },
+    {
+      "id": "PLAN 001",
+      "requirement": "Giáo viên tạo session với một đến năm học sinh ngày giờ thời lượng và mục tiêu.",
+      "priority": "P0",
+      "acceptance": "Không lưu session nếu không có học sinh hoặc vượt giới hạn năm học sinh."
+    },
+    {
+      "id": "PLAN 002",
+      "requirement": "Giáo viên thêm sửa xóa và sắp xếp Activity.",
+      "priority": "P0",
+      "acceptance": "Order liên tục; tổng thời lượng được hiển thị và cảnh báo nếu vượt thời lượng session."
+    },
+    {
+      "id": "PLAN 003",
+      "requirement": "Activity có thể gắn Material và sourceEvidenceIds.",
+      "priority": "P0",
+      "acceptance": "Mở nguồn từ Activity dẫn về Evidence hoặc Claim đã duyệt tương ứng."
+    },
+    {
+      "id": "PLAN 004",
+      "requirement": "AI đề xuất mục tiêu hoặc Activity từ lịch sử đã duyệt.",
+      "priority": "P0",
+      "acceptance": "Giáo viên chấp nhận sửa hoặc bỏ từng đề xuất; đề xuất không tự ghi vào session."
+    },
+    {
+      "id": "PLAN 005",
+      "requirement": "Session scheduled có thể nhân bản thành bản draft mới.",
+      "priority": "P1",
+      "acceptance": "Bản sao có ID mới và không sao chép trạng thái live member hoặc response."
+    },
+    {
+      "id": "LIVE 001",
+      "requirement": "Giáo viên bắt đầu session scheduled hoặc draft sau khi kiểm tra thiết bị.",
+      "priority": "P0",
+      "acceptance": "Backend chuyển trạng thái sang live một lần và phát event session.started."
+    },
+    {
+      "id": "LIVE 002",
+      "requirement": "Giáo viên chọn Activity hiện tại và đánh dấu hoàn tất.",
+      "priority": "P0",
+      "acceptance": "Mọi client trong room nhận activity.changed trong mục tiêu một giây rưỡi."
+    },
+    {
+      "id": "LIVE 003",
+      "requirement": "Main stage chuyển giữa video học liệu bảng và quick check mà không rời trang.",
+      "priority": "P0",
+      "acceptance": "State sharedView được lưu server và khôi phục sau refresh."
+    },
+    {
+      "id": "LIVE 004",
+      "requirement": "Teaching dock hiển thị học sinh đang chọn nút capture AI và evidence gần nhất.",
+      "priority": "P0",
+      "acceptance": "Giáo viên tạo note evidence từ dock bằng không quá hai thao tác chính."
+    },
+    {
+      "id": "LIVE 005",
+      "requirement": "Kết thúc session dừng nhận hoạt động mới và chuyển sang ended.",
+      "priority": "P0",
+      "acceptance": "Học sinh không gửi thêm bài hoặc response; giáo viên được chuyển tới tổng kết."
+    },
+    {
+      "id": "LIVE 006",
+      "requirement": "Mất kết nối realtime hoặc video hiển thị trạng thái và thử kết nối lại độc lập.",
+      "priority": "P0",
+      "acceptance": "Lỗi video không xóa currentActivity hoặc dữ liệu đang soạn; lỗi realtime có hàng đợi cục bộ giới hạn."
+    },
+    {
+      "id": "VID 001",
+      "requirement": "Backend phát video token ngắn hạn cho teacher hoặc student đã được phép vào session.",
+      "priority": "P0",
+      "acceptance": "Token được ký ở server và chứa session role user identity cùng thời hạn tối thiểu cần thiết."
+    },
+    {
+      "id": "VID 002",
+      "requirement": "Client join hoặc leave video session trong container của Classroom.",
+      "priority": "P0",
+      "acceptance": "Không mở ứng dụng Zoom hoặc tab khác; trạng thái joining connected reconnecting error hiển thị rõ."
+    },
+    {
+      "id": "VID 003",
+      "requirement": "Người dùng điều khiển mic camera và screen share theo capability thiết bị.",
+      "priority": "P0",
+      "acceptance": "Từ chối quyền thiết bị có hướng dẫn phục hồi và không chặn xem nội dung lớp."
+    },
+    {
+      "id": "VID 004",
+      "requirement": "Adapter phát participant và active speaker events cho UI.",
+      "priority": "P0",
+      "acceptance": "Classroom cập nhật tile và roster mà không lưu media payload vào cơ sở dữ liệu."
+    },
+    {
+      "id": "VID 005",
+      "requirement": "Hệ thống có mock provider cho automated test và demo offline.",
+      "priority": "P0",
+      "acceptance": "Có thể chuyển mock sang Zoom bằng cấu hình; module khác không import trực tiếp Zoom SDK."
+    },
+    {
+      "id": "VID 006",
+      "requirement": "UI Toolkit được bọc để thay dần bằng custom UI mà không đổi token endpoint.",
+      "priority": "P1",
+      "acceptance": "VideoProvider interface giữ join leave mute camera share và event subscription."
+    },
+    {
+      "id": "ROOM 001",
+      "requirement": "Giáo viên tạo link riêng cho từng học sinh với thời hạn cấu hình.",
+      "priority": "P0",
+      "acceptance": "Link cũ bị thu hồi khi tạo lại; token lưu dạng hash và không xuất hiện trong log."
+    },
+    {
+      "id": "ROOM 002",
+      "requirement": "Học sinh mở link hợp lệ xác nhận tên consent và xin vào lobby.",
+      "priority": "P0",
+      "acceptance": "Link expired revoked hoặc sai session trả trang lỗi không làm lộ tên lớp hay học sinh khác."
+    },
+    {
+      "id": "ROOM 003",
+      "requirement": "Giáo viên admit hoặc từ chối từng học sinh.",
+      "priority": "P0",
+      "acceptance": "Chỉ member joined nhận video token và quyền gửi công cụ."
+    },
+    {
+      "id": "ROOM 004",
+      "requirement": "Giáo viên bật tắt board upload check và chat theo session hoặc member.",
+      "priority": "P0",
+      "acceptance": "Backend từ chối thao tác bị tắt ngay cả khi client cũ còn hiển thị nút."
+    },
+    {
+      "id": "ROOM 005",
+      "requirement": "Room state được đồng bộ theo thứ tự event và hỗ trợ reconnect.",
+      "priority": "P0",
+      "acceptance": "Client gửi lastEventId và nhận phần thiếu; duplicate event không tạo dữ liệu lặp."
+    },
+    {
+      "id": "ROOM 006",
+      "requirement": "Học sinh chỉ nhận nội dung chung và dữ liệu cá nhân của mình.",
+      "priority": "P0",
+      "acceptance": "Kiểm thử quyền chứng minh không thể đọc response board submission hoặc evidence của học sinh khác."
+    },
+    {
+      "id": "TOOL 001",
+      "requirement": "Board hỗ trợ pen line shape text undo clear và chia sẻ trạng thái.",
+      "priority": "P0",
+      "acceptance": "Stroke có authorId; học sinh chỉ sửa stroke của mình nếu không được cấp quyền khác."
+    },
+    {
+      "id": "TOOL 002",
+      "requirement": "Học sinh giữ board cá nhân và chủ động chia sẻ cho giáo viên hoặc lớp.",
+      "priority": "P0",
+      "acceptance": "Board chưa chia sẻ không hiển thị cho học sinh khác; giáo viên được xem theo quyền hỗ trợ đã công bố."
+    },
+    {
+      "id": "TOOL 003",
+      "requirement": "Giáo viên chú thích theo trang học liệu.",
+      "priority": "P0",
+      "acceptance": "Annotation có material version page vị trí và liên kết activity."
+    },
+    {
+      "id": "TOOL 004",
+      "requirement": "Giáo viên mở một quick check và học sinh trả lời một lần trong thời gian mở.",
+      "priority": "P0",
+      "acceptance": "Response trùng bị từ chối idempotent; giáo viên đóng check và xem kết quả theo học sinh."
+    },
+    {
+      "id": "TOOL 005",
+      "requirement": "Học sinh gửi text ảnh hoặc PDF làm bài.",
+      "priority": "P0",
+      "acceptance": "Upload thành công tạo Submission và SessionEvent; lỗi upload cho phép retry không tạo bản ghi trùng."
+    },
+    {
+      "id": "TOOL 006",
+      "requirement": "Chat ngắn lưu author timestamp và sessionId.",
+      "priority": "P1",
+      "acceptance": "Tin nhắn chỉ tới member của session và chịu giới hạn tốc độ."
+    },
+    {
+      "id": "TOOL 007",
+      "requirement": "Giáo viên có thể gắn mức hỗ trợ khi review board response hoặc submission.",
+      "priority": "P0",
+      "acceptance": "Mức hỗ trợ dùng bốn giá trị: Độc lập; Có gợi ý; Được hướng dẫn; Chưa rõ."
+    },
+    {
+      "id": "EVD 001",
+      "requirement": "Giáo viên tạo note evidence từ Teaching Dock với student và activity mặc định hiện tại.",
+      "priority": "P0",
+      "acceptance": "Bản ghi chứa actor createdAt và sourceRef nếu có; giáo viên có thể sửa student trước khi lưu."
+    },
+    {
+      "id": "EVD 002",
+      "requirement": "Hệ thống tạo evidence từ submission board attempt check response hoặc annotation được review.",
+      "priority": "P0",
+      "acceptance": "SourceRef trỏ đúng loại và ID; Source Viewer mở được nguồn gốc."
+    },
+    {
+      "id": "EVD 003",
+      "requirement": "Evidence hỗ trợ mức hỗ trợ và trạng thái deleted hoặc corrected có audit.",
+      "priority": "P0",
+      "acceptance": "Không sửa âm thầm nguồn của Claim approved; correction tạo version mới và đánh dấu Claim cần duyệt lại."
+    },
+    {
+      "id": "EVD 004",
+      "requirement": "Danh sách evidence lọc theo session student activity kind và thời gian.",
+      "priority": "P0",
+      "acceptance": "Kết quả tuân thủ phân quyền và phân trang ổn định."
+    },
+    {
+      "id": "EVD 005",
+      "requirement": "Nguồn có thể tải lại bằng signed URL hoặc snapshot đã lưu.",
+      "priority": "P1",
+      "acceptance": "Liên kết nguồn hết hạn được làm mới sau kiểm tra quyền; không dùng public URL lâu dài."
+    },
+    {
+      "id": "EVD 006",
+      "requirement": "Hệ thống cảnh báo khi evidence chưa đủ hoặc mâu thuẫn cho một Claim.",
+      "priority": "P1",
+      "acceptance": "Cảnh báo không tự chặn giáo viên duyệt nhưng lý do override được audit."
+    },
+    {
+      "id": "AI 001",
+      "requirement": "Giáo viên yêu cầu giải thích lại câu hỏi dẫn dắt ví dụ tương tự hoặc điều chỉnh độ khó.",
+      "priority": "P0",
+      "acceptance": "Request gồm student activity mục tiêu và lịch sử approved tối thiểu; phản hồi hiển thị trong dock."
+    },
+    {
+      "id": "AI 002",
+      "requirement": "Giáo viên dùng sửa bỏ qua hoặc báo lỗi một gợi ý.",
+      "priority": "P0",
+      "acceptance": "Trạng thái ready used ignored reported được lưu để đánh giá chất lượng."
+    },
+    {
+      "id": "AI 003",
+      "requirement": "Gợi ý được dùng có thể lưu thành Evidence loại Gợi ý giảng dạy.",
+      "priority": "P0",
+      "acceptance": "Lưu prompt response model version actor và thời điểm nhưng không đưa vào hồ sơ học sinh như kết luận."
+    },
+    {
+      "id": "AI 004",
+      "requirement": "Sau session AI tạo Claim pending từ evidence theo từng học sinh.",
+      "priority": "P0",
+      "acceptance": "Mỗi Claim có ít nhất một evidenceId; nếu không có nguồn hệ thống không tạo Claim khẳng định năng lực."
+    },
+    {
+      "id": "AI 005",
+      "requirement": "Timeout hoặc provider error trả fallback không chặn lớp.",
+      "priority": "P0",
+      "acceptance": "Sau ngưỡng cấu hình UI cho phép retry và tiếp tục note thủ công; không mất prompt người dùng."
+    },
+    {
+      "id": "AI 006",
+      "requirement": "Dữ liệu gửi AI được giảm thiểu và lọc theo consent cùng policy.",
+      "priority": "P0",
+      "acceptance": "Không gửi token invite secret URL tệp hoặc dữ liệu học sinh khác ngoài ngữ cảnh cần thiết."
+    },
+    {
+      "id": "AI 007",
+      "requirement": "Provider và model được cấu hình qua adapter phía server.",
+      "priority": "P0",
+      "acceptance": "Frontend không giữ API key và module nghiệp vụ không phụ thuộc trực tiếp một nhà cung cấp."
+    },
+    {
+      "id": "REV 001",
+      "requirement": "Màn tổng kết tách nội dung hoàn tất việc còn dở evidence và Claim theo từng học sinh.",
+      "priority": "P0",
+      "acceptance": "Chuyển tab học sinh không trộn dữ liệu; số lượng nguồn và trạng thái pending cập nhật đúng."
+    },
+    {
+      "id": "REV 002",
+      "requirement": "Giáo viên mở nguồn từ mỗi Claim và sửa text hoặc evidenceIds.",
+      "priority": "P0",
+      "acceptance": "Không thể approve Claim không có evidence; sửa Claim approved tạo revision pending."
+    },
+    {
+      "id": "REV 003",
+      "requirement": "Giáo viên approve hoặc reject từng Claim.",
+      "priority": "P0",
+      "acceptance": "Lưu reviewedBy reviewedAt và revision; thao tác được audit."
+    },
+    {
+      "id": "REV 004",
+      "requirement": "Session chỉ chuyển reviewed khi không còn Claim pending và giáo viên xác nhận hoàn tất.",
+      "priority": "P0",
+      "acceptance": "Nếu chưa có evidence hệ thống cho phép hoàn tất với ghi chú không đủ dữ liệu thay vì tạo Claim giả."
+    },
+    {
+      "id": "REV 005",
+      "requirement": "Approved Claim xuất hiện trong hồ sơ học sinh.",
+      "priority": "P0",
+      "acceptance": "Rejected hoặc pending Claim không xuất hiện trong ngữ cảnh lập kế hoạch."
+    },
+    {
+      "id": "REV 006",
+      "requirement": "Giáo viên tạo session kế tiếp từ Claim approved.",
+      "priority": "P0",
+      "acceptance": "Activity mới giữ sourceEvidenceIds và không sao chép member state response hoặc video token."
+    },
+    {
+      "id": "REC 001",
+      "requirement": "Giáo viên chỉ bắt đầu ghi sau khi các member cần thiết đã consent.",
+      "priority": "P1",
+      "acceptance": "UI hiển thị trạng thái ghi rõ ràng và event consent được lưu."
+    },
+    {
+      "id": "REC 002",
+      "requirement": "Recording có trạng thái recording processing ready error và retry.",
+      "priority": "P1",
+      "acceptance": "Kết thúc session tự dừng job còn mở; webhook được xử lý idempotent."
+    },
+    {
+      "id": "REC 003",
+      "requirement": "Player đồng bộ SessionEvent với mốc thời gian.",
+      "priority": "P1",
+      "acceptance": "Chọn mốc activity submission hoặc check đưa player tới thời điểm tương ứng."
+    },
+    {
+      "id": "REC 004",
+      "requirement": "Transcript và recording tuân thủ retention policy.",
+      "priority": "P1",
+      "acceptance": "Xóa theo policy làm mất media nhưng giữ audit metadata tối thiểu theo quy định."
+    },
+    {
+      "id": "OPS 001",
+      "requirement": "Mỗi request có requestId actorId và module tag.",
+      "priority": "P0",
+      "acceptance": "Có thể truy vết lỗi qua API realtime worker và webhook mà không log token hoặc nội dung tệp."
+    },
+    {
+      "id": "OPS 002",
+      "requirement": "AuditLog lưu thao tác quyền invite evidence claim consent và recording.",
+      "priority": "P0",
+      "acceptance": "Audit bất biến với actor action target timestamp và metadata tối thiểu."
+    },
+    {
+      "id": "OPS 003",
+      "requirement": "Health check phản ánh database object storage realtime AI và video token service.",
+      "priority": "P0",
+      "acceptance": "Dependency không thiết yếu như AI có thể degraded mà lớp vẫn vào được."
+    },
+    {
+      "id": "OPS 004",
+      "requirement": "Feature flag bật tắt AI recording và provider theo môi trường.",
+      "priority": "P0",
+      "acceptance": "Tắt feature không làm lỗi route; UI hiển thị trạng thái không khả dụng."
+    },
+    {
+      "id": "OPS 005",
+      "requirement": "Dashboard vận hành theo dõi join failure realtime lag upload failure và AI latency.",
+      "priority": "P1",
+      "acceptance": "Metric không chứa nội dung học tập hoặc thông tin nhận dạng không cần thiết."
+    }
+  ]
+}

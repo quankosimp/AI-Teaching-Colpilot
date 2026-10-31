@@ -1,0 +1,685 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TeacherStatus {
+  active
+  disabled
+}
+
+enum AuthProvider {
+  google
+  mock
+}
+
+enum StudentStatus {
+  active
+  archived
+}
+
+enum MaterialLevel {
+  CoBan
+  TrungBinh
+  NangCao
+}
+
+enum MaterialKind {
+  PDF
+  Anh
+  BaiTap
+  GhiChu
+}
+
+enum UploadStatus {
+  pending
+  ready
+  failed
+}
+
+enum SessionStatus {
+  draft
+  scheduled
+  live
+  ended
+  reviewed
+}
+
+enum SharedView {
+  document
+  board
+  check
+}
+
+enum ActivityType {
+  KhoiDong
+  LyThuyet
+  LuyenTap
+  KiemTra
+}
+
+enum MemberState {
+  invited
+  waiting
+  joined
+  disconnected
+  left
+}
+
+enum CheckStatus {
+  open
+  closed
+}
+
+enum SupportLevel {
+  DocLap
+  CoGoiY
+  DuocHuongDan
+  ChuaRo
+}
+
+enum SubmissionStatus {
+  new
+  draft
+  reviewed
+}
+
+enum EvidenceKind {
+  GhiChu
+  BaiLam
+  MucHoTro
+  GoiYGiangDay
+  TrangNhap
+  KiemTraDocLap
+  ChuThichDe
+}
+
+enum SourceType {
+  note
+  submission
+  board_attempt
+  check_response
+  annotation
+  ai_suggestion
+}
+
+enum EvidenceStatus {
+  active
+  corrected
+  deleted
+}
+
+enum ClaimStatus {
+  pending
+  approved
+  rejected
+}
+
+enum AIKind {
+  suggestion
+  claim_draft
+  plan_suggestion
+  grading_hint
+}
+
+enum AIProvider {
+  gemini
+  mock
+}
+
+enum AIStatus {
+  ready
+  used
+  ignored
+  reported
+  error
+}
+
+enum ActorRole {
+  teacher
+  student
+  system
+  support
+}
+
+model Teacher {
+  id                                   String                 @id @default(uuid()) @db.Uuid
+  email                                String
+  name                                 String
+  avatarUrl                            String?
+  workspaceId                          String                 @db.Uuid
+  status                               TeacherStatus          @default(active)
+  createdAt                            DateTime               @default(now())
+  updatedAt                            DateTime               @updatedAt
+  TeacherOAuthIdentity_teacherId_items TeacherOAuthIdentity[] @relation("TeacherOAuthIdentity_teacherId")
+  TeacherAuthSession_teacherId_items   TeacherAuthSession[]   @relation("TeacherAuthSession_teacherId")
+  Student_teacherId_items              Student[]              @relation("Student_teacherId")
+  StudentGroup_teacherId_items         StudentGroup[]         @relation("StudentGroup_teacherId")
+  Material_teacherId_items             Material[]             @relation("Material_teacherId")
+  Session_teacherId_items              Session[]              @relation("Session_teacherId")
+  Invite_createdBy_items               Invite[]               @relation("Invite_createdBy")
+  Evidence_createdBy_items             Evidence[]             @relation("Evidence_createdBy")
+  EvidenceRevision_changedBy_items     EvidenceRevision[]     @relation("EvidenceRevision_changedBy")
+  Claim_reviewedBy_items               Claim[]                @relation("Claim_reviewedBy")
+}
+
+model TeacherOAuthIdentity {
+  id              String       @id @default(uuid()) @db.Uuid
+  teacherId       String       @db.Uuid
+  provider        AuthProvider
+  providerSubject String
+  teacherIdRef    Teacher      @relation("TeacherOAuthIdentity_teacherId", fields: [teacherId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerSubject])
+}
+
+model TeacherAuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  teacherId        String    @db.Uuid
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  teacherIdRef     Teacher   @relation("TeacherAuthSession_teacherId", fields: [teacherId], references: [id], onDelete: Restrict)
+}
+
+model Student {
+  id                                       String               @id @default(uuid()) @db.Uuid
+  teacherId                                String               @db.Uuid
+  name                                     String
+  grade                                    String
+  subject                                  String
+  goal                                     String               @db.Text
+  status                                   StudentStatus        @default(active)
+  strengths                                String[]
+  gaps                                     String[]
+  notes                                    String               @db.Text
+  initials                                 String
+  color                                    String
+  version                                  Int                  @default(1)
+  archivedAt                               DateTime?
+  createdAt                                DateTime             @default(now())
+  updatedAt                                DateTime             @updatedAt
+  teacherIdRef                             Teacher              @relation("Student_teacherId", fields: [teacherId], references: [id], onDelete: Restrict)
+  StudentGroupMember_studentId_items       StudentGroupMember[] @relation("StudentGroupMember_studentId")
+  Session_primaryStudentId_items           Session[]            @relation("Session_primaryStudentId")
+  RoomMember_studentId_items               RoomMember[]         @relation("RoomMember_studentId")
+  Invite_studentId_items                   Invite[]             @relation("Invite_studentId")
+  BoardAttempt_studentId_items             BoardAttempt[]       @relation("BoardAttempt_studentId")
+  CheckResponse_studentId_items            CheckResponse[]      @relation("CheckResponse_studentId")
+  Submission_studentId_items               Submission[]         @relation("Submission_studentId")
+  RoomReaction_studentId_items             RoomReaction[]       @relation("RoomReaction_studentId")
+  Evidence_studentId_items                 Evidence[]           @relation("Evidence_studentId")
+  EvidenceRevision_studentId_items         EvidenceRevision[]   @relation("EvidenceRevision_studentId")
+  Claim_studentId_items                    Claim[]              @relation("Claim_studentId")
+  AIRequest_studentId_items                AIRequest[]          @relation("AIRequest_studentId")
+  SessionEventOutbox_targetStudentId_items SessionEventOutbox[] @relation("SessionEventOutbox_targetStudentId")
+
+  @@index([teacherId, status])
+}
+
+model StudentGroup {
+  id                               String               @id @default(uuid()) @db.Uuid
+  teacherId                        String               @db.Uuid
+  name                             String
+  grade                            String
+  subject                          String
+  createdAt                        DateTime             @default(now())
+  teacherIdRef                     Teacher              @relation("StudentGroup_teacherId", fields: [teacherId], references: [id], onDelete: Restrict)
+  StudentGroupMember_groupId_items StudentGroupMember[] @relation("StudentGroupMember_groupId")
+  Session_groupId_items            Session[]            @relation("Session_groupId")
+}
+
+model StudentGroupMember {
+  groupId      String       @db.Uuid
+  studentId    String       @db.Uuid
+  groupIdRef   StudentGroup @relation("StudentGroupMember_groupId", fields: [groupId], references: [id], onDelete: Restrict)
+  studentIdRef Student      @relation("StudentGroupMember_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@id([groupId, studentId])
+}
+
+model Material {
+  id                                  String               @id @default(uuid()) @db.Uuid
+  teacherId                           String               @db.Uuid
+  title                               String
+  subject                             String
+  grade                               String
+  topic                               String
+  level                               MaterialLevel
+  kind                                MaterialKind
+  description                         String               @db.Text
+  source                              String
+  currentVersion                      Int                  @default(1)
+  archivedAt                          DateTime?
+  createdAt                           DateTime             @default(now())
+  updatedAt                           DateTime             @updatedAt
+  teacherIdRef                        Teacher              @relation("Material_teacherId", fields: [teacherId], references: [id], onDelete: Restrict)
+  MaterialVersion_materialId_items    MaterialVersion[]    @relation("MaterialVersion_materialId")
+  Activity_materialId_items           Activity[]           @relation("Activity_materialId")
+  Annotation_materialId_items         Annotation[]         @relation("Annotation_materialId")
+  SessionEventOutbox_materialId_items SessionEventOutbox[] @relation("SessionEventOutbox_materialId")
+}
+
+model MaterialVersion {
+  id            String       @id @default(uuid()) @db.Uuid
+  materialId    String       @db.Uuid
+  version       Int
+  storageKey    String?
+  mimeType      String?
+  sizeBytes     Int?
+  sha256        String?
+  pages         String[]
+  uploadStatus  UploadStatus @default(pending)
+  createdAt     DateTime     @default(now())
+  materialIdRef Material     @relation("MaterialVersion_materialId", fields: [materialId], references: [id], onDelete: Restrict)
+
+  @@unique([materialId, version])
+}
+
+model Session {
+  id                                 String               @id @default(uuid()) @db.Uuid
+  teacherId                          String               @db.Uuid
+  primaryStudentId                   String               @db.Uuid
+  groupId                            String?              @db.Uuid
+  groupName                          String?
+  title                              String
+  goal                               String               @db.Text
+  sharedGoal                         String               @db.Text
+  date                               String
+  time                               String
+  duration                           Int
+  status                             SessionStatus        @default(draft)
+  currentActivityId                  String?              @db.Uuid
+  sharedView                         SharedView           @default(document)
+  sharedBoardOwnerId                 String               @default("common")
+  materialPage                       Int                  @default(0)
+  tools                              Json
+  completedActivityIds               String[]
+  dismissedSuggestionIds             String[]
+  reviewNote                         String?              @db.Text
+  startedAt                          DateTime?
+  endedAt                            DateTime?
+  reviewedAt                         DateTime?
+  nextEventSeq                       Int                  @default(1)
+  version                            Int                  @default(1)
+  createdAt                          DateTime             @default(now())
+  updatedAt                          DateTime             @updatedAt
+  teacherIdRef                       Teacher              @relation("Session_teacherId", fields: [teacherId], references: [id], onDelete: Restrict)
+  primaryStudentIdRef                Student              @relation("Session_primaryStudentId", fields: [primaryStudentId], references: [id], onDelete: Restrict)
+  groupIdRef                         StudentGroup?        @relation("Session_groupId", fields: [groupId], references: [id], onDelete: Restrict)
+  Activity_sessionId_items           Activity[]           @relation("Activity_sessionId")
+  RoomMember_sessionId_items         RoomMember[]         @relation("RoomMember_sessionId")
+  Invite_sessionId_items             Invite[]             @relation("Invite_sessionId")
+  Board_sessionId_items              Board[]              @relation("Board_sessionId")
+  BoardAttempt_sessionId_items       BoardAttempt[]       @relation("BoardAttempt_sessionId")
+  Annotation_sessionId_items         Annotation[]         @relation("Annotation_sessionId")
+  QuickCheck_sessionId_items         QuickCheck[]         @relation("QuickCheck_sessionId")
+  CheckResponse_sessionId_items      CheckResponse[]      @relation("CheckResponse_sessionId")
+  Submission_sessionId_items         Submission[]         @relation("Submission_sessionId")
+  RoomMessage_sessionId_items        RoomMessage[]        @relation("RoomMessage_sessionId")
+  RoomReaction_sessionId_items       RoomReaction[]       @relation("RoomReaction_sessionId")
+  Evidence_sessionId_items           Evidence[]           @relation("Evidence_sessionId")
+  EvidenceRevision_sessionId_items   EvidenceRevision[]   @relation("EvidenceRevision_sessionId")
+  Claim_sessionId_items              Claim[]              @relation("Claim_sessionId")
+  AIRequest_sessionId_items          AIRequest[]          @relation("AIRequest_sessionId")
+  SessionEventOutbox_sessionId_items SessionEventOutbox[] @relation("SessionEventOutbox_sessionId")
+  AuditLog_sessionId_items           AuditLog[]           @relation("AuditLog_sessionId")
+}
+
+model Activity {
+  id                                  String               @id @default(uuid()) @db.Uuid
+  sessionId                           String               @db.Uuid
+  order                               Int
+  title                               String
+  duration                            Int
+  description                         String               @db.Text
+  teacherNotes                        String?              @db.Text
+  type                                ActivityType
+  materialId                          String?              @db.Uuid
+  materialVersion                     Int?
+  sourceEvidenceIds                   String[]
+  sourceClaimRefs                     Json
+  sessionIdRef                        Session              @relation("Activity_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  materialIdRef                       Material?            @relation("Activity_materialId", fields: [materialId], references: [id], onDelete: Restrict)
+  Board_activityId_items              Board[]              @relation("Board_activityId")
+  BoardAttempt_activityId_items       BoardAttempt[]       @relation("BoardAttempt_activityId")
+  Annotation_activityId_items         Annotation[]         @relation("Annotation_activityId")
+  QuickCheck_activityId_items         QuickCheck[]         @relation("QuickCheck_activityId")
+  Submission_activityId_items         Submission[]         @relation("Submission_activityId")
+  Evidence_activityId_items           Evidence[]           @relation("Evidence_activityId")
+  EvidenceRevision_activityId_items   EvidenceRevision[]   @relation("EvidenceRevision_activityId")
+  AIRequest_activityId_items          AIRequest[]          @relation("AIRequest_activityId")
+  SessionEventOutbox_activityId_items SessionEventOutbox[] @relation("SessionEventOutbox_activityId")
+
+  @@index([sessionId, order])
+}
+
+model RoomMember {
+  id            String      @id @default(uuid()) @db.Uuid
+  sessionId     String      @db.Uuid
+  studentId     String      @db.Uuid
+  state         MemberState @default(invited)
+  canWrite      Boolean     @default(true)
+  toolOverrides Json?
+  handRaised    Boolean     @default(false)
+  consent       Boolean     @default(false)
+  consentAt     DateTime?
+  joinedAt      DateTime?
+  leftAt        DateTime?
+  updatedAt     DateTime    @updatedAt
+  sessionIdRef  Session     @relation("RoomMember_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  studentIdRef  Student     @relation("RoomMember_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, studentId])
+}
+
+model Invite {
+  id           String    @id @default(uuid()) @db.Uuid
+  sessionId    String    @db.Uuid
+  studentId    String    @db.Uuid
+  tokenHash    String    @unique
+  maskedHint   String
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdBy    String    @db.Uuid
+  createdAt    DateTime  @default(now())
+  sessionIdRef Session   @relation("Invite_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  studentIdRef Student   @relation("Invite_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+  createdByRef Teacher   @relation("Invite_createdBy", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([sessionId, studentId])
+}
+
+model Board {
+  id                         String         @id
+  sessionId                  String         @db.Uuid
+  activityId                 String         @db.Uuid
+  ownerId                    String
+  shared                     Boolean        @default(false)
+  strokes                    Json
+  text                       String         @db.Text
+  notes                      Json
+  revision                   Int            @default(1)
+  updatedAt                  DateTime       @updatedAt
+  sessionIdRef               Session        @relation("Board_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  activityIdRef              Activity       @relation("Board_activityId", fields: [activityId], references: [id], onDelete: Restrict)
+  BoardAttempt_boardId_items BoardAttempt[] @relation("BoardAttempt_boardId")
+}
+
+model BoardAttempt {
+  id            String   @id @default(uuid()) @db.Uuid
+  boardId       String
+  sessionId     String   @db.Uuid
+  activityId    String   @db.Uuid
+  studentId     String   @db.Uuid
+  strokes       Json
+  text          String   @db.Text
+  createdAt     DateTime @default(now())
+  boardIdRef    Board    @relation("BoardAttempt_boardId", fields: [boardId], references: [id], onDelete: Restrict)
+  sessionIdRef  Session  @relation("BoardAttempt_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  activityIdRef Activity @relation("BoardAttempt_activityId", fields: [activityId], references: [id], onDelete: Restrict)
+  studentIdRef  Student  @relation("BoardAttempt_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+}
+
+model Annotation {
+  id              String   @id @default(uuid()) @db.Uuid
+  sessionId       String   @db.Uuid
+  activityId      String   @db.Uuid
+  materialId      String   @db.Uuid
+  materialVersion Int
+  page            Int
+  x               Float
+  y               Float
+  text            String   @db.Text
+  authorId        String
+  createdAt       DateTime @default(now())
+  sessionIdRef    Session  @relation("Annotation_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  activityIdRef   Activity @relation("Annotation_activityId", fields: [activityId], references: [id], onDelete: Restrict)
+  materialIdRef   Material @relation("Annotation_materialId", fields: [materialId], references: [id], onDelete: Restrict)
+}
+
+model QuickCheck {
+  id                          String          @id @default(uuid()) @db.Uuid
+  sessionId                   String          @db.Uuid
+  activityId                  String          @db.Uuid
+  question                    String          @db.Text
+  status                      CheckStatus     @default(open)
+  openedAt                    DateTime        @default(now())
+  closedAt                    DateTime?
+  sessionIdRef                Session         @relation("QuickCheck_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  activityIdRef               Activity        @relation("QuickCheck_activityId", fields: [activityId], references: [id], onDelete: Restrict)
+  CheckResponse_checkId_items CheckResponse[] @relation("CheckResponse_checkId")
+}
+
+model CheckResponse {
+  id           String       @id @default(uuid()) @db.Uuid
+  checkId      String       @db.Uuid
+  sessionId    String       @db.Uuid
+  studentId    String       @db.Uuid
+  answer       String       @db.Text
+  support      SupportLevel
+  feedback     String?      @db.Text
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  checkIdRef   QuickCheck   @relation("CheckResponse_checkId", fields: [checkId], references: [id], onDelete: Restrict)
+  sessionIdRef Session      @relation("CheckResponse_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  studentIdRef Student      @relation("CheckResponse_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([checkId, studentId])
+}
+
+model Submission {
+  id                          String           @id @default(uuid()) @db.Uuid
+  sessionId                   String           @db.Uuid
+  studentId                   String           @db.Uuid
+  activityId                  String?          @db.Uuid
+  title                       String
+  answer                      String           @db.Text
+  fileName                    String?
+  storageKey                  String?
+  mimeType                    String?
+  sizeBytes                   Int?
+  status                      SubmissionStatus @default(new)
+  support                     SupportLevel?
+  suggestedFeedback           String?          @db.Text
+  finalFeedback               String?          @db.Text
+  score                       String?
+  version                     Int              @default(1)
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
+  sessionIdRef                Session          @relation("Submission_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  studentIdRef                Student          @relation("Submission_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+  activityIdRef               Activity?        @relation("Submission_activityId", fields: [activityId], references: [id], onDelete: Restrict)
+  Evidence_submissionId_items Evidence[]       @relation("Evidence_submissionId")
+}
+
+model RoomMessage {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionId    String   @db.Uuid
+  authorId     String
+  text         String   @db.Text
+  createdAt    DateTime @default(now())
+  sessionIdRef Session  @relation("RoomMessage_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+}
+
+model RoomReaction {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionId    String   @db.Uuid
+  studentId    String   @db.Uuid
+  emoji        String
+  label        String
+  createdAt    DateTime @default(now())
+  sessionIdRef Session  @relation("RoomReaction_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  studentIdRef Student  @relation("RoomReaction_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, studentId])
+}
+
+model Evidence {
+  id                                String             @id @default(uuid()) @db.Uuid
+  sessionId                         String             @db.Uuid
+  studentId                         String             @db.Uuid
+  activityId                        String?            @db.Uuid
+  kind                              EvidenceKind
+  title                             String
+  detail                            String             @db.Text
+  support                           SupportLevel
+  sourceType                        SourceType
+  sourceId                          String?
+  sourceVersion                     Int?
+  submissionId                      String?            @db.Uuid
+  isObservation                     Boolean            @default(true)
+  status                            EvidenceStatus     @default(active)
+  version                           Int                @default(1)
+  createdBy                         String             @db.Uuid
+  createdAt                         DateTime           @default(now())
+  updatedAt                         DateTime           @updatedAt
+  sessionIdRef                      Session            @relation("Evidence_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  studentIdRef                      Student            @relation("Evidence_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+  activityIdRef                     Activity?          @relation("Evidence_activityId", fields: [activityId], references: [id], onDelete: Restrict)
+  submissionIdRef                   Submission?        @relation("Evidence_submissionId", fields: [submissionId], references: [id], onDelete: Restrict)
+  createdByRef                      Teacher            @relation("Evidence_createdBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  EvidenceRevision_evidenceId_items EvidenceRevision[] @relation("EvidenceRevision_evidenceId")
+}
+
+model EvidenceRevision {
+  id            String         @id @default(uuid()) @db.Uuid
+  evidenceId    String         @db.Uuid
+  version       Int
+  detail        String         @db.Text
+  support       SupportLevel
+  studentId     String         @db.Uuid
+  sessionId     String         @db.Uuid
+  activityId    String?        @db.Uuid
+  sourceType    SourceType
+  sourceId      String?
+  sourceVersion Int?
+  status        EvidenceStatus
+  changedBy     String         @db.Uuid
+  reason        String?
+  createdAt     DateTime       @default(now())
+  evidenceIdRef Evidence       @relation("EvidenceRevision_evidenceId", fields: [evidenceId], references: [id], onDelete: Restrict)
+  studentIdRef  Student        @relation("EvidenceRevision_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+  sessionIdRef  Session        @relation("EvidenceRevision_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  activityIdRef Activity?      @relation("EvidenceRevision_activityId", fields: [activityId], references: [id], onDelete: Restrict)
+  changedByRef  Teacher        @relation("EvidenceRevision_changedBy", fields: [changedBy], references: [id], onDelete: Restrict)
+
+  @@unique([evidenceId, version])
+}
+
+model Claim {
+  id                          String          @id @default(uuid()) @db.Uuid
+  sessionId                   String          @db.Uuid
+  studentId                   String          @db.Uuid
+  text                        String          @db.Text
+  evidenceIds                 String[]
+  status                      ClaimStatus     @default(pending)
+  revision                    Int             @default(1)
+  staleReason                 String?
+  reviewedBy                  String?         @db.Uuid
+  reviewedAt                  DateTime?
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+  sessionIdRef                Session         @relation("Claim_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  studentIdRef                Student         @relation("Claim_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+  reviewedByRef               Teacher?        @relation("Claim_reviewedBy", fields: [reviewedBy], references: [id], onDelete: Restrict)
+  ClaimRevision_claimId_items ClaimRevision[] @relation("ClaimRevision_claimId")
+}
+
+model ClaimRevision {
+  id          String      @id @default(uuid()) @db.Uuid
+  claimId     String      @db.Uuid
+  revision    Int
+  text        String      @db.Text
+  evidenceIds String[]
+  status      ClaimStatus
+  actorId     String
+  reason      String?
+  createdAt   DateTime    @default(now())
+  claimIdRef  Claim       @relation("ClaimRevision_claimId", fields: [claimId], references: [id], onDelete: Restrict)
+
+  @@unique([claimId, revision])
+}
+
+model AIRequest {
+  id             String     @id @default(uuid()) @db.Uuid
+  sessionId      String     @db.Uuid
+  activityId     String?    @db.Uuid
+  studentId      String     @db.Uuid
+  kind           AIKind
+  prompt         String     @db.Text
+  promptVersion  String
+  responseText   String     @db.Text
+  contextSummary String     @db.Text
+  provider       AIProvider
+  model          String
+  modelVersion   String
+  status         AIStatus
+  actorId        String
+  createdAt      DateTime   @default(now())
+  sessionIdRef   Session    @relation("AIRequest_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  activityIdRef  Activity?  @relation("AIRequest_activityId", fields: [activityId], references: [id], onDelete: Restrict)
+  studentIdRef   Student    @relation("AIRequest_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+}
+
+model SessionEventOutbox {
+  id                  String    @id @default(uuid()) @db.Uuid
+  sessionId           String    @db.Uuid
+  seq                 Int
+  kind                String
+  label               String
+  actorId             String
+  shared              Boolean
+  targetStudentId     String?   @db.Uuid
+  activityId          String?   @db.Uuid
+  materialId          String?   @db.Uuid
+  page                Int?
+  sourceId            String?
+  boardSnapshot       Json?
+  payload             Json
+  occurredAt          DateTime  @default(now())
+  publishedAt         DateTime?
+  publicationAttempts Int       @default(0)
+  lastAttemptAt       DateTime?
+  sessionIdRef        Session   @relation("SessionEventOutbox_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  targetStudentIdRef  Student?  @relation("SessionEventOutbox_targetStudentId", fields: [targetStudentId], references: [id], onDelete: Restrict)
+  activityIdRef       Activity? @relation("SessionEventOutbox_activityId", fields: [activityId], references: [id], onDelete: Restrict)
+  materialIdRef       Material? @relation("SessionEventOutbox_materialId", fields: [materialId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, seq])
+  @@index([publishedAt, occurredAt])
+}
+
+model AuditLog {
+  id           String    @id @default(uuid()) @db.Uuid
+  workspaceId  String    @db.Uuid
+  actorId      String
+  actorRole    ActorRole
+  action       String
+  targetType   String
+  targetId     String
+  sessionId    String?   @db.Uuid
+  requestId    String
+  metadata     Json
+  createdAt    DateTime  @default(now())
+  sessionIdRef Session?  @relation("AuditLog_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+}
+
+model IdempotencyRecord {
+  key          String
+  actorId      String
+  route        String
+  requestHash  String
+  statusCode   Int
+  responseBody Json
+  expiresAt    DateTime
+
+  @@id([actorId, route, key])
+}

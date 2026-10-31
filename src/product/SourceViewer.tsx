@@ -3,6 +3,7 @@ import type { Evidence } from "./model";
 import { formatTime } from "./model";
 import { useStore } from "./store";
 import { appendEvent } from "./adapters";
+import { updateEvidence } from "./reviewLogic";
 import { BoardPreview } from "./Board";
 import { MaterialContent } from "./DocumentStage";
 import { Banner, Modal, Status } from "./ui";
@@ -118,31 +119,24 @@ export function SourceViewer({
           className="button primary"
           disabled={!detail.trim()}
           onClick={() => {
-            setData((prev) =>
-              appendEvent(
-                {
-                  ...prev,
-                  evidence: prev.evidence.map((e) =>
-                    e.id === item.id
-                      ? {
-                          ...e,
-                          detail: detail.trim(),
-                          support,
-                          updatedAt: new Date().toISOString(),
-                        }
-                      : e,
-                  ),
-                },
-                {
-                  sessionId: item.sessionId,
-                  activityId: item.activityId,
-                  kind: "member",
-                  label: "Gia sư sửa ghi nhận/mức hỗ trợ",
-                  sourceId: item.id,
-                  shared: false,
-                },
-              ),
-            );
+            setData((prev) => {
+              const updated = updateEvidence(
+                prev,
+                item.id,
+                detail,
+                support,
+                new Date().toISOString(),
+              );
+              if (updated === prev) return prev;
+              return appendEvent(updated, {
+                sessionId: item.sessionId,
+                activityId: item.activityId,
+                kind: "member",
+                label: "Gia sư sửa ghi nhận/mức hỗ trợ",
+                sourceId: item.id,
+                shared: false,
+              });
+            });
             toast("Đã cập nhật minh chứng, giữ nguyên bài gốc.");
             onClose();
           }}
