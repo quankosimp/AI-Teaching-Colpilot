@@ -30,7 +30,7 @@ export type ThreeContextRoom = {
   sessionId: string;
   activityId: string;
   sockets: Socket[];
-  connectSocket: (token: string, sessionId: string) => Promise<Socket>;
+  connectSocket: (token: string, sessionId?: string) => Promise<Socket>;
   cleanup: () => Promise<void>;
 };
 

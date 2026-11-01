@@ -700,51 +700,184 @@ test(
 
 test(
   "T-LIVE-006-POS: [LIVE 006] Connection loss preserves in-progress state and attempts independent realtime reconnection",
-  () => {
-    // Contract verification of BoundedReconnectQueue client mechanics
+  async () => {
+    // 1. Contract verification of BoundedReconnectQueue client mechanics with in-progress draft preservation
     const queue = new BoundedReconnectQueue();
+    const draftPayload = { tool: "pen", points: [[10, 10], [20, 20]], color: "#ff0000" };
     const res = queue.enqueue({
-      sessionId: "ses-1",
-      path: "/sessions/ses-1/boards/own",
+      sessionId: "ses-offline-1",
+      path: "/sessions/ses-offline-1/boards/own",
       method: "PUT",
       idempotent: true,
-      idempotencyKey: "key-1",
-      payload: { operation: "addStroke" },
+      idempotencyKey: "key-offline-1",
+      payload: { operation: "addStroke", stroke: draftPayload },
+      draft: draftPayload,
     });
     assert.equal(res.accepted, true);
     assert.equal(queue.size, 1);
+    const snap = queue.snapshot();
+    assert.equal(snap.length, 1);
+    assert.deepEqual((snap[0] as any).draft, draftPayload);
+
+    // 2. Offline reconnection attempt with temporary network glitch
+    let networkAttempts = 0;
+    const flushGlitch = await queue.flush("live", async (_cmd) => {
+      networkAttempts++;
+      throw new Error("Temporary connection glitch");
+    });
+    assert.equal(flushGlitch.replayed, 0);
+    assert.equal(flushGlitch.failed, 1);
+    assert.equal(queue.size, 1, "Failed command preserved in queue for subsequent retry");
+
+    // 3. Second reconnection attempt succeeds
+    let replayedCommandId = "";
+    const flushSuccess = await queue.flush("live", async (cmd) => {
+      networkAttempts++;
+      replayedCommandId = cmd.idempotencyKey;
+    });
+    assert.equal(flushSuccess.replayed, 1);
+    assert.equal(flushSuccess.failed, 0);
+    assert.equal(replayedCommandId, "key-offline-1");
+    assert.equal(queue.size, 0, "Queue cleared after successful replay");
+    assert.equal(networkAttempts, 2);
   },
 );
 
 test(
   "T-LIVE-006-NEG: [LIVE 006 / LIVE 005] Realtime reconnect queue enforces bounded limits (max 50 commands / 1 MiB / 5 min TTL); server drops stale commands after session end",
-  () => {
-    // Bounded queue limit (50 commands max)
+  { skip: SKIP_IF_NO_SERVER },
+  async () => {
+    // 1. Enforce max 50 commands limit
     const queue = new BoundedReconnectQueue();
     for (let i = 0; i < 50; i++) {
       const res = queue.enqueue({
-        sessionId: "ses-1",
-        path: "/sessions/ses-1/boards/own",
+        sessionId: "ses-bounded-1",
+        path: "/sessions/ses-bounded-1/boards/own",
         method: "PUT",
         idempotent: true,
-        idempotencyKey: `key-${i}`,
+        idempotencyKey: `key-bounded-${i}`,
         payload: { operation: "addStroke", i },
+        draft: { strokeIndex: i },
       });
       assert.equal(res.accepted, true);
     }
     assert.equal(queue.size, 50);
 
-    // 51st command is rejected because queue is full
+    // 51st command is rejected due to capacity limit (50 commands max), but draft is fully retained
+    const overflowDraft = { strokeIndex: 51, unsavedData: "stroke-51" };
     const overflow = queue.enqueue({
-      sessionId: "ses-1",
-      path: "/sessions/ses-1/boards/own",
+      sessionId: "ses-bounded-1",
+      path: "/sessions/ses-bounded-1/boards/own",
       method: "PUT",
       idempotent: true,
-      idempotencyKey: "key-51",
+      idempotencyKey: "key-bounded-51",
       payload: { operation: "addStroke", i: 51 },
+      draft: overflowDraft,
     });
     assert.equal(overflow.accepted, false);
     assert.equal(overflow.reason, "queue_full");
+    assert.deepEqual(overflow.preservedDraft, overflowDraft, "Full retain: user draft is not lost on queue full");
+
+    // 2. Non-idempotent rejection preserves draft
+    const nonIdemDraft = { operation: "chat_message", text: "hello" };
+    const nonIdem = queue.enqueue({
+      sessionId: "ses-bounded-1",
+      path: "/sessions/ses-bounded-1/messages",
+      method: "POST",
+      idempotent: false,
+      payload: nonIdemDraft,
+    });
+    assert.equal(nonIdem.accepted, false);
+    assert.equal(nonIdem.reason, "non_idempotent");
+    assert.deepEqual(nonIdem.preservedDraft, nonIdemDraft);
+
+    // 3. Payload size limit (>1 MiB) rejection preserves draft
+    const hugePayload = "A".repeat(1024 * 1024 + 10);
+    const hugeRes = queue.enqueue({
+      sessionId: "ses-bounded-1",
+      path: "/sessions/ses-bounded-1/boards/own",
+      method: "PUT",
+      idempotent: true,
+      idempotencyKey: "key-huge",
+      payload: { huge: hugePayload },
+    });
+    assert.equal(hugeRes.accepted, false);
+    assert.equal(hugeRes.reason, "payload_too_large");
+
+    // 4. TTL expiration (5 minutes / 300,000 ms)
+    const ttlQueue = new BoundedReconnectQueue();
+    const t0 = 1_000_000;
+    ttlQueue.enqueue({
+      sessionId: "ses-ttl",
+      path: "/sessions/ses-ttl/boards/own",
+      method: "PUT",
+      idempotent: true,
+      idempotencyKey: "key-ttl-1",
+      payload: { operation: "addStroke" },
+      now: t0,
+    });
+    assert.equal(ttlQueue.size, 1);
+    const pruned = ttlQueue.pruneExpired(t0 + 300_001); // 5 min + 1 ms later
+    assert.equal(pruned, 1);
+    assert.equal(ttlQueue.size, 0);
+
+    // 5. Client drop after session end: flush("ended") discards all stale commands
+    const endQueue = new BoundedReconnectQueue();
+    for (let i = 0; i < 5; i++) {
+      endQueue.enqueue({
+        sessionId: "ses-ended",
+        path: "/sessions/ses-ended/boards/own",
+        method: "PUT",
+        idempotent: true,
+        idempotencyKey: `key-end-${i}`,
+        payload: { operation: "addStroke", i },
+      });
+    }
+    assert.equal(endQueue.size, 5);
+    const endFlush = await endQueue.flush("ended", async () => {
+      assert.fail("Executor must never be called for stale commands after session end");
+    });
+    assert.equal(endFlush.droppedAfterEnd, 5);
+    assert.equal(endFlush.replayed, 0);
+    assert.equal(endQueue.size, 0);
+
+    // 6. Live server verification: server drops / rejects stale client commands after session end
+    const { teacher, student1, sessionId, cleanup } = await createThreeContextRoom("live-006-server");
+    try {
+      // Teacher ends session
+      const endRes = await apiRequest(`/api/v1/sessions/${sessionId}/end`, {
+        method: "POST",
+        token: teacher.token,
+        body: {},
+      });
+      assert.equal(endRes.status, 200);
+
+      // Student attempts to send an offline-queued board mutation after session end
+      const staleWriteRes = await apiRequest(
+        `/api/v1/sessions/${sessionId}/boards/own`,
+        {
+          method: "PUT",
+          token: student1.accessToken,
+          body: {
+            operation: "addStroke",
+            stroke: {
+              id: uid("stale-stroke"),
+              authorId: student1.studentId,
+              color: "#444444",
+              kind: "line",
+              width: 3,
+              points: [{ x: 1, y: 1 }],
+            },
+          },
+        },
+      );
+      assert.ok(
+        [403, 409].includes(staleWriteRes.status),
+        `Server must reject stale write after session end, got ${staleWriteRes.status}`,
+      );
+    } finally {
+      await cleanup();
+    }
   },
 );
 
@@ -1548,7 +1681,7 @@ test(
         {
           method: "POST",
           token: teacher.token,
-          body: { support: "CanHuongDan", feedback: "Cần chú ý dấu âm ở hệ số b" },
+          body: { support: "DuocHuongDan", feedback: "Cần chú ý dấu âm ở hệ số b" },
         },
       );
       assert.equal(regradeRes.status, 200);
@@ -1652,7 +1785,7 @@ test(
   { skip: SKIP_IF_NO_SERVER },
   async () => {
     const { teacher, student1, student2, sessionId, activityId, cleanup } =
-      await createThreeContextRoom("rg2-04");
+      await createThreeContextRoom("rg2-04", { admitStudents: true, startSession: false });
 
     try {
       // 1. Upload material
@@ -1679,14 +1812,58 @@ test(
         token: teacher.token,
         body: {
           title: "Tài liệu kiểm toán",
-          mimeType: "application/pdf",
-          sizeBytes: pdfBytes.length,
-          sha256,
+          subject: "Toán",
+          grade: "Lớp 9",
+          topic: "Viète",
+          level: "CoBan",
+          kind: "PDF",
+          description: "Tài liệu kiểm tra độc lập",
+          source: "upload",
           uploadId: intentRes.data.uploadId,
         },
       });
       assert.equal(matRes.status, 201);
       const matId = matRes.data.material.id;
+
+      // Fetch current session version
+      const sesGet = await apiRequest<{ session: { version: number } }>(
+        `/api/v1/sessions/${sessionId}`,
+        { method: "GET", token: teacher.token },
+      );
+      assert.equal(sesGet.status, 200);
+
+      // Associate material with session activity while in draft
+      const actRes = await apiRequest<{ session: { currentActivityId: string; Activity_sessionId_items: Array<{ id: string }> } }>(
+        `/api/v1/sessions/${sessionId}/activities`,
+        {
+          method: "PUT",
+          token: teacher.token,
+          headers: { "If-Match-Version": String(sesGet.data.session.version) },
+          body: [
+            {
+              id: activityId,
+              title: "Hoạt động thực hành",
+              description: "Khởi động và làm bài",
+              duration: 15,
+              type: "LuyenTap",
+              materialId: matId,
+              materialVersion: 1,
+              teacherNotes: null,
+              sourceEvidenceIds: [],
+              sourceClaimRefs: [],
+            },
+          ],
+        },
+      );
+      assert.equal(actRes.status, 200);
+
+      // Start the session
+      const startRes = await apiRequest(`/api/v1/sessions/${sessionId}/start`, {
+        method: "POST",
+        token: teacher.token,
+        body: {},
+      });
+      assert.equal(startRes.status, 200);
 
       // 2. Create annotation bound to Student 1
       const annoRes = await apiRequest<{ annotation: { id: string } }>(
