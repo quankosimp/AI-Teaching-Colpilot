@@ -43,6 +43,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import http from 'node:http';
+import { evaluateContainers, deniedCors } from './docker-doctor-checks.mjs';
 
 // CLI / Environment Configuration
 const args = process.argv.slice(2);
@@ -306,7 +307,7 @@ async function main() {
   try {
     const psRaw = execFileSync(
       'docker',
-      [...composeBaseArgs, 'ps', '--format', '{{.Name}}|{{.Service}}|{{.Status}}|{{.Health}}'],
+      [...composeBaseArgs, 'ps', '--format', '{{.Name}}|{{.Service}}|{{.State}}|{{.Health}}'],
       { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
     ).trim();
 
@@ -326,14 +327,9 @@ async function main() {
     return;
   }
 
-  for (const c of runningContainers) {
-    const isUp = c.status?.toLowerCase().includes('up');
-    const isHealthy = !c.health || c.health?.toLowerCase().includes('healthy');
-    if (isUp && isHealthy) {
-      logPass(`Container '${c.name}' (${c.service})`, `${c.status}${c.health ? ` [${c.health}]` : ''}`);
-    } else {
-      logFail(`Container '${c.name}' (${c.service})`, `Unhealthy state: ${c.status} [${c.health || 'no-health'}]`);
-    }
+  for (const result of evaluateContainers(runningContainers)) {
+    if (result.ok) logPass(result.title, result.detail);
+    else logFail(result.title, result.detail);
   }
 
   // ---------------------------------------------------------------------------
@@ -379,7 +375,7 @@ async function main() {
   });
 
   const deniedOriginHeader = corsDeniedRes.headers['access-control-allow-origin'];
-  if (!deniedOriginHeader || (deniedOriginHeader !== externalOrigin && deniedOriginHeader !== '*')) {
+  if (deniedCors(corsDeniedRes)) {
     logPass(
       'External non-local origin CORS restriction',
       `Non-local origin '${externalOrigin}' was not granted CORS access (allow-origin header: ${deniedOriginHeader || 'none'})`
@@ -387,7 +383,7 @@ async function main() {
   } else {
     logFail(
       'External non-local origin CORS restriction',
-      `Unexpected origin grant: allow-origin header returned '${deniedOriginHeader}'`
+      `Expected HTTP 204 or 403 with no allow-origin header; got status=${corsDeniedRes.statusCode}, origin=${deniedOriginHeader || 'none'}`
     );
   }
 

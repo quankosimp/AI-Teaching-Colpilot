@@ -74,6 +74,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     environment:
       APP_MODE: ${APP_MODE:-local_mock}
       NODE_ENV: ${NODE_ENV:-development}
@@ -112,7 +114,7 @@ services:
     restart: unless-stopped
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-4170}:4170"
     healthcheck:
