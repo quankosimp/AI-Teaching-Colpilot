@@ -1,5 +1,6 @@
 import { statusLabel } from "./statusLabels";
 import { useState, type FormEvent } from "react";
+import { AIClaimDraftPanel } from "./AITeachingPanel";
 
 type Request = <T>(path: string, init?: RequestInit) => Promise<T>;
 type Evidence = {
@@ -108,6 +109,7 @@ export function ReviewPanel({
       <label>
         Học sinh{" "}
         <select
+          aria-label="Học sinh tổng kết"
           value={target}
           onChange={(e) => {
             setStudent(e.target.value);
@@ -224,6 +226,13 @@ export function ReviewPanel({
           </button>
         </div>
       )}
+      {["ended", "reviewed"].includes(status) && <AIClaimDraftPanel
+        key={`${sessionId}:${target}`}
+        sessionId={sessionId}
+        studentId={target}
+        request={request}
+        reload={reload}
+      />}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -259,6 +268,7 @@ export function ReviewPanel({
               {c.text} · {statusLabel(c.status)} · phiên bản {c.revision}{" "}
               {c.staleReason && `· ${statusLabel(c.staleReason)}`}
             </p>
+            <p>Nguồn: {c.evidenceIds.map(id => visible.find(item => item.id === id)?.title || "Nguồn cần kiểm tra lại").join("; ")}</p>
             <button
               disabled={busy || c.status !== "pending"}
               onClick={() =>

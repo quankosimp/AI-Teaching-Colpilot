@@ -22,6 +22,8 @@ import {
   AIRequestInput,
   AIStatusUpdate,
   AIClaimsDraftInput,
+  AIClaimsDraftResponse,
+  AIPlanSources,
 } from "../../contracts/ai.js";
 
 const safeId = z.string().uuid();
@@ -37,11 +39,48 @@ function createInFlightBarrier(lockKey: string): { release: () => void } {
   inFlightRequests.set(lockKey, promise);
   return {
     release: () => {
-      inFlightRequests.delete(lockKey);
+      if (inFlightRequests.get(lockKey) === promise) inFlightRequests.delete(lockKey);
       releaseBarrier();
     },
   };
 }
+
+async function readDraftReceipt(id: string) {
+  if (!safeId.safeParse(id).success) {
+    throw new SessionConflict("VERSION_CONFLICT", "Biên nhận AI cũ cần được xem lại trong phần tổng kết");
+  }
+  const item = await db.aIRequest.findUniqueOrThrow({ where: { id } });
+  if (item.kind !== "claim_draft") throw new Error("Invalid AI draft receipt");
+  return AIClaimsDraftResponse.parse(JSON.parse(item.responseText));
+}
+
+const planSources = AIPlanSources;
+async function readPlanReceipt(id: string) {
+  const item = await db.aIRequest.findUniqueOrThrow({ where: { id } });
+  const sources = planSources.safeParse(item.sourceClaimRefs);
+  if (item.kind !== "plan_suggestion" || !sources.success) {
+    throw new SessionConflict("VERSION_CONFLICT", "Gợi ý kế hoạch cũ thiếu nguồn xác thực; hãy tạo yêu cầu mới");
+  }
+  return { suggestion: { id: item.id, text: item.responseText, status: item.status, provider: item.provider, model: item.model, sources: sources.data } };
+}
+
+const formatSuggestion = (item: any) => ({
+  id: item.id,
+  sessionId: item.sessionId,
+  studentId: item.studentId,
+  activityId: item.activityId,
+  kind: item.kind,
+  prompt: item.prompt,
+  responseText: item.responseText,
+  editedText: item.editedText,
+  evidenceId: item.evidenceId,
+  provider: item.provider,
+  model: item.model,
+  modelVersion: item.modelVersion,
+  status: item.status,
+  actorId: item.actorId,
+  createdAt: item.createdAt.toISOString(),
+});
 
 export function aiRouter(config: AppConfig) {
   const r = Router();
@@ -55,7 +94,7 @@ export function aiRouter(config: AppConfig) {
         return fail(res, 503, "AI_UNAVAILABLE", "AI chưa được bật");
       }
       const adapter = getAIAdapter();
-      if (!adapter) {
+      if (!adapter || ((config.mode === "production" || config.mode === "staging") && adapter.getCircuitStatus().provider === "mock")) {
         return fail(res, 503, "AI_UNAVAILABLE", "Dịch vụ AI không khả dụng trong môi trường hiện tại");
       }
 
@@ -109,36 +148,7 @@ export function aiRouter(config: AppConfig) {
       if (!activity)
         return fail(res, 400, "VALIDATION_ERROR", "Hoạt động không thuộc buổi học này");
 
-      // Check adapter circuit breaker
-      const circuit = getCircuitStatus();
-      if (circuit.circuitOpen) {
-        return fail(
-          res,
-          503,
-          "AI_UNAVAILABLE",
-          "Dịch vụ AI tạm gián đoạn do lỗi liên tiếp; vui lòng thử lại sau giây lát hoặc soạn thủ công",
-        );
-      }
-
       const routeKey = `/sessions/${session.id}/ai/suggestions`;
-
-      const formatSuggestion = (item: any) => ({
-        id: item.id,
-        sessionId: item.sessionId,
-        studentId: item.studentId,
-        activityId: item.activityId,
-        kind: item.kind,
-        prompt: item.prompt,
-        responseText: item.responseText,
-        editedText: item.editedText,
-        evidenceId: item.evidenceId,
-        provider: item.provider,
-        model: item.model,
-        modelVersion: item.modelVersion,
-        status: item.status,
-        actorId: item.actorId,
-        createdAt: item.createdAt.toISOString(),
-      });
 
       // Preflight replay check: avoid calling provider if key already processed
       const prior = await lookupReplay(req, res, routeKey);
@@ -156,25 +166,43 @@ export function aiRouter(config: AppConfig) {
       const lockKey = `${res.locals.actor.id}:${routeKey}:${idempotencyKey}`;
 
       if (idempotencyKey) {
-        const inFlight = inFlightRequests.get(lockKey);
-        if (inFlight) {
-          // Concurrent request in flight: await settlement and return cached replay
-          await inFlight.catch(() => {});
-          const postReplay = await lookupReplay(req, res, routeKey);
-          if (postReplay === null) return;
-          if (postReplay) {
-            const existing = await db.aIRequest.findUniqueOrThrow({
-              where: { id: postReplay.resourceId },
-            });
-            return res.status(200).json({
-              suggestion: formatSuggestion(existing),
-            });
+        while (inFlightRequests.has(lockKey)) {
+          const inFlight = inFlightRequests.get(lockKey);
+          if (inFlight) {
+            // Concurrent request in flight: await settlement and return cached replay
+            await inFlight.catch(() => {});
+            const postReplay = await lookupReplay(req, res, routeKey);
+            if (postReplay === null) return;
+            if (postReplay) {
+              const existing = await db.aIRequest.findUniqueOrThrow({
+                where: { id: postReplay.resourceId },
+              });
+              return res.status(200).json({
+                suggestion: formatSuggestion(existing),
+              });
+            }
           }
         }
+      }
+      // Check adapter circuit breaker
+      const circuit = getCircuitStatus();
+      if (circuit.circuitOpen) {
+        return fail(
+          res,
+          503,
+          "AI_UNAVAILABLE",
+          "Dịch vụ AI tạm gián đoạn do lỗi liên tiếp; vui lòng thử lại sau giây lát hoặc soạn thủ công",
+        );
       }
 
       const barrier = idempotencyKey ? createInFlightBarrier(lockKey) : null;
       try {
+        const replay = await lookupReplay(req, res, routeKey);
+        if (replay === null) return;
+        if (replay) {
+          const item = await db.aIRequest.findUniqueOrThrow({ where: { id: replay.resourceId } });
+          return res.status(200).json({ suggestion: formatSuggestion(item) });
+        }
         // Query ALL student personal names in workspace for context anonymization (target + all peers)
         const allStudents = await db.student.findMany({
           where: { teacherId: res.locals.actor.id },
@@ -346,8 +374,8 @@ export function aiRouter(config: AppConfig) {
       });
       if (!item)
         return fail(res, 404, "NOT_FOUND", "Không tìm thấy gợi ý AI");
-      if (item.status !== "ready")
-        return fail(res, 409, "VERSION_CONFLICT", "Gợi ý đã được xử lý");
+      if (item.kind === "claim_draft")
+        return fail(res, 400, "VALIDATION_ERROR", "Nhận định dự thảo cần được xử lý trong phần duyệt nhận định");
 
       const editedText = parsed.data.editedText?.trim() || null;
       const saveAsEvidence = parsed.data.saveAsEvidence === true && parsed.data.status === "used";
@@ -358,8 +386,13 @@ export function aiRouter(config: AppConfig) {
         const freshItem = await tx.aIRequest.findUniqueOrThrow({
           where: { id: item.id },
         });
-        if (freshItem.status !== "ready")
+        if (freshItem.status !== "ready") {
+          if (freshItem.status === parsed.data.status && freshItem.editedText === editedText && Boolean(freshItem.evidenceId) === saveAsEvidence) {
+            const existingEvidence = freshItem.evidenceId ? await tx.evidence.findUnique({ where: { id: freshItem.evidenceId } }) : null;
+            return { next: freshItem, createdEvidence: existingEvidence, sessionId: freshItem.sessionId };
+          }
           throw new SessionConflict("VERSION_CONFLICT", "Gợi ý đã được xử lý bởi thao tác khác");
+        }
 
         const currentSession = await tx.session.findUniqueOrThrow({
           where: { id: freshItem.sessionId },
@@ -509,7 +542,7 @@ export function aiRouter(config: AppConfig) {
         return fail(res, 503, "AI_UNAVAILABLE", "AI chưa được bật");
       }
       const adapter = getAIAdapter();
-      if (!adapter) {
+      if (!adapter || ((config.mode === "production" || config.mode === "staging") && adapter.getCircuitStatus().provider === "mock")) {
         return fail(res, 503, "AI_UNAVAILABLE", "Dịch vụ AI không khả dụng trong môi trường hiện tại");
       }
 
@@ -557,21 +590,7 @@ export function aiRouter(config: AppConfig) {
       const prior = await lookupReplay(req, res, routeKey);
       if (prior === null) return;
       if (prior) {
-        const ids = prior.resourceId ? prior.resourceId.split(",").filter(Boolean) : [];
-        const claims = ids.length
-          ? await db.claim.findMany({ where: { id: { in: ids } } })
-          : [];
-        return res.status(200).json({
-          claims: claims.map((c) => ({
-            id: c.id,
-            studentId: c.studentId,
-            text: c.text,
-            evidenceIds: c.evidenceIds,
-            status: c.status,
-            revision: c.revision,
-          })),
-          summary: "Nhận định dự thảo đã được tạo trước đó",
-        });
+        return res.status(200).json(await readDraftReceipt(prior.resourceId));
       }
 
       // Check circuit
@@ -595,7 +614,8 @@ export function aiRouter(config: AppConfig) {
           kind: { not: "GoiYGiangDay" },
           sourceType: { not: "ai_suggestion" },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 20,
       });
 
       // Filter out stale observations using current G2 source version resolution
@@ -608,7 +628,8 @@ export function aiRouter(config: AppConfig) {
           db,
           targetStudentId,
         );
-        if (obs.sourceVersion !== null && curVer !== obs.sourceVersion) {
+        const expected = obs.sourceVersion ?? (obs.sourceType === "note" ? 1 : 0);
+        if (expected < 1 || curVer !== expected) {
           // Stale observation, ignore
           continue;
         }
@@ -633,6 +654,7 @@ export function aiRouter(config: AppConfig) {
             sourceVersion: o.sourceVersion,
             sourceType: o.sourceType,
             sourceId: o.sourceId,
+            currentSourceVersion: o.sourceVersion ?? 1,
           },
         ]),
       );
@@ -641,33 +663,23 @@ export function aiRouter(config: AppConfig) {
       const lockKey = `${res.locals.actor.id}:${routeKey}:${idempotencyKey}`;
 
       if (idempotencyKey) {
-        const inFlight = inFlightRequests.get(lockKey);
-        if (inFlight) {
-          await inFlight.catch(() => {});
-          const postReplay = await lookupReplay(req, res, routeKey);
-          if (postReplay === null) return;
-          if (postReplay) {
-            const ids = postReplay.resourceId ? postReplay.resourceId.split(",").filter(Boolean) : [];
-            const claims = ids.length
-              ? await db.claim.findMany({ where: { id: { in: ids } } })
-              : [];
-            return res.status(200).json({
-              claims: claims.map((c) => ({
-                id: c.id,
-                studentId: c.studentId,
-                text: c.text,
-                evidenceIds: c.evidenceIds,
-                status: c.status,
-                revision: c.revision,
-              })),
-              summary: "Nhận định dự thảo đã được tạo trước đó",
-            });
+        while (inFlightRequests.has(lockKey)) {
+          const inFlight = inFlightRequests.get(lockKey);
+          if (inFlight) {
+            await inFlight.catch(() => {});
+            const postReplay = await lookupReplay(req, res, routeKey);
+            if (postReplay === null) return;
+            if (postReplay) {
+              return res.status(200).json(await readDraftReceipt(postReplay.resourceId));
+            }
           }
         }
       }
-
       const barrier = idempotencyKey ? createInFlightBarrier(lockKey) : null;
       try {
+        const replay = await lookupReplay(req, res, routeKey);
+        if (replay === null) return;
+        if (replay) return res.status(200).json(await readDraftReceipt(replay.resourceId));
         // Query all student names in workspace for comprehensive context minimization
         const allStudents = await db.student.findMany({
           where: { teacherId: res.locals.actor.id },
@@ -777,7 +789,8 @@ export function aiRouter(config: AppConfig) {
               if (
                 live.version !== snapshot.version ||
                 live.sourceVersion !== snapshot.sourceVersion ||
-                curLiveSourceVer !== snapshot.sourceVersion
+                curLiveSourceVer !== snapshot.currentSourceVersion ||
+                live.sourceId !== snapshot.sourceId || live.sourceType !== snapshot.sourceType
               ) {
                 throw new SessionConflict(
                   "VERSION_CONFLICT",
@@ -801,7 +814,7 @@ export function aiRouter(config: AppConfig) {
             }
 
             // Check if ALL ids belong to live valid observations belonging to the student
-            const allValid = candidate.evidenceIds.every((id) => liveObsMap.has(id));
+            const allValid = candidate.evidenceIds.every((id) => preSnapshotObsMap.has(id) && liveObsMap.has(id));
             if (!allValid) {
               // Discard whole candidate with ANY hallucinated/peer/unknown ref
               continue;
@@ -810,7 +823,7 @@ export function aiRouter(config: AppConfig) {
             validCandidates.push(candidate);
           }
 
-          const createdClaimIds: string[] = [];
+          const createdClaims: AIClaimsDraftResponse["claims"] = [];
 
           // Reopen reviewed session ONLY if at least one valid claim will actually persist
           if (current.status === "reviewed" && validCandidates.length > 0) {
@@ -857,7 +870,7 @@ export function aiRouter(config: AppConfig) {
                 revision: 1,
               },
             });
-            createdClaimIds.push(created.id);
+            createdClaims.push({ id: created.id, studentId: created.studentId, text: created.text, evidenceIds: created.evidenceIds, status: "pending", revision: created.revision });
 
             await tx.auditLog.create({
               data: {
@@ -880,14 +893,14 @@ export function aiRouter(config: AppConfig) {
           }
 
           // Record AIRequest audit
-          await tx.aIRequest.create({
+          const request = await tx.aIRequest.create({
             data: {
               sessionId: session.id,
               studentId: targetStudentId,
               kind: "claim_draft",
               prompt: aiDrafts.promptUsed,
               promptVersion: aiDrafts.promptVersion,
-              responseText: JSON.stringify(validCandidates),
+              responseText: JSON.stringify({ claims: createdClaims, summary: aiDrafts.summary }),
               contextSummary: aiDrafts.contextSummary,
               provider: aiDrafts.provider,
               model: aiDrafts.model,
@@ -897,28 +910,12 @@ export function aiRouter(config: AppConfig) {
             },
           });
 
-          return createdClaimIds.join(",");
+          return request.id;
         });
 
         if (!result) return;
-        const ids = result.resourceId ? result.resourceId.split(",").filter(Boolean) : [];
-        const claims = ids.length
-          ? await db.claim.findMany({ where: { id: { in: ids } } })
-          : [];
-
         triggerOutboxPublish(session.id);
-
-        return res.status(201).json({
-          claims: claims.map((c) => ({
-            id: c.id,
-            studentId: c.studentId,
-            text: c.text,
-            evidenceIds: c.evidenceIds,
-            status: c.status,
-            revision: c.revision,
-          })),
-          summary: aiDrafts.summary,
-        });
+        return res.status(201).json(await readDraftReceipt(result.resourceId));
       } finally {
         barrier?.release();
       }
@@ -933,7 +930,7 @@ export function aiRouter(config: AppConfig) {
         return fail(res, 503, "AI_UNAVAILABLE", "AI chưa được bật");
       }
       const adapter = getAIAdapter();
-      if (!adapter) {
+      if (!adapter || ((config.mode === "production" || config.mode === "staging") && adapter.getCircuitStatus().provider === "mock")) {
         return fail(res, 503, "AI_UNAVAILABLE", "Dịch vụ AI không khả dụng trong môi trường hiện tại");
       }
 
@@ -987,19 +984,7 @@ export function aiRouter(config: AppConfig) {
       // Preflight replay check
       const prior = await lookupReplay(req, res, routeKey);
       if (prior === null) return;
-      if (prior) {
-        const existing = await db.aIRequest.findUniqueOrThrow({
-          where: { id: prior.resourceId },
-        });
-        return res.status(200).json({
-          suggestion: {
-            id: existing.id,
-            text: existing.responseText,
-            status: existing.status,
-            sources: [],
-          },
-        });
-      }
+      if (prior) return res.status(200).json(await readPlanReceipt(prior.resourceId));
 
       // Query past approved claims for student with historical consent
       const claims = await db.claim.findMany({
@@ -1040,6 +1025,7 @@ export function aiRouter(config: AppConfig) {
       // Snapshot eligible claims to detect races while awaiting model
       const preSnapshotClaims = eligible.map((c) => ({
         id: c.id,
+        sessionId: c.sessionId,
         revision: c.revision,
         evidenceIds: c.evidenceIds,
       }));
@@ -1048,29 +1034,21 @@ export function aiRouter(config: AppConfig) {
       const lockKey = `${res.locals.actor.id}:${routeKey}:${idempotencyKey}`;
 
       if (idempotencyKey) {
-        const inFlight = inFlightRequests.get(lockKey);
-        if (inFlight) {
-          await inFlight.catch(() => {});
-          const postReplay = await lookupReplay(req, res, routeKey);
-          if (postReplay === null) return;
-          if (postReplay) {
-            const existing = await db.aIRequest.findUniqueOrThrow({
-              where: { id: postReplay.resourceId },
-            });
-            return res.status(200).json({
-              suggestion: {
-                id: existing.id,
-                text: existing.responseText,
-                status: existing.status,
-                sources: [],
-              },
-            });
+        while (inFlightRequests.has(lockKey)) {
+          const inFlight = inFlightRequests.get(lockKey);
+          if (inFlight) {
+            await inFlight.catch(() => {});
+            const postReplay = await lookupReplay(req, res, routeKey);
+            if (postReplay === null) return;
+            if (postReplay) return res.status(200).json(await readPlanReceipt(postReplay.resourceId));
           }
         }
       }
-
       const barrier = idempotencyKey ? createInFlightBarrier(lockKey) : null;
       try {
+        const replay = await lookupReplay(req, res, routeKey);
+        if (replay === null) return;
+        if (replay) return res.status(200).json(await readPlanReceipt(replay.resourceId));
         // Query student personal names for context minimization
         const allStudents = await db.student.findMany({
           where: { teacherId: res.locals.actor.id },
@@ -1109,7 +1087,7 @@ export function aiRouter(config: AppConfig) {
 
         // Revalidate and persist UNDER SESSION LOCK
         const result = await createOnce(req, res, routeKey, async (tx) => {
-          await lockSession(tx, session.id);
+          for (const id of [...new Set([session.id, ...preSnapshotClaims.map(claim => claim.sessionId)])].sort()) await lockSession(tx, id);
 
           const currentSession = await tx.session.findUniqueOrThrow({
             where: { id: session.id },
@@ -1136,6 +1114,12 @@ export function aiRouter(config: AppConfig) {
             );
           }
 
+          const historyConsent = await tx.roomMember.findMany({ where: {
+            sessionId: { in: preSnapshotClaims.map(claim => claim.sessionId) }, studentId: parsed.data.studentId, consent: true,
+          }, select: { sessionId: true } });
+          if (preSnapshotClaims.some(claim => !historyConsent.some(member => member.sessionId === claim.sessionId))) {
+            throw new SessionConflict("PERMISSION_DENIED", "Lịch sử học sinh không còn được đồng ý sử dụng");
+          }
           // Recheck that eligible claims have not been revised or unapproved
           const liveClaims = await tx.claim.findMany({
             where: {
@@ -1147,7 +1131,7 @@ export function aiRouter(config: AppConfig) {
 
           for (const snap of preSnapshotClaims) {
             const live = liveClaimMap.get(snap.id);
-            if (!live || live.revision !== snap.revision) {
+            if (!live || live.revision !== snap.revision || live.studentId !== parsed.data.studentId || live.sessionId !== snap.sessionId || JSON.stringify(live.evidenceIds) !== JSON.stringify(snap.evidenceIds)) {
               throw new SessionConflict(
                 "VERSION_CONFLICT",
                 "Nhận định năng lực dùng làm căn cứ đã bị thay đổi trong khi chờ AI",
@@ -1155,11 +1139,21 @@ export function aiRouter(config: AppConfig) {
             }
           }
 
+          const observations = await tx.evidence.findMany({
+            where: { id: { in: eligible.flatMap(claim => claim.evidenceIds) }, status: "active", isObservation: true,
+              kind: { not: "GoiYGiangDay" }, sourceType: { not: "ai_suggestion" }, sessionIdRef: { teacherId: res.locals.actor.id } },
+            select: { id: true, sessionId: true, studentId: true },
+          });
+          const sources = eligible.map(claim => ({ claimId: claim.id, revision: claim.revision,
+            evidenceIds: claim.evidenceIds.filter(id => observations.some(item => item.id === id && item.sessionId === claim.sessionId && item.studentId === claim.studentId)),
+          }));
+          if (!planSources.safeParse(sources).success) throw new SessionConflict("VERSION_CONFLICT", "Nguồn kế hoạch đã thay đổi; hãy đối chiếu lại");
           const request = await tx.aIRequest.create({
             data: {
               sessionId: session.id,
               studentId: parsed.data.studentId,
               kind: "plan_suggestion",
+              sourceClaimRefs: sources,
               prompt: aiResult.promptUsed,
               promptVersion: aiResult.promptVersion,
               responseText: aiResult.text.slice(0, 4000),
@@ -1176,42 +1170,7 @@ export function aiRouter(config: AppConfig) {
         });
 
         if (!result) return;
-        const request = await db.aIRequest.findUniqueOrThrow({
-          where: { id: result.resourceId },
-        });
-
-        // Re-read active observations for sources output
-        const observations = await db.evidence.findMany({
-          where: {
-            id: { in: eligible.flatMap((claim) => claim.evidenceIds) },
-            status: "active",
-            isObservation: true,
-            kind: { not: "GoiYGiangDay" },
-            sourceType: { not: "ai_suggestion" },
-            sessionIdRef: { teacherId: res.locals.actor.id },
-          },
-          select: { id: true, sessionId: true, studentId: true },
-        });
-
-        return res.status(201).json({
-          suggestion: {
-            id: request.id,
-            text: request.responseText,
-            status: request.status,
-            sources: eligible.map((c) => ({
-              claimId: c.id,
-              revision: c.revision,
-              evidenceIds: c.evidenceIds.filter((id) =>
-                observations.some(
-                  (item) =>
-                    item.id === id &&
-                    item.sessionId === c.sessionId &&
-                    item.studentId === c.studentId,
-                ),
-              ),
-            })),
-          },
-        });
+        return res.status(result.replay ? 200 : 201).json(await readPlanReceipt(result.resourceId));
       } finally {
         barrier?.release();
       }
@@ -1242,7 +1201,7 @@ export function aiRouter(config: AppConfig) {
         take: 50,
       });
 
-      return res.json({ suggestions: items });
+      return res.json({ suggestions: items.map(formatSuggestion) });
     }),
   );
 

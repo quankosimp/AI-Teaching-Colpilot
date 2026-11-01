@@ -46,285 +46,73 @@ const path = require("node:path");
     await unitPage.goto(origin);
 
     const spyResult = await unitPage.evaluate(async () => {
-      // Build a strict contract spy for @zoom/videosdk-ui-toolkit matching installed 2.6.0-1 behavior
-      let isConfigured = false;
-      const calls = [];
-      const listeners = {};
-      let audioMuted = false;
-      let videoOn = false;
-      let sharing = false;
-
-      const mediaStream = {
-        muteAudio: async () => {
-          calls.push("mediaStream.muteAudio");
-          audioMuted = true;
-        },
-        unmuteAudio: async () => {
-          calls.push("mediaStream.unmuteAudio");
-          audioMuted = false;
-        },
-        startAudio: async () => {
-          calls.push("mediaStream.startAudio");
-          audioMuted = false;
-        },
-        startVideo: async () => {
-          calls.push("mediaStream.startVideo");
-          videoOn = true;
-        },
-        stopVideo: async () => {
-          calls.push("mediaStream.stopVideo");
-          videoOn = false;
-        },
-        startShareScreen: async () => {
-          calls.push("mediaStream.startShareScreen");
-          sharing = true;
-        },
-        stopShareScreen: async () => {
-          calls.push("mediaStream.stopShareScreen");
-          sharing = false;
-        },
-      };
-
-      const client = {
-        getSessionInfo: () => ({ isInMeeting: true }),
-        getCurrentUserInfo: () => ({
-          userId: 1001,
-          displayName: "Teacher Host",
-          muted: audioMuted,
-          bAudioOn: !audioMuted,
-          bVideoOn: videoOn,
-          bShareOn: sharing,
-        }),
-        getAllUser: () => [
-          {
-            userId: 1001,
-            displayName: "Teacher Host",
-            isHost: true,
-            muted: audioMuted,
-            bAudioOn: !audioMuted,
-            bVideoOn: videoOn,
-            bShareOn: sharing,
-          },
-          {
-            userId: 1002,
-            displayName: "Student Peer",
-            isHost: false,
-            muted: true,
-            bAudioOn: false,
-            bVideoOn: true,
-            bShareOn: false,
-          },
-        ],
-        getMediaStream: () => mediaStream,
-      };
-
-      const mockToolkit = {
-        joinSession: async (container, config) => {
-          calls.push("joinSession");
-          isConfigured = true;
-        },
-        leaveSession: async () => {
-          calls.push("leaveSession");
-          isConfigured = false;
-        },
-        closeSession: async (container) => {
-          calls.push("closeSession");
-        },
-        getClient: () => client,
-        getCurrentUserInfo: () => client.getCurrentUserInfo(),
-        getAllUser: () => client.getAllUser(),
-        onSessionJoined: (cb) => {
-          if (!isConfigured) {
-            throw new Error(
-              "UIToolkit config is required. Call joinSession method first",
-            );
-          }
-          calls.push("onSessionJoined");
-        },
-        offSessionJoined: (cb) => {
-          calls.push("offSessionJoined");
-        },
-        onSessionClosed: (cb) => {
-          if (!isConfigured) {
-            throw new Error(
-              "UIToolkit config is required. Call joinSession method first",
-            );
-          }
-          calls.push("onSessionClosed");
-        },
-        offSessionClosed: (cb) => {
-          calls.push("offSessionClosed");
-        },
-        on: (event, cb) => {
-          if (!isConfigured) {
-            throw new Error(
-              "UIToolkit config is required. Call joinSession method first",
-            );
-          }
-          calls.push("on:" + event);
-          if (!listeners[event]) listeners[event] = new Set();
-          listeners[event].add(cb);
-        },
-        off: (event, cb) => {
-          calls.push("off:" + event);
-          listeners[event]?.delete(cb);
-        },
-      };
-
-      // Import createZoomSession from compiled bundle
       const { createZoomSession } = await import("/src/product/media/zoomAdapter.ts");
-
-      // Verify that calling .on before joinSession throws the exact error
-      let caughtPrematureError = false;
-      try {
-        mockToolkit.on("test", () => {});
-      } catch (e) {
-        if (e.message.includes("Call joinSession method first")) {
-          caughtPrematureError = true;
-        }
-      }
-
-      const container = document.createElement("div");
-      document.body.appendChild(container);
-
-      // Create Zoom session with spy override
-      const handle = await createZoomSession(
-        container,
-        {
-          provider: "zoom",
-          token: "spy-jwt-token",
-          topic: "spy-topic",
-          sessionName: "spy-topic",
-          userName: "Teacher Host",
-          userId: "teacher-1001",
-          isHost: true,
-          roleType: 1,
+      const calls = [];
+      let configured = false;
+      let features;
+      const listeners = new Map();
+      const users = [
+        { userId: 1001, displayName: "Teacher Host", isHost: true, audio: "computer", muted: false, bVideoOn: true, sharerOn: true },
+        { userId: 1002, displayName: "Student Peer", isHost: false, audio: "", muted: true, bVideoOn: false, sharerOn: false },
+      ];
+      const register = (name, cb) => {
+        if (!configured) throw new Error("Call joinSession method first");
+        calls.push("on:" + name); listeners.set(name, cb);
+      };
+      const toolkit = {
+        joinSession: (_element, config) => {
+          calls.push("joinSession"); configured = true; features = config.featuresOptions;
+          return Promise.resolve(); // Preview opening is not a joined event.
         },
-        mockToolkit,
-      );
-
-      // Verify join call happened BEFORE listener registration
-      const joinIdx = calls.indexOf("joinSession");
-      const onConnectionIdx = calls.indexOf("on:connection-change");
-      const registrationOrderedCorrectly =
-        joinIdx !== -1 && onConnectionIdx !== -1 && joinIdx < onConnectionIdx;
-
-      // Verify initial participants mapped from getAllUser
-      const participants = handle.getParticipants();
-      const hostUser = participants.find((p) => p.name === "Teacher Host");
-      const peerUser = participants.find((p) => p.name === "Student Peer");
-
-      // Test real media stream invocations:
-      // 1. Mute Audio
-      await handle.toggleAudio(true);
-      const muteAudioCalled = calls.includes("mediaStream.muteAudio");
-
-      // 2. Unmute Audio
-      await handle.toggleAudio(false);
-      const unmuteAudioCalled =
-        calls.includes("mediaStream.unmuteAudio") ||
-        calls.includes("mediaStream.startAudio");
-
-      // 3. Start Video
-      await handle.toggleVideo(true);
-      const startVideoCalled = calls.includes("mediaStream.startVideo");
-
-      // 4. Stop Video
-      await handle.toggleVideo(false);
-      const stopVideoCalled = calls.includes("mediaStream.stopVideo");
-
-      // 5. Start Share
-      await handle.toggleShare(true);
-      const startShareCalled = calls.includes("mediaStream.startShareScreen");
-
-      // 6. Stop Share
-      await handle.toggleShare(false);
-      const stopShareCalled = calls.includes("mediaStream.stopShareScreen");
-
-      // 7. Active speaker event array mapping
-      let activeSpeakerFired = null;
-      handle.on("active-speaker-change", (spk) => {
-        activeSpeakerFired = spk;
-      });
-      listeners["active-speaker"]?.forEach((cb) => cb([{ userId: 1002, displayName: "Student Peer" }]));
-
-      // 8. Error handling when mediaStream fails (never fake success)
-      mediaStream.muteAudio = async () => {
-        throw new Error("Device audio hardware failed");
+        closeSession: async () => { calls.push("closeSession"); },
+        onSessionJoined: cb => register("joined", cb),
+        offSessionJoined: () => { calls.push("off:joined"); },
+        onSessionClosed: cb => register("closed", cb),
+        offSessionClosed: () => { calls.push("off:closed"); },
+        on: register,
+        off: name => { calls.push("off:" + name); },
+        getAllUser: () => users,
+        getCurrentUserInfo: () => users[0],
       };
-      let errorPropagated = false;
-      let emittedError = null;
-      handle.on("error", (err) => {
-        emittedError = err;
-      });
-      try {
-        await handle.toggleAudio(true);
-      } catch (err) {
-        if (err.message.includes("Device audio hardware failed")) {
-          errorPropagated = true;
-        }
+      const config = { provider: "zoom", token: "spy-token", topic: "spy-topic", sessionName: "spy-topic", userName: "Teacher Host", userId: "teacher", isHost: true, roleType: 1 };
+      const mount = document.body.appendChild(document.createElement("div"));
+      const handle = await createZoomSession(mount, config, toolkit);
+      const previewStatus = handle.getStatus();
+      listeners.get("joined")();
+      const connectedStatus = handle.getStatus();
+      const host = handle.getParticipants().find(user => user.isSelf);
+      const actualAudio = handle.isAudioMuted();
+      const actualSharing = handle.isScreenSharing();
+      listeners.get("active-speaker")([{ userId: 1002 }]);
+      const speaker = handle.getActiveSpeakerId();
+      const rejected = [];
+      for (const method of ["toggleAudio", "toggleVideo", "toggleShare", "requestDevicePermission"]) {
+        try { await handle[method](); } catch (error) { rejected.push(error.message.includes("Zoom")); }
       }
-
-      // 9. Leave & Destroy cleanup
-      await handle.destroy();
-      const leaveCalled = calls.includes("leaveSession");
-      const closeCalled = calls.includes("closeSession");
-      const offCalled = calls.some((c) => c.startsWith("off:"));
-
-      return {
-        calls,
-        caughtPrematureError,
-        registrationOrderedCorrectly,
-        hasHost: Boolean(hostUser?.isHost),
-        hasPeer: Boolean(peerUser && !peerUser.isHost),
-        muteAudioCalled,
-        unmuteAudioCalled,
-        startVideoCalled,
-        stopVideoCalled,
-        startShareCalled,
-        stopShareCalled,
-        activeSpeakerFired,
-        errorPropagated,
-        emittedError,
-        leaveCalled,
-        closeCalled,
-        offCalled,
-        statusAfterDestroy: handle.getStatus(),
-      };
+      await handle.destroy(); await handle.leave();
+      const controller = new AbortController();
+      const delayed = { ...toolkit, joinSession: () => { configured = true; return new Promise(() => {}); } };
+      const pending = createZoomSession(mount, { ...config, signal: controller.signal }, delayed);
+      await Promise.resolve(); controller.abort();
+      let cancelled = false;
+      try { await pending; } catch (error) { cancelled = error.name === "AbortError"; }
+      return { calls, previewStatus, connectedStatus, host, actualAudio, actualSharing, speaker, rejected, features, cancelled, afterDestroy: handle.getStatus() };
     });
-
-    console.log("Recorded calls:", spyResult.calls);
-    if (!spyResult.caughtPrematureError) {
-      throw new Error("Failed: Mock UIToolkit did not enforce joinSession before registration");
-    }
-    if (!spyResult.registrationOrderedCorrectly) {
-      throw new Error("Failed: createZoomSession did not invoke joinSession before registering listeners");
-    }
-    if (!spyResult.hasHost || !spyResult.hasPeer) {
-      throw new Error("Failed: Participant roster mapping from SDK getAllUser was incorrect");
-    }
-    if (!spyResult.muteAudioCalled || !spyResult.unmuteAudioCalled) {
-      throw new Error("Failed: Audio toggle did not invoke mediaStream.muteAudio / unmuteAudio");
-    }
-    if (!spyResult.startVideoCalled || !spyResult.stopVideoCalled) {
-      throw new Error("Failed: Video toggle did not invoke mediaStream.startVideo / stopVideo");
-    }
-    if (!spyResult.startShareCalled || !spyResult.stopShareCalled) {
-      throw new Error("Failed: Share toggle did not invoke mediaStream.startShareScreen / stopShareScreen");
-    }
-    if (spyResult.activeSpeakerFired !== "1002") {
-      throw new Error(`Failed: Active speaker mapping failed, expected '1002', got: ${spyResult.activeSpeakerFired}`);
-    }
-    if (!spyResult.errorPropagated || !spyResult.emittedError?.includes("Device audio hardware failed")) {
-      throw new Error("Failed: MediaStream failure was not propagated as an error");
-    }
-    if (!spyResult.leaveCalled || !spyResult.closeCalled || !spyResult.offCalled) {
-      throw new Error("Failed: destroy did not call leaveSession, closeSession, and listener unregistration");
-    }
-    if (spyResult.statusAfterDestroy !== "disconnected") {
-      throw new Error(`Failed: status after destroy should be disconnected, got: ${spyResult.statusAfterDestroy}`);
-    }
-    console.log("  ✓ SG3-01: Zoom Video SDK contract-spy and mediaStream operations verified successfully");
+    const assert = require("node:assert/strict");
+    assert.equal(spyResult.calls[0], "joinSession");
+    assert.equal(spyResult.previewStatus, "joining");
+    assert.equal(spyResult.connectedStatus, "connected");
+    assert.equal(spyResult.actualAudio, false);
+    assert.equal(spyResult.actualSharing, true);
+    assert.equal(spyResult.host.audioMuted, false);
+    assert.equal(spyResult.speaker, "1002");
+    for (const feature of ["preview", "audio", "video", "share", "footer"]) assert.equal(spyResult.features[feature].enable, true);
+    assert.deepEqual(spyResult.rejected, [true, true, true, true]);
+    assert.equal(spyResult.calls.filter(call => call === "closeSession").length, 2); // One normal disposal and one cancellation.
+    assert.ok(spyResult.calls.includes("off:connection-change"));
+    assert.equal(spyResult.cancelled, true);
+    assert.equal(spyResult.afterDestroy, "disconnected");
+    console.log("  ✓ Native Toolkit controls configured; preview/join distinguished; typed roster, cancellation and cleanup verified with contract fixture (not a real Zoom connection)");
 
     console.log("=== 2. UNIT TESTS: Mock Provider XSS & Timer Neutralization (SG3-03) ===");
     const mockProbeResult = await unitPage.evaluate(async () => {
@@ -392,7 +180,7 @@ const path = require("node:path");
     }
     console.log("  ✓ SG3-03: Mock provider XSS prevention and timer neutralization verified");
 
-    console.log("=== 3. BACKEND TESTS: Strict Mock Guard, Provider Validation, Race Conditions (SG3-04) ===");
+    console.log("=== 3. BACKEND TESTS: Strict Mock Guard, Provider Validation, Post-transition Guards (SG3-04) ===");
     const auth = await post("/auth/mock", "", { account: "teacher-a" });
     const teacherToken = auth.accessToken;
 
@@ -545,7 +333,7 @@ const path = require("node:path");
       if (e.status !== 401 && e.status !== 403) {
         throw new Error(`Expected 401 or 403 for revoked student, got: ${e.status} ${e.message}`);
       }
-      console.log("  ✓ Revoke-wins race test: revoked student token request blocked (401/403)");
+      console.log("  ✓ After committed revoke: revoked student token request blocked (401/403)");
     }
 
     // 3g. End-wins race: end session, then teacher requests token -> 409 SESSION_STATE_INVALID
@@ -557,9 +345,9 @@ const path = require("node:path");
       if (e.status !== 409) {
         throw new Error(`Expected 409 SESSION_STATE_INVALID after end, got: ${e.status} ${e.message}`);
       }
-      console.log("  ✓ End-wins race test: token request after session end returned 409 SESSION_STATE_INVALID");
+      console.log("  ✓ After committed end: token request after session end returned 409 SESSION_STATE_INVALID");
     }
-    console.log("  ✓ SG3-04: Strict mock guard, provider validation, and atomic race protections verified");
+    console.log("  ✓ SG3-04: Strict mock guard, provider validation, and atomic post-transition guards verified");
 
     console.log("=== 4. INTEGRATION BROWSER TEST: MediaHost Lifecycle, No Token Churn, Dynamic Header Status (SG3-02, SG3-05) ===");
     // Create new session for multi-client UI test
@@ -648,7 +436,8 @@ const path = require("node:path");
     // 4d. Verify MediaHost connects and Header updates dynamically (SG3-05)
     await teacherPage.locator('[data-testid="online-room-media"]').waitFor();
     await teacherPage.getByText("Đã kết nối video (Giả lập)").waitFor();
-    // Dynamic header check
+    // Data and media states must independently reflect a connected runtime.
+    await teacherPage.getByText(/Kết nối dữ liệu:\s*đã kết nối/).waitFor();
     await teacherPage.getByText(/Video:\s*đã kết nối \(giả lập\)/).waitFor();
     console.log("  ✓ SG3-05: Dynamic header truthfully reflects media status 'Video: đã kết nối (giả lập)'");
 
@@ -741,7 +530,7 @@ const path = require("node:path");
   }
 
   console.log("\n=======================================================");
-  console.log("ALL G3 SUPERVISOR MUST-FIX TESTS PASSED SUCCESSFULLY!");
+  console.log("G3 LOCAL CONTRACT/MOCK CHECKS PASS; REAL ZOOM STILL BLOCKED");
   console.log("=======================================================");
 })().catch((err) => {
   console.error("G3 MEDIA TEST SUITE FAILED:", err);

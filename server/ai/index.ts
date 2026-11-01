@@ -35,7 +35,7 @@ export function isMockEnvironmentAllowed(): boolean {
 }
 
 export function getAIAdapter(): AIAdapter | null {
-  if (testAdapterOverride) {
+  if (testAdapterOverride && process.env.APP_MODE === "test" && !isProductionOrStaging()) {
     return testAdapterOverride;
   }
 
@@ -96,7 +96,7 @@ export function getCircuitStatus(): CircuitStatus {
   const mockAllowed = isMockEnvironmentAllowed();
   const prod = isProductionOrStaging();
 
-  if (testAdapterOverride) {
+  if (testAdapterOverride && process.env.APP_MODE === "test" && !isProductionOrStaging()) {
     return testAdapterOverride.getCircuitStatus();
   }
 

@@ -2167,3 +2167,10 @@ body.dark .online-room .button:disabled {
   background: #4b2531;
   color: #ffced6;
 }
+.ai-panel { min-width: 0; margin-block: 16px; padding-block: 12px; border-block: 1px solid var(--border, #d8d3e3); }
+.ai-panel p, .ai-panel textarea { overflow-wrap: anywhere; }
+.ai-panel textarea, .ai-panel select { width: 100%; max-width: 100%; box-sizing: border-box; }
+.ai-panel label { display: block; margin-block: 8px; }
+.ai-panel label:has(input[type="checkbox"]) { display: flex; align-items: flex-start; gap: 8px; }
+.ai-panel input[type="checkbox"] { width: auto; flex: none; }
+.ai-panel .presentation-actions { display: flex; flex-wrap: wrap; gap: 8px; }

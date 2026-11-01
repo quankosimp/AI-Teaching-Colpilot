@@ -657,6 +657,7 @@ model AIRequest {
   promptVersion  String
   responseText   String     @db.Text
   contextSummary String     @db.Text
+  sourceClaimRefs Json      @default("[]")
   provider       AIProvider
   model          String
   modelVersion   String

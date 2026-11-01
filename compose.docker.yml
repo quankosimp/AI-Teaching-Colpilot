@@ -96,6 +96,12 @@ services:
       BIND_HOST: ${BIND_HOST:-0.0.0.0}
       AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
       AUTO_SEED: ${AUTO_SEED:-true}
+      ENABLE_AI: ${ENABLE_AI:-false}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      MEDIA_PROVIDER: ${MEDIA_PROVIDER:-}
+      ZOOM_SDK_KEY: ${ZOOM_SDK_KEY:-}
+      ZOOM_SDK_SECRET: ${ZOOM_SDK_SECRET:-}
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://127.0.0.1:3100/health/live || exit 1"]
       interval: 4s

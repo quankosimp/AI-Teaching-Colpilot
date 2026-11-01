@@ -45,3 +45,36 @@ DO \$\$ BEGIN
   END IF;
 END \$\$;
 "
+# Upgrade an already-applied 008 without rewriting its checksum or losing AI history.
+psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+INSERT INTO "AIRequest" (id,"sessionId","studentId",kind,prompt,"promptVersion","responseText","contextSummary",provider,model,"modelVersion",status,"actorId")
+VALUES ('90909090-9090-4090-8090-909090909090','44444444-4444-4444-8444-444444444444','22222222-2222-4222-8222-222222222222','suggestion','legacy prompt','v1','legacy response','legacy context','mock','mock','v1','ready','11111111-1111-4111-8111-111111111111');
+SQL
+cp -r "$task_root/prisma/migrations/202611010009_ai_teaching_modes" "$task_tmp/migrations/"
+DATABASE_URL="$MIGRATION_TEST_DATABASE_URL" node "$task_root/node_modules/prisma/build/index.js" migrate deploy --schema "$task_tmp/schema.prisma"
+psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+DO $$ BEGIN
+  IF (SELECT count(*) FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid
+      WHERE t.typname='AIKind' AND e.enumlabel IN ('explain','leading_question','example','difficulty')) <> 4 THEN
+    RAISE EXCEPTION 'Teaching modes missing after additive upgrade';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM "AIRequest" WHERE id='90909090-9090-4090-8090-909090909090'
+      AND kind='suggestion' AND "responseText"='legacy response') THEN
+    RAISE EXCEPTION 'Existing AI history lost during upgrade';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM _prisma_migrations WHERE migration_name='202611010008_ai_request_fields'
+      AND checksum='352e6ae7428c7f7e59b44705a74d2060baa1b748903414b274b2be06d235604d') THEN
+    RAISE EXCEPTION 'Applied migration 008 checksum changed';
+  END IF;
+END $$;
+SQL
+
+cp -r "$task_root/prisma/migrations/202611010010_ai_plan_sources" "$task_tmp/migrations/"
+DATABASE_URL="$MIGRATION_TEST_DATABASE_URL" node "$task_root/node_modules/prisma/build/index.js" migrate deploy --schema "$task_tmp/schema.prisma"
+psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM "AIRequest" WHERE id='90909090-9090-4090-8090-909090909090' AND "sourceClaimRefs"='[]'::jsonb AND "responseText"='legacy response') THEN
+    RAISE EXCEPTION 'Legacy AI request changed when adding plan provenance';
+  END IF;
+END $$;
+SQL

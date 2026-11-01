@@ -8,6 +8,7 @@ import { OnlineBoard, type BoardState } from "./OnlineBoard";
 import { MaterialViewer } from "./MaterialViewer";
 import { BoundedReconnectQueue } from "./reconnectQueue";
 import { MediaHost } from "./media/MediaHost";
+import { AITeachingPanel } from "./AITeachingPanel";
 
 type Grant = {
   accessToken: string;
@@ -475,7 +476,7 @@ export function LiveRoom({
         </button>
         <h1>{s?.title || "Phòng chờ"}</h1>
         <p>
-          Kết nối dữ liệu: {connected ? "đang kết nối" : "mất kết nối"} · Video:{" "}
+          Kết nối dữ liệu: {connected ? "đã kết nối" : "mất kết nối"} · Video:{" "}
           {mediaVideoStatus}
         </p>
         {!grant && s && <div className="online-room__lifecycle">
@@ -718,6 +719,15 @@ export function LiveRoom({
                 Chụp bảng học sinh
               </button>
               <h3>Minh chứng gần đây</h3>
+              <AITeachingPanel
+                key={`${sessionId}:${selected}:${s.currentActivityId}`}
+                sessionId={sessionId}
+                studentId={selected}
+                activityId={s.currentActivityId}
+                active={["draft", "scheduled", "live"].includes(s.status)}
+                request={request}
+                reload={load}
+              />
               {room?.evidence
                 ?.filter((e) => e.studentId === selected)
                 .slice(0, 3)

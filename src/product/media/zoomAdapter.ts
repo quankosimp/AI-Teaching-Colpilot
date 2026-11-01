@@ -1,355 +1,129 @@
 import "@zoom/videosdk-ui-toolkit/dist/videosdk-ui-toolkit.css";
-import type {
-  MediaDevicePermissions,
-  MediaParticipant,
-  MediaSessionConfig,
-  MediaSessionHandle,
-  MediaSessionStatus,
-} from "./types";
+import type { UIToolkit } from "@zoom/videosdk-ui-toolkit";
+import type { MediaParticipant, MediaSessionConfig, MediaSessionHandle, MediaSessionStatus } from "./types";
+
+type Toolkit = Pick<UIToolkit, "joinSession" | "closeSession" | "onSessionJoined" | "offSessionJoined" | "onSessionClosed" | "offSessionClosed" | "on" | "off" | "getAllUser" | "getCurrentUserInfo">;
+type Participant = ReturnType<Toolkit["getAllUser"]>[number];
 
 export async function createZoomSession(
   container: HTMLElement,
   config: MediaSessionConfig,
-  toolkitModuleOverride?: any,
+  injectedToolkit?: Toolkit | { default: Toolkit },
 ): Promise<MediaSessionHandle> {
-  const listeners: Record<string, Set<(...args: any[]) => void>> = {};
-  const emit = (event: string, ...args: any[]) => {
-    listeners[event]?.forEach((cb) => {
-      try {
-        cb(...args);
-      } catch (err) {
-        console.error(`[ZoomAdapter] Error in listener for ${event}:`, err);
-      }
-    });
-  };
-
+  config.signal?.throwIfAborted();
+  const imported = injectedToolkit || await import("@zoom/videosdk-ui-toolkit");
+  const toolkit: Toolkit = "default" in imported ? imported.default : imported;
+  const listeners = new Map<string, Set<(...args: any[]) => void>>();
   let status: MediaSessionStatus = "joining";
   let error: string | null = null;
-  let activeSpeakerId: string | null = null;
-  let audioMuted = false;
-  let videoOn = true;
-  let isSharing = false;
-
-  const permissions: MediaDevicePermissions = {
-    audio: "prompt",
-    video: "prompt",
-    screen: "prompt",
+  let participants: MediaParticipant[] = [];
+  let self: Participant | null = null;
+  let speaker: string | null = null;
+  let disposal: Promise<void> | null = null;
+  let initialized = false;
+  let registered = false;
+  const emit = (event: string, ...args: any[]) => listeners.get(event)?.forEach((callback) => callback(...args));
+  const sync = () => {
+    if (disposal) return;
+    self = toolkit.getCurrentUserInfo();
+    participants = toolkit.getAllUser().map((user) => ({
+      id: String(user.userId), name: user.displayName,
+      isSelf: user.userId === self?.userId, isHost: user.isHost,
+      audioMuted: !user.audio || user.muted !== false,
+      videoOn: user.bVideoOn === true, isSharing: user.sharerOn === true,
+      isSpeaking: String(user.userId) === speaker,
+    }));
+    emit("participants-change", participants);
   };
-
-  const participantsMap = new Map<string, MediaParticipant>();
-  participantsMap.set(config.userId, {
-    id: config.userId,
-    name: config.userName,
-    isHost: config.isHost,
-    isSelf: true,
-    audioMuted,
-    videoOn,
-    isSharing,
-  });
-
-  let uitoolkitInstance: any = null;
-
-  const syncFromSdk = () => {
-    try {
-      const client = uitoolkitInstance?.getClient?.();
-      const current =
-        uitoolkitInstance?.getCurrentUserInfo?.() ||
-        client?.getCurrentUserInfo?.();
-      const all =
-        uitoolkitInstance?.getAllUser?.() || client?.getAllUser?.() || [];
-
-      if (current) {
-        audioMuted = Boolean(current.muted || !current.bAudioOn);
-        videoOn = Boolean(current.bVideoOn);
-        isSharing = Boolean(current.bShareOn);
-      }
-
-      participantsMap.clear();
-      for (const u of all) {
-        const id = String(u.userId);
-        const isSelf = current
-          ? u.userId === current.userId
-          : id === config.userId;
-        participantsMap.set(id, {
-          id,
-          name: u.displayName || (isSelf ? config.userName : `User ${id}`),
-          isHost: Boolean(u.isHost || u.roleType === 1),
-          isSelf,
-          audioMuted: Boolean(u.muted || !u.bAudioOn),
-          videoOn: Boolean(u.bVideoOn),
-          isSharing: Boolean(u.bShareOn),
-          isSpeaking: activeSpeakerId === id,
-        });
-      }
-      if (!participantsMap.has(config.userId) && !current) {
-        participantsMap.set(config.userId, {
-          id: config.userId,
-          name: config.userName,
-          isHost: config.isHost,
-          isSelf: true,
-          audioMuted,
-          videoOn,
-          isSharing,
-          isSpeaking: activeSpeakerId === config.userId,
-        });
-      }
-      emit("participants-change", Array.from(participantsMap.values()));
-    } catch (e) {
-      console.warn("[ZoomAdapter] syncFromSdk warning:", e);
-    }
-  };
-
-  const onSessionJoined = () => {
-    status = "connected";
-    syncFromSdk();
+  const changeStatus = (next: MediaSessionStatus) => {
+    if (disposal) return;
+    status = next;
+    if (next === "connected") sync();
     emit("status-change", status);
   };
-
-  const onSessionClosed = () => {
-    status = "disconnected";
-    emit("status-change", status);
-  };
-
-  const onConnectionChange = (payload: any) => {
-    const state = payload?.state;
-    if (state === "Connected") {
-      status = "connected";
-      syncFromSdk();
-    } else if (state === "Reconnecting") {
-      status = "reconnecting";
-    } else if (state === "Closed" || state === "Fail") {
-      status = "disconnected";
+  const joined = () => changeStatus("connected");
+  const closed = () => changeStatus("disconnected");
+  const connection = (payload: { state?: string }) => {
+    if (payload?.state === "Connected") joined();
+    else if (payload?.state === "Reconnecting") changeStatus("reconnecting");
+    else if (payload?.state === "Closed") closed();
+    else if (payload?.state === "Fail") {
+      error = "Không thể kết nối video. Kiểm tra mạng và quyền thiết bị rồi thử lại.";
+      changeStatus("error"); emit("error", error);
     }
-    emit("status-change", status);
   };
-
-  const onUserEvent = () => {
-    syncFromSdk();
+  const activeSpeaker = (payload: { userId?: number } | { userId?: number }[]) => {
+    const user = Array.isArray(payload) ? payload[0] : payload;
+    speaker = user?.userId == null ? null : String(user.userId);
+    sync(); emit("active-speaker-change", speaker);
   };
-
-  const onActiveSpeaker = (payload: any) => {
-    let speakerId: string | null = null;
-    if (Array.isArray(payload) && payload.length > 0) {
-      speakerId = payload[0]?.userId != null ? String(payload[0].userId) : null;
-    } else if (payload?.userId != null) {
-      speakerId = String(payload.userId);
-    }
-    activeSpeakerId = speakerId;
-    syncFromSdk();
-    emit("active-speaker-change", speakerId);
+  const subscriptions = [
+    ["connection-change", connection], ["user-added", sync], ["user-updated", sync],
+    ["user-removed", sync], ["active-speaker", activeSpeaker],
+  ] as const;
+  const dispose = (): Promise<void> => {
+    if (disposal) return disposal;
+    disposal = (async () => {
+      config.signal?.removeEventListener("abort", aborted);
+      if (registered) {
+        toolkit.offSessionJoined(joined); toolkit.offSessionClosed(closed);
+        subscriptions.forEach(([name, callback]) => toolkit.off(name, callback));
+      }
+      try { if (initialized) await toolkit.closeSession(container); }
+      finally {
+        container.replaceChildren(); participants = []; self = null; speaker = null;
+        status = "disconnected"; emit("status-change", status); listeners.clear();
+      }
+    })();
+    return disposal;
   };
-
+  let rejectAbort: ((reason: unknown) => void) | undefined;
+  const aborted = () => {
+    void dispose().catch(() => {});
+    rejectAbort?.(new DOMException("Media connection cancelled", "AbortError"));
+  };
+  const abortPromise = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
+  config.signal?.addEventListener("abort", aborted, { once: true });
   try {
-    const toolkitModule =
-      toolkitModuleOverride || (await import("@zoom/videosdk-ui-toolkit"));
-    uitoolkitInstance = toolkitModule.default || toolkitModule;
-
-    const joinPromise = uitoolkitInstance.joinSession(container, {
-      videoSDKJWT: config.token,
-      sessionName: config.topic,
-      userName: config.userName,
+    config.signal?.throwIfAborted();
+    const joining = toolkit.joinSession(container, {
+      videoSDKJWT: config.token, sessionName: config.topic, userName: config.userName,
       featuresOptions: {
-        video: { enable: true },
-        audio: { enable: true },
-        share: { enable: true },
-        chat: { enable: false },
-        users: { enable: true },
-        settings: { enable: true },
-        leave: { enable: false },
+        preview: { enable: true }, video: { enable: true }, audio: { enable: true },
+        share: { enable: true }, footer: { enable: true }, settings: { enable: true },
+        users: { enable: true }, chat: { enable: false, enableEmoji: false }, leave: { enable: false },
       },
     });
-
-    try {
-      uitoolkitInstance.onSessionJoined?.(onSessionJoined);
-      uitoolkitInstance.onSessionClosed?.(onSessionClosed);
-      uitoolkitInstance.on?.("connection-change", onConnectionChange);
-      uitoolkitInstance.on?.("user-added", onUserEvent);
-      uitoolkitInstance.on?.("user-removed", onUserEvent);
-      uitoolkitInstance.on?.("user-updated", onUserEvent);
-      uitoolkitInstance.on?.("active-speaker", onActiveSpeaker);
-    } catch (regErr) {
-      console.warn("[ZoomAdapter] Listener registration notice:", regErr);
-    }
-
-    await joinPromise;
-
-    status = "connected";
-    syncFromSdk();
-    emit("status-change", status);
-  } catch (err: any) {
-    status = "error";
-    error = err?.message || "Không thể khởi tạo Zoom Video SDK";
-    emit("status-change", status);
-    emit("error", error);
-    throw err;
+    initialized = true;
+    toolkit.onSessionJoined(joined); toolkit.onSessionClosed(closed);
+    subscriptions.forEach(([name, callback]) => toolkit.on(name, callback));
+    registered = true;
+    await Promise.race([joining, abortPromise]);
+    config.signal?.throwIfAborted();
+    // Opening the preview is not proof of joining. Only SDK events set connected.
+  } catch (failure) {
+    await dispose().catch(() => {});
+    if (config.signal?.aborted) throw failure;
+    throw new Error("Không thể khởi tạo video. Có thể thử lại và tiếp tục học bằng học liệu.");
   }
-
-  const handle: MediaSessionHandle = {
-    provider: "zoom",
-    getStatus: () => status,
-    getError: () => error,
-    getParticipants: () => Array.from(participantsMap.values()),
-    getActiveSpeakerId: () => activeSpeakerId,
-    isAudioMuted: () => audioMuted,
-    isVideoOn: () => videoOn,
-    isScreenSharing: () => isSharing,
-    getDevicePermissions: () => ({ ...permissions }),
-
-    async toggleAudio(muted?: boolean) {
-      const client = uitoolkitInstance?.getClient?.();
-      const mediaStream = client?.getMediaStream?.();
-      if (!mediaStream) {
-        const err = new Error("Media stream không khả dụng trên client Zoom");
-        emit("error", err.message);
-        throw err;
-      }
-      const shouldMute = muted !== undefined ? muted : !audioMuted;
-      try {
-        if (shouldMute) {
-          await mediaStream.muteAudio?.();
-          audioMuted = true;
-        } else {
-          const current =
-            uitoolkitInstance?.getCurrentUserInfo?.() ||
-            client?.getCurrentUserInfo?.();
-          if (current && !current.bAudioOn) {
-            await mediaStream.startAudio?.();
-          } else {
-            await mediaStream.unmuteAudio?.();
-          }
-          audioMuted = false;
-        }
-        syncFromSdk();
-        return !audioMuted;
-      } catch (err: any) {
-        const msg = err?.message || "Không thể điều khiển microphone";
-        emit("error", msg);
-        throw err;
-      }
-    },
-
-    async toggleVideo(on?: boolean) {
-      const client = uitoolkitInstance?.getClient?.();
-      const mediaStream = client?.getMediaStream?.();
-      if (!mediaStream) {
-        const err = new Error("Media stream không khả dụng trên client Zoom");
-        emit("error", err.message);
-        throw err;
-      }
-      const shouldTurnOn = on !== undefined ? on : !videoOn;
-      try {
-        if (shouldTurnOn) {
-          await mediaStream.startVideo?.();
-          videoOn = true;
-        } else {
-          await mediaStream.stopVideo?.();
-          videoOn = false;
-        }
-        syncFromSdk();
-        return videoOn;
-      } catch (err: any) {
-        const msg = err?.message || "Không thể điều khiển camera";
-        emit("error", msg);
-        throw err;
-      }
-    },
-
-    async toggleShare(sharing?: boolean) {
-      const client = uitoolkitInstance?.getClient?.();
-      const mediaStream = client?.getMediaStream?.();
-      if (!mediaStream) {
-        const err = new Error("Media stream không khả dụng trên client Zoom");
-        emit("error", err.message);
-        throw err;
-      }
-      const shouldShare = sharing !== undefined ? sharing : !isSharing;
-      try {
-        if (shouldShare) {
-          await mediaStream.startShareScreen?.();
-          isSharing = true;
-        } else {
-          await mediaStream.stopShareScreen?.();
-          isSharing = false;
-        }
-        syncFromSdk();
-        return isSharing;
-      } catch (err: any) {
-        const msg = err?.message || "Không thể chia sẻ màn hình";
-        emit("error", msg);
-        throw err;
-      }
-    },
-
-    async requestDevicePermission(kind: "audio" | "video" | "screen") {
-      if (typeof navigator === "undefined" || !navigator.mediaDevices) {
-        permissions[kind] = "denied";
-        emit("permissions-change", { ...permissions });
-        return false;
-      }
-      try {
-        if (kind === "audio") {
-          const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-          s.getTracks().forEach((t) => t.stop());
-          permissions.audio = "granted";
-        } else if (kind === "video") {
-          const s = await navigator.mediaDevices.getUserMedia({ video: true });
-          s.getTracks().forEach((t) => t.stop());
-          permissions.video = "granted";
-        } else if (kind === "screen") {
-          if (navigator.mediaDevices.getDisplayMedia) {
-            const s = await navigator.mediaDevices.getDisplayMedia({
-              video: true,
-            });
-            s.getTracks().forEach((t) => t.stop());
-            permissions.screen = "granted";
-          } else {
-            permissions.screen = "granted";
-          }
-        }
-        emit("permissions-change", { ...permissions });
-        return true;
-      } catch (e) {
-        permissions[kind] = "denied";
-        emit("permissions-change", { ...permissions });
-        return false;
-      }
-    },
-
-    async leave() {
-      try {
-        if (uitoolkitInstance) {
-          uitoolkitInstance.offSessionJoined?.(onSessionJoined);
-          uitoolkitInstance.offSessionClosed?.(onSessionClosed);
-          uitoolkitInstance.off?.("connection-change", onConnectionChange);
-          uitoolkitInstance.off?.("user-added", onUserEvent);
-          uitoolkitInstance.off?.("user-removed", onUserEvent);
-          uitoolkitInstance.off?.("user-updated", onUserEvent);
-          uitoolkitInstance.off?.("active-speaker", onActiveSpeaker);
-          await uitoolkitInstance.leaveSession?.();
-          await uitoolkitInstance.closeSession?.(container);
-        }
-      } catch (e) {
-        console.warn("[ZoomAdapter] Error during leave:", e);
-      } finally {
-        status = "disconnected";
-        emit("status-change", status);
-      }
-    },
-
-    async destroy() {
-      await this.leave();
-      container.innerHTML = "";
-    },
-
-    on(event: string, cb: (...args: any[]) => void) {
-      if (!listeners[event]) listeners[event] = new Set();
-      listeners[event].add(cb);
-    },
-
-    off(event: string, cb: (...args: any[]) => void) {
-      listeners[event]?.delete(cb);
-    },
+  const nativeControls = async (): Promise<never> => {
+    throw new Error("Dùng các nút mic, camera và chia sẻ trong thanh điều khiển Zoom.");
   };
-
-  return handle;
+  return {
+    provider: "zoom", getStatus: () => status, getError: () => error,
+    getParticipants: () => [...participants], getActiveSpeakerId: () => speaker,
+    isAudioMuted: () => !self?.audio || self.muted !== false,
+    isVideoOn: () => self?.bVideoOn === true,
+    isScreenSharing: () => self?.sharerOn === true,
+    getDevicePermissions: () => ({ audio: "prompt", video: "prompt", screen: "prompt" }),
+    // The supported Toolkit toolbar owns real device operations and permission UI.
+    // Never mirror its controls with guessed SDK fields or synthetic successes.
+    toggleAudio: nativeControls, toggleVideo: nativeControls, toggleShare: nativeControls,
+    requestDevicePermission: nativeControls, leave: dispose, destroy: dispose,
+    on: (event, callback) => {
+      if (!listeners.has(event)) listeners.set(event, new Set());
+      listeners.get(event)!.add(callback);
+    },
+    off: (event, callback) => { listeners.get(event)?.delete(callback); },
+  };
 }

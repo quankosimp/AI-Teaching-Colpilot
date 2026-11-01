@@ -140,6 +140,7 @@ export default function OnlineApp() {
   const [suggestion, setSuggestion] = useState<{
     id: string;
     text: string;
+    provider?: "gemini" | "mock";
     sources: { claimId: string; revision: number; evidenceIds: string[] }[];
   } | null>(null);
   const [editingSuggestion, setEditingSuggestion] = useState(false);
@@ -1318,6 +1319,7 @@ export default function OnlineApp() {
                             suggestion: {
                               id: string;
                               text: string;
+                              provider?: "gemini" | "mock";
                               sources: {
                                 claimId: string;
                                 revision: number;
@@ -1337,6 +1339,7 @@ export default function OnlineApp() {
                     </button>
                     {suggestion && (
                       <>
+                        <p>{suggestion.provider === "mock" ? "Giả lập local" : suggestion.provider === "gemini" ? "Gemini" : "Gợi ý đã lưu"} · Giáo viên kiểm tra nguồn trước khi dùng.</p>
                         <AISuggestionReview
                           text={suggestion.text}
                           busy={busy}

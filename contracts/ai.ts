@@ -12,8 +12,8 @@ export type TeachingRequestMode = z.infer<typeof TeachingRequestMode>;
 
 /** Input contract for requesting in-session AI teaching suggestion. */
 export const AIRequestInput = z.strictObject({
-  studentId: Id,
-  activityId: Id,
+  studentId: z.uuid(),
+  activityId: z.uuid(),
   kind: TeachingRequestMode,
   prompt: z.string().max(4000),
 });
@@ -22,14 +22,14 @@ export type AIRequestInput = z.infer<typeof AIRequestInput>;
 /** Input contract for updating AI suggestion lifecycle status (AI 002 & AI 003). */
 export const AIStatusUpdate = z.strictObject({
   status: z.enum(["used", "ignored", "reported"]),
-  editedText: z.string().optional(),
+  editedText: z.string().max(4000).optional(),
   saveAsEvidence: z.boolean().optional(),
 });
 export type AIStatusUpdate = z.infer<typeof AIStatusUpdate>;
 
 /** Input contract for post-session AI claim drafting (AI 004). */
 export const AIClaimsDraftInput = z.strictObject({
-  studentId: Id.optional(),
+  studentId: z.uuid().optional(),
   prompt: z.string().max(2000).optional(),
 });
 export type AIClaimsDraftInput = z.infer<typeof AIClaimsDraftInput>;
@@ -83,6 +83,17 @@ export const AIClaimsDraftResponse = z.strictObject({
   summary: z.string(),
 });
 export type AIClaimsDraftResponse = z.infer<typeof AIClaimsDraftResponse>;
+
+export const AIPlanSources = z.array(z.strictObject({
+  claimId: z.uuid(), revision: z.number().int().positive(), evidenceIds: z.array(z.uuid()).min(1),
+})).min(1);
+export const AIPlanSuggestionResponse = z.strictObject({
+  suggestion: z.strictObject({
+    id: Id, text: z.string(), status: z.string(), provider: z.enum(["gemini", "mock"]),
+    model: z.string(), sources: AIPlanSources,
+  }),
+});
+export type AIPlanSuggestionResponse = z.infer<typeof AIPlanSuggestionResponse>;
 
 export const AICircuitStatusResponse = z.strictObject({
   enabled: z.boolean(),

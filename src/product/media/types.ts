@@ -36,6 +36,7 @@ export interface MediaSessionConfig {
   userId: string;
   isHost: boolean;
   roleType?: number;
+  signal?: AbortSignal;
 }
 
 export interface MediaSessionHandle {

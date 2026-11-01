@@ -1,14 +1,8 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import type {
-  MediaDevicePermissions,
-  MediaParticipant,
-  MediaSessionConfig,
-  MediaSessionHandle,
-  MediaSessionStatus,
-  VideoTokenResponse,
-} from "./types";
+import { useEffect, useRef, useState } from "react";
+import type { MediaDevicePermissions, MediaParticipant, MediaSessionHandle, MediaSessionStatus, VideoTokenResponse } from "./types";
 import { createMockSession } from "./mockProvider";
 import { createZoomSession } from "./zoomAdapter";
+import { MediaLifecycle } from "./lifecycle";
 import "./media.css";
 
 interface MediaHostProps {
@@ -18,277 +12,121 @@ interface MediaHostProps {
   displayName: string;
   userId: string;
   request: <T>(path: string, init?: RequestInit) => Promise<T>;
-  onError?: (err: string) => void;
-  onStatusChange?: (statusDesc: string) => void;
+  onError?: (error: string) => void;
+  onStatusChange?: (description: string) => void;
 }
 
-export function MediaHost({
-  sessionId,
-  isLive,
-  role,
-  displayName,
-  userId,
-  request,
-  onError,
-  onStatusChange,
-}: MediaHostProps) {
+export function MediaHost(props: MediaHostProps) {
+  const { sessionId, isLive, role, userId } = props;
+  const propsRef = useRef(props);
+  propsRef.current = props;
   const containerRef = useRef<HTMLDivElement>(null);
+  const lifecycle = useRef(new MediaLifecycle());
   const handleRef = useRef<MediaSessionHandle | null>(null);
-  const connectEpochRef = useRef(0);
-  const connectedSessionIdRef = useRef<string | null>(null);
-  const isJoiningRef = useRef(false);
-
-  // Stable refs for props that might change identity across parent re-renders
-  const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
-  const requestRef = useRef(request);
-  requestRef.current = request;
-  const onStatusChangeRef = useRef(onStatusChange);
-  onStatusChangeRef.current = onStatusChange;
-
+  const [retry, setRetry] = useState(0);
   const [status, setStatus] = useState<MediaSessionStatus>("idle");
-  const statusRef = useRef<MediaSessionStatus>("idle");
-  statusRef.current = status;
-
-  const [provider, setProvider] = useState<"zoom" | "mock" | "none">("none");
+  const [provider, setProvider] = useState<"mock" | "zoom" | "none">("none");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [participants, setParticipants] = useState<MediaParticipant[]>([]);
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOn, setIsVideoOn] = useState(true);
+  const [isVideoOn, setIsVideoOn] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [permissions, setPermissions] = useState<MediaDevicePermissions>({
-    audio: "prompt",
-    video: "prompt",
-    screen: "prompt",
-  });
+  const [permissions, setPermissions] = useState<MediaDevicePermissions>({ audio: "prompt", video: "prompt", screen: "prompt" });
   const [permissionAlert, setPermissionAlert] = useState<string | null>(null);
 
-  const cleanupSession = useCallback(async () => {
-    // Invalidate any in-flight connection
-    connectEpochRef.current++;
-    connectedSessionIdRef.current = null;
-    isJoiningRef.current = false;
-
-    if (handleRef.current) {
-      const h = handleRef.current;
-      handleRef.current = null;
-      try {
-        await h.leave();
-        await h.destroy();
-      } catch (e) {
-        console.warn("[MediaHost] Error during session cleanup:", e);
-      }
-    }
-    setStatus("idle");
-    setParticipants([]);
-    setActiveSpeakerId(null);
-    onStatusChangeRef.current?.("chưa kết nối");
-  }, []);
-
-  const connectMedia = useCallback(
-    async (isRetry = false) => {
-      if (!containerRef.current || !sessionId) return;
-
-      // Avoid duplicate re-joins on polling / re-render
-      if (!isRetry) {
-        if (isJoiningRef.current) return;
-        if (
-          handleRef.current &&
-          connectedSessionIdRef.current === sessionId &&
-          (statusRef.current === "connected" || statusRef.current === "joining")
-        ) {
-          return;
-        }
-      }
-
-      isJoiningRef.current = true;
-      const currentEpoch = ++connectEpochRef.current;
-      setStatus("joining");
-      setErrorMsg(null);
-      setPermissionAlert(null);
-      onStatusChangeRef.current?.("đang chuẩn bị");
-
-      try {
-        const data = await requestRef.current<VideoTokenResponse>(
-          `/sessions/${sessionId}/video-token`,
-          { method: "POST" },
-        );
-
-        // Cancel if superseded by end / unmount / newer retry
-        if (currentEpoch !== connectEpochRef.current) return;
-
-        setProvider(data.provider);
-
-        const config: MediaSessionConfig = {
-          provider: data.provider,
-          token: data.token,
-          topic: data.topic,
-          sessionName: data.sessionName || data.topic,
-          userName: data.userName || displayName,
-          userId,
-          isHost: role === "teacher",
-          roleType: data.roleType,
-        };
-
-        let handle: MediaSessionHandle;
-        if (data.provider === "zoom") {
-          handle = await createZoomSession(containerRef.current, config);
-        } else {
-          handle = await createMockSession(containerRef.current, config);
-        }
-
-        // Cancel if superseded during async session setup
-        if (currentEpoch !== connectEpochRef.current) {
-          void handle.destroy();
-          return;
-        }
-
-        // Clean up any stale previous handle before assigning
-        if (handleRef.current && handleRef.current !== handle) {
-          void handleRef.current.destroy();
-        }
-
-        handleRef.current = handle;
-        connectedSessionIdRef.current = sessionId;
-        setStatus(handle.getStatus());
-        setParticipants(handle.getParticipants());
-        setActiveSpeakerId(handle.getActiveSpeakerId());
-        setIsMuted(handle.isAudioMuted());
-        setIsVideoOn(handle.isVideoOn());
-        setIsSharing(handle.isScreenSharing());
-        setPermissions(handle.getDevicePermissions());
-
-        const initialLabel =
-          data.provider === "mock"
-            ? "đã kết nối (giả lập)"
-            : "đã kết nối zoom";
-        onStatusChangeRef.current?.(initialLabel);
-
-        handle.on("status-change", (nextStatus: MediaSessionStatus) => {
-          if (currentEpoch !== connectEpochRef.current) return;
-          setStatus(nextStatus);
-          if (nextStatus === "connected") {
-            onStatusChangeRef.current?.(
-              data.provider === "mock"
-                ? "đã kết nối (giả lập)"
-                : "đã kết nối zoom",
-            );
-          } else if (nextStatus === "reconnecting") {
-            onStatusChangeRef.current?.("đang khôi phục");
-          } else if (nextStatus === "disconnected") {
-            onStatusChangeRef.current?.("đã ngắt");
-          }
-        });
-
-        handle.on("participants-change", (list: MediaParticipant[]) => {
-          if (currentEpoch !== connectEpochRef.current) return;
-          setParticipants([...list]);
-        });
-
-        handle.on("active-speaker-change", (speakerId: string | null) => {
-          if (currentEpoch !== connectEpochRef.current) return;
-          setActiveSpeakerId(speakerId);
-        });
-
-        handle.on("error", (err: string) => {
-          if (currentEpoch !== connectEpochRef.current) return;
-          setErrorMsg(err);
-          onErrorRef.current?.(err);
-          onStatusChangeRef.current?.("lỗi dịch vụ");
-        });
-
-        handle.on("permissions-change", (perms: MediaDevicePermissions) => {
-          if (currentEpoch !== connectEpochRef.current) return;
-          setPermissions({ ...perms });
-        });
-      } catch (err: any) {
-        if (currentEpoch !== connectEpochRef.current) return;
-        console.warn("[MediaHost] video-token request failed:", err);
-        setStatus("error");
-        const msg =
-          err?.status === 503
-            ? "Dịch vụ video chưa được cấu hình trên môi trường này."
-            : err?.message || "Không thể kết nối dịch vụ video.";
-        setErrorMsg(msg);
-        onErrorRef.current?.(msg);
-        onStatusChangeRef.current?.(
-          err?.status === 503 ? "chưa cấu hình" : "lỗi dịch vụ",
-        );
-      } finally {
-        isJoiningRef.current = false;
-      }
-    },
-    [sessionId, role, displayName, userId],
-  );
-
   useEffect(() => {
-    if (isLive) {
-      void connectMedia();
-    } else {
-      void cleanupSession();
+    const manager = lifecycle.current;
+    if (!isLive) {
+      handleRef.current = null;
+      setStatus("idle"); setErrorMsg(null); setParticipants([]); setActiveSpeakerId(null);
+      propsRef.current.onStatusChange?.("chưa kết nối");
+      void manager.stop().catch(() => {});
+      return;
     }
+    setStatus("joining"); setErrorMsg(null); setPermissionAlert(null);
+    setParticipants([]); setActiveSpeakerId(null);
+    propsRef.current.onStatusChange?.("đang chuẩn bị");
+    void manager.start(async (signal) => {
+      const data = await propsRef.current.request<VideoTokenResponse>(`/sessions/${sessionId}/video-token`, { method: "POST", signal });
+      signal.throwIfAborted();
+      if ((data.provider !== "zoom" && data.provider !== "mock") || !data.token || data.topic !== sessionId || data.isHost !== (role === "teacher")) {
+        throw new Error("Phản hồi dịch vụ video không hợp lệ");
+      }
+      setProvider(data.provider);
+      const mount = document.createElement("div");
+      containerRef.current!.appendChild(mount);
+      try {
+        const config = { ...data, userId, userName: data.userName || propsRef.current.displayName, signal };
+        const handle = data.provider === "zoom" ? await createZoomSession(mount, config) : await createMockSession(mount, config);
+        const destroy = handle.destroy.bind(handle);
+        let destroyed: Promise<void> | undefined;
+        handle.destroy = () => destroyed ||= destroy().finally(() => mount.remove());
+        return handle;
+      } catch (error) { mount.remove(); throw error; }
+    }, (handle, signal) => {
+      handleRef.current = handle;
+      const setConnection = (next: MediaSessionStatus) => {
+        if (signal.aborted) return;
+        setStatus(next);
+        const label = next === "connected" ? (handle.provider === "mock" ? "đã kết nối (giả lập)" : "đã kết nối Zoom")
+          : next === "reconnecting" ? "đang khôi phục" : next === "joining" ? "đang chuẩn bị" : next === "error" ? "lỗi dịch vụ" : "đã ngắt";
+        propsRef.current.onStatusChange?.(label);
+      };
+      const sync = () => {
+        if (signal.aborted) return;
+        setParticipants(handle.getParticipants()); setActiveSpeakerId(handle.getActiveSpeakerId());
+        setIsMuted(handle.isAudioMuted()); setIsVideoOn(handle.isVideoOn()); setIsSharing(handle.isScreenSharing());
+        setPermissions(handle.getDevicePermissions());
+      };
+      handle.on("status-change", setConnection);
+      handle.on("participants-change", sync);
+      handle.on("active-speaker-change", sync);
+      handle.on("permissions-change", sync);
+      handle.on("error", () => {
+        if (signal.aborted) return;
+        const message = "Video gặp sự cố. Kiểm tra mạng và quyền thiết bị rồi thử lại.";
+        setConnection("error"); setErrorMsg(message); propsRef.current.onError?.(message);
+      });
+      sync(); setConnection(handle.getStatus());
+    }, () => {
+      const message = "Không thể kết nối video. Có thể thử lại và tiếp tục học bằng học liệu.";
+      handleRef.current = null; setStatus("error"); setErrorMsg(message);
+      propsRef.current.onError?.(message); propsRef.current.onStatusChange?.("lỗi dịch vụ");
+    });
     return () => {
-      void cleanupSession();
+      handleRef.current = null;
+      void manager.stop().catch(() => {});
     };
-  }, [isLive, sessionId, connectMedia, cleanupSession]);
+  }, [sessionId, isLive, role, userId, retry]);
 
-  const handleToggleAudio = async () => {
-    if (!handleRef.current) return;
-    if (permissions.audio === "denied") {
-      setPermissionAlert(
-        "Trình duyệt đã chặn quyền Microphone. Vui lòng kiểm tra quyền thiết bị trong cài đặt trình duyệt.",
-      );
+  const toggle = async (kind: "audio" | "video" | "screen") => {
+    const handle = handleRef.current;
+    if (!handle || provider !== "mock") return;
+    if (permissions[kind] === "denied") {
+      setPermissionAlert("Trình duyệt đã chặn quyền thiết bị. Kiểm tra quyền của trang rồi thử lại.");
       return;
     }
     try {
-      const unmuted = await handleRef.current.toggleAudio();
-      setIsMuted(!unmuted);
-    } catch (e: any) {
-      setErrorMsg(e?.message || "Không thể điều khiển microphone");
-    }
+      if (kind === "audio") setIsMuted(!(await handle.toggleAudio()));
+      if (kind === "video") setIsVideoOn(await handle.toggleVideo());
+      if (kind === "screen") setIsSharing(await handle.toggleShare());
+    } catch { setErrorMsg("Không thể điều khiển thiết bị."); }
   };
-
-  const handleToggleVideo = async () => {
-    if (!handleRef.current) return;
-    if (permissions.video === "denied") {
-      setPermissionAlert(
-        "Trình duyệt đã chặn quyền Camera. Vui lòng kiểm tra quyền thiết bị trong cài đặt trình duyệt.",
-      );
-      return;
-    }
-    try {
-      const on = await handleRef.current.toggleVideo();
-      setIsVideoOn(on);
-    } catch (e: any) {
-      setErrorMsg(e?.message || "Không thể điều khiển camera");
-    }
-  };
-
-  const handleToggleShare = async () => {
-    if (!handleRef.current) return;
-    try {
-      const sharing = await handleRef.current.toggleShare();
-      setIsSharing(sharing);
-    } catch (e: any) {
-      setErrorMsg(e?.message || "Không thể chia sẻ màn hình");
-    }
-  };
-
+  const handleToggleAudio = () => void toggle("audio");
+  const handleToggleVideo = () => void toggle("video");
+  const handleToggleShare = () => void toggle("screen");
   const handleSimulatePermissionDenial = () => {
-    setPermissions((prev) => ({ ...prev, audio: "denied", video: "denied" }));
-    setPermissionAlert(
-      "Trình duyệt đã chặn quyền Camera/Microphone. Vui lòng kiểm tra quyền thiết bị trong cài đặt trình duyệt.",
-    );
+    setPermissions((current) => ({ ...current, audio: "denied", video: "denied" }));
+    setPermissionAlert("Trình duyệt đã chặn quyền Camera/Microphone. Vui lòng kiểm tra quyền thiết bị trong cài đặt trình duyệt.");
   };
-
   const handleGrantPermission = async (kind: "audio" | "video") => {
-    if (!handleRef.current) return;
-    await handleRef.current.requestDevicePermission(kind);
-    setPermissionAlert(null);
+    const handle = handleRef.current;
+    if (handle && await handle.requestDevicePermission(kind)) {
+      setPermissions(handle.getDevicePermissions()); setPermissionAlert(null);
+    }
   };
-
-  const activeSpeaker = participants.find((p) => p.id === activeSpeakerId);
+  const activeSpeaker = participants.find((participant) => participant.id === activeSpeakerId);
 
   return (
     <section
@@ -349,15 +187,15 @@ export function MediaHost({
         </div>
       )}
 
-      {errorMsg && (
+      {isLive && (errorMsg || status === "disconnected") && (
         <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "4px 0" }}>
           <p role="alert" style={{ color: "#dc2626", margin: 0 }}>
-            {errorMsg}
+            {errorMsg || "Video đã ngắt. Có thể thử kết nối lại."}
           </p>
           <button
             type="button"
             className="button small secondary"
-            onClick={() => void connectMedia(true)}
+            onClick={() => setRetry((value) => value + 1)}
             data-testid="btn-retry-media"
           >
             Thử lại
@@ -365,6 +203,9 @@ export function MediaHost({
         </div>
       )}
 
+      {provider === "zoom" && isLive && (
+        <p>Điều khiển mic, camera và chia sẻ trong thanh Zoom. Nếu trình duyệt chặn thiết bị, mở quyền của trang rồi thử lại; học liệu và bản nháp vẫn dùng được.</p>
+      )}
       {/* Persistent DOM container stays mounted */}
       <div className="online-room__media-stage">
         <div
@@ -374,7 +215,7 @@ export function MediaHost({
         />
       </div>
 
-      {status === "connected" && (
+      {status === "connected" && provider === "mock" && (
         <div className="media-controls" aria-label="Điều khiển video">
           <button
             type="button"

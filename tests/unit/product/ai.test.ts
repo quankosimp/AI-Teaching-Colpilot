@@ -94,6 +94,19 @@ test(
       assert.equal(probeJson.provider, "mock");
       assert.equal(probeJson.circuitOpen, false);
 
+      // Even contradictory process environment/test injection must not enable mock in a production app.
+      const productionServer = createApp({ ...config, mode: "production" }).listen(0, "127.0.0.1");
+      await once(productionServer, "listening");
+      try {
+        const address = productionServer.address();
+        assert.ok(address && typeof address !== "string");
+        const response = await fetch(`http://127.0.0.1:${address.port}/api/v1/sessions/${randomUUID()}/ai/suggestions`, {
+          method: "POST", headers: { Origin: config.origin, "Content-Type": "application/json", Authorization: `Bearer ${teacherToken}` },
+          body: JSON.stringify({ studentId: randomUUID(), activityId: randomUUID(), kind: "explain", prompt: "" }),
+        });
+        assert.equal(response.status, 503);
+      } finally { await new Promise<void>(resolve => productionServer.close(() => resolve())); }
+
       // setAIAdapterForTesting gate check: forbidden in production/staging NODE_ENV
       const oldNodeEnv = process.env.NODE_ENV;
       try {
@@ -359,6 +372,32 @@ test(
       );
       assert.equal(conflictResp.status, 409);
 
+      // A failed first attempt must release the key to one waiter, not every waiter.
+      const recoveryKey = randomUUID();
+      let arrived = 0;
+      let allArrived!: () => void;
+      const arrival = new Promise<void>(resolve => { allArrived = resolve; });
+      const countArrival = (req: import("node:http").IncomingMessage) => {
+        if (req.headers["idempotency-key"] === recoveryKey && ++arrived === 6) allArrived();
+      };
+      server.on("request", countArrival);
+      class FailFirstAdapter extends FakeAIAdapter {
+        attempts = 0;
+        async generateTeachingSuggestion(input: any) {
+          if (++this.attempts === 1) { await arrival; throw new Error("Transient provider failure"); }
+          return super.generateTeachingSuggestion(input);
+        }
+      }
+      const recoveryAdapter = new FailFirstAdapter();
+      setAIAdapterForTesting(recoveryAdapter);
+      const recovered = await Promise.all(Array.from({ length: 6 }, () => call(`/sessions/${sessionId}/ai/suggestions`, teacherToken, "POST",
+        { studentId: student.id, activityId, kind: "explain", prompt: "Recover one request" }, { "Idempotency-Key": recoveryKey })));
+      server.off("request", countArrival);
+      assert.equal(recovered.filter(response => response.status === 503).length, 1);
+      assert.ok(recovered.every(response => [200, 201, 503].includes(response.status)));
+      assert.equal(recoveryAdapter.attempts, 2, "Only one waiter may retry a failed provider attempt");
+      setAIAdapterForTesting(capturingAdapter);
+
       // --- Lifecycle Updates & Evidence Creation with Review Reopening ---
       // Update suggestion to 'used' with saveAsEvidence: true
       const patchResp = await call(
@@ -384,6 +423,11 @@ test(
       assert.equal(createdEvidence.isObservation, false);
       assert.equal(createdEvidence.kind, "GoiYGiangDay");
       assert.equal(createdEvidence.sourceType, "ai_suggestion");
+      const replayStatus = await call(`/ai-requests/${suggestBody.suggestion.id}`, teacherToken, "PATCH", {
+        status: "used", editedText: "Nội dung giáo viên đã chỉnh sửa cho dễ hiểu", saveAsEvidence: true,
+      });
+      assert.equal(replayStatus.status, 200);
+      assert.equal((await replayStatus.json()).evidenceId, createdEvidence.id, "Retry must not duplicate the saved teaching aid");
 
       // Verify outbox event 'evidence.created' was emitted
       const evOutbox = await db.sessionEventOutbox.findFirst({
@@ -512,19 +556,39 @@ test(
       }
 
       setAIAdapterForTesting(new AllInvalidCandidateAdapter());
+      const emptyReceiptKey = randomUUID();
       const allInvalidResp = await call(
         `/sessions/${sessionId}/ai/claims-draft`,
         teacherToken,
         "POST",
         { studentId: student.id },
+        { "Idempotency-Key": emptyReceiptKey },
       );
       assert.equal(allInvalidResp.status, 201);
       const allInvalidJson = await allInvalidResp.json();
       assert.equal(allInvalidJson.claims.length, 0);
+      const emptyReplay = await call(`/sessions/${sessionId}/ai/claims-draft`, teacherToken, "POST",
+        { studentId: student.id }, { "Idempotency-Key": emptyReceiptKey });
+      assert.equal(emptyReplay.status, 200, "An empty model result must still have a durable replay receipt");
+      assert.deepEqual(await emptyReplay.json(), allInvalidJson);
 
       // Verify session status is STILL "reviewed" (not wrongly reopened when 0 valid claims persist)
       const sessionAfterAllInvalid = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
       assert.equal(sessionAfterAllInvalid.status, "reviewed", "Reviewed session must not reopen when 0 claims created");
+
+      class UnexpectedObservationAdapter extends AllInvalidCandidateAdapter {
+        async generateClaimDrafts() {
+          const extra = await db.evidence.create({ data: {
+            sessionId, studentId: student.id, kind: "GhiChu", title: "Added after dispatch", detail: "New observation",
+            support: "DocLap", sourceType: "note", sourceVersion: null, isObservation: true, status: "active", createdBy: teacherId,
+          } });
+          return { ...(await super.generateClaimDrafts()), claims: [{ text: "Not in the model input snapshot", evidenceIds: [noteObs.id, extra.id] }] };
+        }
+      }
+      setAIAdapterForTesting(new UnexpectedObservationAdapter());
+      const unexpected = await call(`/sessions/${sessionId}/ai/claims-draft`, teacherToken, "POST", { studentId: student.id });
+      assert.equal(unexpected.status, 201);
+      assert.deepEqual((await unexpected.json()).claims, [], "An observation added after dispatch cannot validate a model reference");
 
       // 3) Controlled deferred race: evidence edited/version changed while model waits -> 409 VERSION_CONFLICT
       class DeferredEvidenceChangeAdapter extends FakeAIAdapter {
@@ -576,11 +640,13 @@ test(
 
       // Clean successful post-session claim drafting
       setAIAdapterForTesting(capturingAdapter);
+      const draftReceiptKey = randomUUID();
       const cleanDraftResp = await call(
         `/sessions/${sessionId}/ai/claims-draft`,
         teacherToken,
         "POST",
         { studentId: student.id },
+        { "Idempotency-Key": draftReceiptKey },
       );
       assert.equal(cleanDraftResp.status, 201);
       const cleanDraftBody = await cleanDraftResp.json();
@@ -598,6 +664,11 @@ test(
         where: { id: createdClaim.id },
         data: { status: "approved", reviewedAt: new Date() },
       });
+      const draftReplay = await call(`/sessions/${sessionId}/ai/claims-draft`, teacherToken, "POST",
+        { studentId: student.id }, { "Idempotency-Key": draftReceiptKey });
+      assert.equal(draftReplay.status, 200);
+      assert.deepEqual(await draftReplay.json(), cleanDraftBody,
+        "Replay returns the original pending draft receipt even after a teacher approves its claim");
 
       // Create draft planning session
       const planSessionResp = await call("/sessions", teacherToken, "POST", {
@@ -632,6 +703,7 @@ test(
       assert.equal(planResp1.status, 201);
       const planJson1 = await planResp1.json();
       assert.ok(planJson1.suggestion);
+      assert.ok(planJson1.suggestion.sources.length > 0);
       assert.equal(capturingAdapter.callCount, planCallCountBefore + 1);
 
       // Replay must hit preflight without invoking adapter
@@ -643,6 +715,7 @@ test(
         { "Idempotency-Key": planIdemKey },
       );
       assert.equal(planResp2.status, 200);
+      assert.deepEqual(await planResp2.json(), planJson1, "Plan retry must preserve the exact source provenance");
       assert.equal(capturingAdapter.callCount, planCallCountBefore + 1, "Plan suggestion replay must not call adapter");
 
       // 2) Plan suggestions race: session started while model waits -> 409 SESSION_STATE_INVALID
