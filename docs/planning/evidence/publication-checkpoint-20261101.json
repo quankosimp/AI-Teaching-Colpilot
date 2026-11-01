@@ -1,0 +1,78 @@
+{
+  "checkpointUTC": "2026-11-01 04:03:42 UTC",
+  "repository": "git@github.com:quankosimp/AI-Teaching-Colpilot.git",
+  "branchesBeforeReportCommit": [
+    {
+      "role": "Supervisor",
+      "branch": "feat/integrated-classroom-ui",
+      "sha": "71ce979c5861efb07fe65068d33236b66293fab5"
+    },
+    {
+      "role": "Backend",
+      "branch": "workers/product-completion-20261031",
+      "sha": "f6a40bcf9d14939e2d61f177b3cdce34b70e1a31"
+    },
+    {
+      "role": "Frontend",
+      "branch": "workers/classroom-wiring-20261101",
+      "sha": "2555198ae0dbef790a24aa65899e8a9dc3a40451"
+    },
+    {
+      "role": "UI",
+      "branch": "workers/ui-completion-20261031",
+      "sha": "f55ef71976b8edb648034b5bd5065c9a528ac27d"
+    },
+    {
+      "role": "QA",
+      "branch": "workers/demo-verification-20261031",
+      "sha": "1501d80d4c10471f65b53bab82037d33762479e5"
+    },
+    {
+      "role": "Ops",
+      "branch": "workers/operations-local-20261031",
+      "sha": "29f97ca3c670635500fd2a042dc365e95a6c813a"
+    }
+  ],
+  "note": "Supervisor branch receives this report as an additional documentation commit after this source snapshot. Final report commit and all branch tips are verified against origin in the supervisor response.",
+  "gate": "G0, G1-local and local Docker packaging accepted; G2 is a review checkpoint, not accepted.",
+  "checks": {
+    "backend_f6a40bc": {
+      "supervisorVerified": [
+        "14/14 focused unit and contract tests passed",
+        "server TypeScript check passed"
+      ],
+      "workerReported": [
+        "migration fixtures and G2 integration suite passed; independent re-audit still pending"
+      ]
+    },
+    "frontend_2555198": {
+      "supervisorVerified": [
+        "Node22.23.4 Prisma generation, frontend typecheck and production build passed",
+        "browser harness syntax valid"
+      ],
+      "pending": [
+        "new capability browser suite execution",
+        "full SRS coverage and independent review",
+        "default-deny UI capability fallbacks require review"
+      ]
+    },
+    "qa_1501d80": {
+      "supervisorVerified": [
+        "31/31 scoped G2 HTTP/socket tests against backend66baabd; not attributed to newer f6a40bc"
+      ]
+    },
+    "ui_f55ef71": {
+      "workerReported": [
+        "typecheck/build and Product browser harness on own3131 passed"
+      ],
+      "pending": [
+        "full final integrated UI verification after new classroom wiring"
+      ]
+    }
+  },
+  "userArtifactsPreservedUntracked": [
+    "docs/.qa/",
+    "docs/SRS_AI_Teaching_Copilot_Modules_v0.1.docx",
+    "docs/build_srs.py"
+  ]
+}

@@ -1,0 +1,94 @@
+TAP version 13
+# Subtest: mock mode cannot be enabled when NODE_ENV is production or staging
+ok 1 - mock mode cannot be enabled when NODE_ENV is production or staging
+  ---
+  duration_ms: 1.596653
+  type: 'test'
+  ...
+# Subtest: approval needs current observations belonging to the same teacher, student and session
+ok 2 - approval needs current observations belonging to the same teacher, student and session
+  ---
+  duration_ms: 4.886151
+  type: 'test'
+  ...
+# Subtest: lifecycle rejects reopening live tools
+ok 3 - lifecycle rejects reopening live tools
+  ---
+  duration_ms: 0.103799
+  type: 'test'
+  ...
+# Subtest: read projections and cached or audited metadata reject secret fields
+ok 4 - read projections and cached or audited metadata reject secret fields
+  ---
+  duration_ms: 1.684184
+  type: 'test'
+  ...
+# Subtest: student room rejects private fields and event fanout enforces recipient
+ok 5 - student room rejects private fields and event fanout enforces recipient
+  ---
+  duration_ms: 4.817644
+  type: 'test'
+  ...
+# Subtest: review completion and student writes respect session and membership gates
+ok 6 - review completion and student writes respect session and membership gates
+  ---
+  duration_ms: 1.048561
+  type: 'test'
+  ...
+# Subtest: member grant survives invite rotation but explicit revocation and missing command permission fail
+ok 7 - member grant survives invite rotation but explicit revocation and missing command permission fail
+  ---
+  duration_ms: 0.151882
+  type: 'test'
+  ...
+# Subtest: uploads enforce 10 MiB and AI aid kind matches a supplied source
+ok 8 - uploads enforce 10 MiB and AI aid kind matches a supplied source
+  ---
+  duration_ms: 1.312103
+  type: 'test'
+  ...
+# Subtest: own submission exposes feedback but rejects private AI suggestions
+ok 9 - own submission exposes feedback but rejects private AI suggestions
+  ---
+  duration_ms: 0.826829
+  type: 'test'
+  ...
+# Subtest: shared board must match the selected owner and actually be shared
+ok 10 - shared board must match the selected owner and actually be shared
+  ---
+  duration_ms: 0.704325
+  type: 'test'
+  ...
+# Subtest: student room capabilities and safe annotation mark projections
+ok 11 - student room capabilities and safe annotation mark projections
+  ---
+  duration_ms: 1.972479
+  type: 'test'
+  ...
+# Subtest: AnnotationInput strict validation on sharedWithClass and student attribution
+ok 12 - AnnotationInput strict validation on sharedWithClass and student attribution
+  ---
+  duration_ms: 1.046801
+  type: 'test'
+  ...
+# Subtest: liveness endpoint responds without reporting dependency readiness
+ok 13 - liveness endpoint responds without reporting dependency readiness
+  ---
+  duration_ms: 29.998229
+  type: 'test'
+  ...
+# Subtest: queue preserves rejected drafts and respects count, byte, expiry and ended limits
+ok 14 - queue preserves rejected drafts and respects count, byte, expiry and ended limits
+  ---
+  duration_ms: 8.399684
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 733.840226

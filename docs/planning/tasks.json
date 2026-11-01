@@ -1004,20 +1004,24 @@
         "ARCH-06"
       ],
       "acceptance": "Actual teacher/student stage, material/page/annotations, completion, tool toggles, permitted boards, selected-student support dock, check results, chat and invite lifecycle wired to server APIs; three independent browser contexts verify actions, persistence and privacy.",
-      "commit": null,
-      "evidence": []
+      "commit": "2555198ae0dbef790a24aa65899e8a9dc3a40451",
+      "evidence": [
+        "docs/planning/checkpoint-20261101.md"
+      ],
+      "local_gate": "WIP publication checkpoint only; browser/SRS acceptance pending"
     }
   ],
   "active_executors": {
     "PRODUCT": {
       "agentId": "a86e230b-65d4-4b62-920e-f9dda0df117f",
       "provider": "antigravity-3/gemini-3.8-flash-high",
-      "scope": "Only backend/contracts/schema/migrations/Product unit tests; original801idle and Codex pool quota, discovered Sonnet also quota. Runtime model updated to Flash; execution confirmation pending."
+      "scope": "Only backend/contracts/schema/migrations/Product unit tests; original801idle and Codex pool quota, discovered Sonnet also quota. Runtime model updated to Flash; execution confirmation pending.",
+      "last_event": "Committed clean checkpoint f6a40bc; supervisor verified14/14 focused tests and server typecheck. Paused at requested publication checkpoint, no fullG2 acceptance."
     },
     "QA": {
       "agentId": "f21a5ec6-49fc-4369-9041-75d2f8a23e11",
-      "provider": "antigravity-3/gemini-3.8-flash-high",
-      "last_event": "Committed1501d80 and reported31 scoped G2 tests passed, then stream interrupted. Supervisor independently replayed31/31 on own API3150; no G2 acceptance."
+      "provider": "antigravity-3/gemini-4-argon-medium",
+      "last_event": "Read-only quota probe replied QUOTA_PROBE_OK then stream interrupted; no model-budget percentage known. Existing31/31 test evidence remains scoped to66baabd."
     },
     "REVIEW": {
       "agentId": "865d2663-05ee-4be1-8f8a-f295467c7006",
@@ -1042,7 +1046,8 @@
       "provider": "antigravity-3/gemini-3.8-flash-high",
       "task": "PRODUCT-05-B",
       "workspace": "/home/quanan/.paseo/worktrees/2qimpyn4/teaching-classroom-wiring-20261101",
-      "scope": "Sole writer LiveRoom/OnlineBoard/ReviewPanel/SubmissionForm/onlineApi/statusLabels and new classroom modules outside presentation; original4b7quota; preserve WIP at66baabd. Model updated to Flash after Sonnet quota; execution confirmation pending."
+      "scope": "Sole writer LiveRoom/OnlineBoard/ReviewPanel/SubmissionForm/onlineApi/statusLabels and new classroom modules outside presentation; original4b7quota; preserve WIP at66baabd. Model updated to Flash after Sonnet quota; execution confirmation pending.",
+      "last_event": "Supervisor preserved idle writer WIP as2555198 on backendf6a40bc after successful frontend typecheck/build. Browser/SRS review pending; requested publication checkpoint."
     }
   }
 }

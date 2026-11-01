@@ -2,6 +2,8 @@
 
 ## Current
 
+- User requested repository checkpoint publication: backendf6a40bc and frontendWIP2555198 are committed; UI f55ef71, QA1501d80 and Ops29f97ca preserved. Supervisor independently passed backend14 focused tests/server types and frontend typecheck/build. All remain separate from finalG2 acceptance. Publication report: checkpoint-20261101.md.
+
 - Accepted local gates: G0 contract v1 and G1-local. Provider-real and public HTTPS gates remain blocked on credentials/target.
 - PRODUCT-12-A local Docker packaging accepted at583784d after independent code remediation review of29f97ca and supervisor startup/runtime/failure checks. Doctor passes actual file/permission flow and rejects unavailable storage; private init gates API and API health gates gateway. Scratch probe was safely cleaned. Evidence: evidence/docker-accepted-583784d.json. Parent operations/final release remain open.
 - G2 Product source advanced to1955fca after initial94380a7, with upload/review UI and reported controlled transaction-race tests. Independent QA is validating it in its own worktree; Product80137a9b is completing remaining source-grade/relabel/annotation race and browser coverage. No G2 gate acceptance or root G2 merge yet.
