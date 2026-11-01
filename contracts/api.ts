@@ -27,10 +27,11 @@ export const CreateInviteResponse = z.strictObject({
   rawToken: z.string().min(32),
   inviteUrl: z.url(),
   expiresAt: z.iso.datetime({ offset: true }),
+  invite: InviteSummary.optional(),
 });
 export const InviteCommand = z.strictObject({
   studentId: Id,
-  expiresAt: z.iso.datetime({ offset: true }),
+  expiresAt: z.iso.datetime({ offset: true }).optional(),
 });
 export const JoinRequest = z.strictObject({
   token: z.string().min(1),
@@ -122,8 +123,72 @@ export const CompleteReviewCommand = z.strictObject({
 });
 export const StudentBoardCommand = z.discriminatedUnion("operation", [
   z.strictObject({ operation: z.literal("addStroke"), stroke: Stroke }),
-  z.strictObject({ operation: z.literal("undoOwnStroke"), strokeId: Id }),
+  z.strictObject({
+    operation: z.literal("undoOwnStroke"),
+    strokeId: Id.optional(),
+  }),
+  z.strictObject({ operation: z.literal("clearOwnStrokes") }),
+  z.strictObject({
+    operation: z.literal("setNote"),
+    text: z.string().max(4000),
+  }),
+  z.strictObject({
+    operation: z.literal("setShared"),
+    shared: z.boolean(),
+  }),
 ]);
+export const InvitePreviewInput = z.strictObject({
+  token: z.string().min(1),
+});
+export const InvitePreviewResponse = z.strictObject({
+  inviteState: z.literal("active"),
+  sessionId: Id,
+  sessionTitle: z.string(),
+  sessionStatus: z.enum(["draft", "scheduled", "live"]),
+  studentDefaultName: z.string(),
+});
+export const StudentRefreshInput = z.strictObject({
+  refreshToken: z.string().min(32),
+});
+export const StudentAuthResponse = z.strictObject({
+  accessToken: z.string().min(1),
+  studentRoomToken: z.string().min(1).optional(),
+  refreshToken: z.string().min(32),
+  sessionId: Id,
+  studentId: Id,
+  memberId: Id,
+  displayName: z.string(),
+  memberState: z.enum(["waiting", "joined"]),
+});
+export const AdmitCommand = z.strictObject({
+  approved: z.boolean().optional(),
+});
+export const ClassroomStatePatch = z.strictObject({
+  currentActivityId: Id.nullable().optional(),
+  completedActivityIds: z.array(Id).optional(),
+  sharedView: z.enum(["document", "board", "check"]).optional(),
+  sharedBoardOwnerId: Id.optional(),
+  materialPage: z.number().int().nonnegative().optional(),
+  tools: Tools.partial().optional(),
+});
+export const QuickCheckStatusUpdate = z.strictObject({
+  status: z.enum(["open", "closed"]),
+});
+export const CheckResponseReviewInput = z.strictObject({
+  support: SupportLevel,
+  feedback: z.string().trim().min(1),
+});
+export const EvidenceUpdateInput = z.strictObject({
+  detail: z.string().trim().min(1).optional(),
+  support: SupportLevel.optional(),
+  status: z.enum(["active", "corrected", "deleted"]).optional(),
+  reason: z.string().trim().max(500).optional(),
+});
+export const ClaimDraftInput = z.strictObject({
+  studentId: Id.optional(),
+  text: z.string().trim().min(1).optional(),
+  evidenceIds: z.array(Id).min(1).optional(),
+});
 export const API_ROUTES = {
   googleCallback: ["POST", "/api/v1/auth/google/callback"],
   mockAuth: ["POST", "/api/v1/auth/mock"],
@@ -140,13 +205,16 @@ export const API_ROUTES = {
   sessionsCreate: ["POST", "/api/v1/sessions"],
   sessionRead: ["GET", "/api/v1/sessions/:id"],
   sessionUpdate: ["PATCH", "/api/v1/sessions/:id"],
+  sessionClassroomState: ["PATCH", "/api/v1/sessions/:id/classroom"],
   activities: ["PUT", "/api/v1/sessions/:id/activities"],
   start: ["POST", "/api/v1/sessions/:id/start"],
   end: ["POST", "/api/v1/sessions/:id/end"],
   invitesList: ["GET", "/api/v1/sessions/:id/invites"],
   invite: ["POST", "/api/v1/sessions/:id/invites"],
   revokeInvite: ["POST", "/api/v1/sessions/:id/invites/:invId/revoke"],
+  invitePreview: ["POST", "/api/v1/room/invite-preview"],
   joinRequest: ["POST", "/api/v1/room/join-request"],
+  roomRefresh: ["POST", "/api/v1/room/refresh"],
   admit: ["POST", "/api/v1/sessions/:id/members/:mId/admit"],
   memberUpdate: ["PATCH", "/api/v1/sessions/:id/members/:mId"],
   roomState: ["GET", "/api/v1/room/state"],
@@ -155,9 +223,15 @@ export const API_ROUTES = {
   boardAttempt: ["POST", "/api/v1/sessions/:id/boards/:boardKey/attempts"],
   annotation: ["POST", "/api/v1/sessions/:id/annotations"],
   checks: ["POST", "/api/v1/sessions/:id/checks"],
+  checkUpdate: ["PATCH", "/api/v1/checks/:checkId"],
   response: ["POST", "/api/v1/checks/:checkId/responses"],
   responseReview: ["POST", "/api/v1/checks/:checkId/responses/:rId/review"],
+  submissionUploadIntent: [
+    "POST",
+    "/api/v1/sessions/:id/submissions/upload-intent",
+  ],
   submission: ["POST", "/api/v1/sessions/:id/submissions"],
+  submissionReadUrl: ["GET", "/api/v1/submissions/:id/read-url"],
   grade: ["PATCH", "/api/v1/submissions/:id/grade"],
   relabel: ["PATCH", "/api/v1/submissions/:id/relabel"],
   messages: ["POST", "/api/v1/sessions/:id/messages"],
@@ -167,6 +241,7 @@ export const API_ROUTES = {
   evidenceUpdate: ["PATCH", "/api/v1/evidence/:id"],
   aiSuggest: ["POST", "/api/v1/sessions/:id/ai/suggestions"],
   aiUpdate: ["PATCH", "/api/v1/ai-requests/:id"],
+  claimsList: ["GET", "/api/v1/sessions/:id/claims"],
   claimDraft: ["POST", "/api/v1/sessions/:id/claims/draft"],
   claimReview: ["PATCH", "/api/v1/claims/:id/review"],
   reviewComplete: ["POST", "/api/v1/sessions/:id/complete-review"],
@@ -345,6 +420,15 @@ export const REPLAY_ROUTES = [
   "POST /api/v1/sessions",
   "POST /api/v1/materials",
   "POST /api/v1/sessions/:id/annotations",
+  "POST /api/v1/sessions/:id/start",
+  "POST /api/v1/sessions/:id/end",
+  "POST /api/v1/sessions/:id/boards/:boardKey/attempts",
+  "POST /api/v1/sessions/:id/checks",
+  "POST /api/v1/checks/:checkId/responses",
+  "POST /api/v1/sessions/:id/submissions",
+  "POST /api/v1/sessions/:id/evidence",
+  "POST /api/v1/sessions/:id/claims/draft",
+  "POST /api/v1/sessions/:id/next-session",
 ] as const;
 export type AuthMockInput = z.infer<typeof AuthMockInput>;
 export type AuthResponse = z.infer<typeof AuthResponse>;

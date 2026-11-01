@@ -14,6 +14,7 @@ import {
 } from "./presentation";
 import { api, ApiError, googleCallback, signIn, signOut } from "./onlineApi";
 import { Modal } from "./ui";
+import { LiveRoom } from "./LiveRoom";
 import { MaterialViewer } from "./MaterialViewer";
 import "./product.css";
 import "./classroom.css";
@@ -124,6 +125,7 @@ export default function OnlineApp() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedStudent, setSelectedStudent] = useState("");
   const [selectedSession, setSelectedSession] = useState("");
+  const [roomSession, setRoomSession] = useState("");
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [title, setTitle] = useState("");
@@ -467,6 +469,7 @@ export default function OnlineApp() {
       setActivityDuration(15);
     });
   };
+  if (roomSession) return <LiveRoom sessionId={roomSession} teacherId={teacher?.id} onExit={() => setRoomSession("")} />;
   return (
     <main className="main-content" data-theme={theme ? "dark" : "light"}>
       <header className="page-header">
@@ -917,6 +920,7 @@ export default function OnlineApp() {
                 {session ? (
                   <>
                     <h2>{session.title}</h2>
+                    <button type="button" onClick={() => setRoomSession(session.id)}>Mở phòng học</button>
                     <p>
                       {session.date} · {session.time} · {session.duration} phút
                     </p>

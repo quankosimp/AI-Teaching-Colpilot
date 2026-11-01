@@ -1,9 +1,11 @@
+import { lockSession } from "../sessionLock.js";
 import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import {
   ActivityInput,
   AnnotationInput,
+  ClassroomStatePatch,
   SessionCreate,
   StudentInput,
 } from "../../contracts/api.js";
@@ -18,7 +20,8 @@ import {
 } from "../context.js";
 import { createOnce } from "../idempotency.js";
 import { filterEligibleApprovedClaims } from "../eligibleClaims.js";
-import { ClaimRef } from "../../contracts/domain.js";
+import { appendOutboxEvent, triggerOutboxPublish } from "../realtime.js";
+import { ClaimRef, Tools } from "../../contracts/domain.js";
 import type { Request, Response } from "express";
 
 async function ownedStudent(id: string, actor: TeacherActor, res: Response) {
@@ -453,18 +456,26 @@ export function teacherRouter(config: AppConfig) {
         return fail(res, 400, "VALIDATION_ERROR", "ID không hợp lệ");
       const session = await ownedSession(req.params.id, res.locals.actor, res);
       if (!session) return;
-      if (!["draft", "scheduled"].includes(session.status))
+      if (!["draft", "scheduled", "live"].includes(session.status))
         return fail(
           res,
           409,
           "SESSION_STATE_INVALID",
           "Không thể sửa buổi này",
         );
-      const patch = SessionCreate.omit({ studentIds: true })
+      const patchSchema = SessionCreate.omit({ studentIds: true })
         .partial()
-        .extend({ status: z.enum(["draft", "scheduled"]).optional() })
-        .strict()
-        .safeParse(req.body);
+        .extend({
+          status: z.enum(["draft", "scheduled"]).optional(),
+          currentActivityId: z.string().uuid().nullable().optional(),
+          completedActivityIds: z.array(z.string().uuid()).optional(),
+          sharedView: z.enum(["document", "board", "check"]).optional(),
+          sharedBoardOwnerId: z.string().min(1).max(256).optional(),
+          materialPage: z.number().int().nonnegative().optional(),
+          tools: Tools.partial().optional(),
+        })
+        .strict();
+      const patch = patchSchema.safeParse(req.body);
       const expected = version(req);
       if (!patch.success || !expected)
         return fail(
@@ -473,17 +484,101 @@ export function teacherRouter(config: AppConfig) {
           "VALIDATION_ERROR",
           "Dữ liệu hoặc phiên bản không hợp lệ",
         );
+      const planOnlyKeys = [
+        "title",
+        "goal",
+        "sharedGoal",
+        "date",
+        "time",
+        "duration",
+        "status",
+      ] as const;
+      if (
+        session.status === "live" &&
+        planOnlyKeys.some((k) => patch.data[k] !== undefined)
+      )
+        return fail(
+          res,
+          409,
+          "SESSION_STATE_INVALID",
+          "Không thể sửa thông tin kế hoạch khi buổi học đang diễn ra",
+        );
+      if (
+        patch.data.currentActivityId !== undefined ||
+        patch.data.completedActivityIds !== undefined
+      ) {
+        const acts = await db.activity.findMany({
+          where: { sessionId: session.id },
+          select: { id: true },
+        });
+        const validIds = new Set(acts.map((a) => a.id));
+        if (
+          (patch.data.currentActivityId &&
+            !validIds.has(patch.data.currentActivityId)) ||
+          (patch.data.completedActivityIds &&
+            patch.data.completedActivityIds.some((id) => !validIds.has(id)))
+        )
+          return fail(
+            res,
+            400,
+            "VALIDATION_ERROR",
+            "Hoạt động không thuộc buổi học",
+          );
+      }
+      let nextSharedOwner = patch.data.sharedBoardOwnerId;
+      if (nextSharedOwner && nextSharedOwner !== "common") {
+        const activeActId =
+          patch.data.currentActivityId !== undefined
+            ? patch.data.currentActivityId
+            : session.currentActivityId;
+        const member = await db.roomMember.findUnique({
+          where: {
+            sessionId_studentId: {
+              sessionId: session.id,
+              studentId: nextSharedOwner,
+            },
+          },
+        });
+        const board = activeActId
+          ? await db.board.findUnique({
+              where: {
+                id: `${session.id}:${activeActId}:${nextSharedOwner}`,
+              },
+            })
+          : null;
+        if (!member || member.state !== "joined" || !board?.shared) {
+          nextSharedOwner = "common";
+        }
+      }
+      const existingTools = Tools.safeParse(session.tools).success
+        ? Tools.parse(session.tools)
+        : { board: true, upload: true, check: true, chat: true };
+      const mergedTools = patch.data.tools
+        ? { ...existingTools, ...patch.data.tools }
+        : undefined;
+      const {
+        tools: _tools,
+        sharedBoardOwnerId: _sbo,
+        ...restPatch
+      } = patch.data;
       const changed = await db.$transaction(async (tx) => {
         const result = await tx.session.updateMany({
           where: {
             id: session.id,
             teacherId: res.locals.actor.id,
             version: expected,
-            status: { in: ["draft", "scheduled"] },
+            status: { in: ["draft", "scheduled", "live"] },
           },
-          data: { ...patch.data, version: { increment: 1 } },
+          data: {
+            ...restPatch,
+            ...(nextSharedOwner !== undefined
+              ? { sharedBoardOwnerId: nextSharedOwner }
+              : {}),
+            ...(mergedTools ? { tools: mergedTools } : {}),
+            version: { increment: 1 },
+          },
         });
-        if (result.count)
+        if (result.count) {
           await tx.auditLog.create({
             data: {
               workspaceId: res.locals.actor.workspaceId,
@@ -497,10 +592,37 @@ export function teacherRouter(config: AppConfig) {
               metadata: {},
             },
           });
+          if (
+            ClassroomStatePatch.safeParse({
+              currentActivityId: patch.data.currentActivityId,
+              completedActivityIds: patch.data.completedActivityIds,
+              sharedView: patch.data.sharedView,
+              sharedBoardOwnerId: nextSharedOwner,
+              materialPage: patch.data.materialPage,
+              tools: patch.data.tools,
+            }).success
+          ) {
+            await appendOutboxEvent(tx, {
+              sessionId: session.id,
+              type: "activity.changed",
+              label: "Cập nhật trạng thái lớp học",
+              actorId: res.locals.actor.id,
+              visibility: { scope: "public" },
+              activityId:
+                patch.data.currentActivityId !== undefined
+                  ? patch.data.currentActivityId
+                  : session.currentActivityId,
+              page: patch.data.materialPage ?? session.materialPage,
+              resourceId: session.id,
+              version: expected + 1,
+            });
+          }
+        }
         return result;
       });
       if (!changed.count)
         return fail(res, 409, "VERSION_CONFLICT", "Buổi học đã thay đổi");
+      triggerOutboxPublish(session.id);
       return res.json({
         session: await db.session.findUniqueOrThrow({
           where: { id: session.id },
@@ -653,6 +775,7 @@ export function teacherRouter(config: AppConfig) {
         res,
         `/sessions/${session.id}/annotations`,
         async (tx) => {
+          await lockSession(tx, session.id);
           const annotation = await tx.annotation.create({
             data: {
               sessionId: session.id,
@@ -666,8 +789,8 @@ export function teacherRouter(config: AppConfig) {
               authorId: res.locals.actor.id,
             },
           });
-          if (input.studentId)
-            await tx.evidence.create({
+          if (input.studentId) {
+            const ev = await tx.evidence.create({
               data: {
                 sessionId: session.id,
                 activityId: input.activityId,
@@ -683,6 +806,31 @@ export function teacherRouter(config: AppConfig) {
                 createdBy: res.locals.actor.id,
               },
             });
+            await appendOutboxEvent(tx, {
+              sessionId: session.id,
+              type: "evidence.created",
+              label: "Thêm minh chứng chú thích đề",
+              actorId: res.locals.actor.id,
+              visibility: { scope: "teacher" },
+              activityId: input.activityId,
+              sourceId: ev.id,
+              resourceId: ev.id,
+              version: 1,
+            });
+          }
+          await appendOutboxEvent(tx, {
+            sessionId: session.id,
+            type: "annotation.created",
+            label: "Thêm chú thích tài liệu",
+            actorId: res.locals.actor.id,
+            visibility: { scope: "public" },
+            activityId: input.activityId,
+            materialId: input.materialId,
+            page: input.page,
+            sourceId: annotation.id,
+            resourceId: annotation.id,
+            version: 1,
+          });
           await tx.auditLog.create({
             data: {
               workspaceId: res.locals.actor.workspaceId,
@@ -699,6 +847,7 @@ export function teacherRouter(config: AppConfig) {
         },
       );
       if (!result) return;
+      triggerOutboxPublish(session.id);
       return res.status(201).json({
         annotation: await db.annotation.findUniqueOrThrow({
           where: { id: result.resourceId },
