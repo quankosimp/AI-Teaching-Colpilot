@@ -1,0 +1,17 @@
+{
+  "scope": "Isolated Docker connectivity hooks; not full container acceptance",
+  "sourceCommit": "e1c1c9d63187f054d7e0df0564ce3d6b4deeb5cf",
+  "integratedCommit": "9de1625",
+  "runtime": "Node 22.23.4",
+  "environment": "Local checks without provider credentials",
+  "checks": [
+    {"name": "Public storage signer", "status": "passed", "detail": "PUT and GET URLs signed offline for configured browser origin; internal client remains separate; unset public overrides reuse internal client"},
+    {"name": "Storage production guard", "status": "passed", "detail": "Non-TLS internal/public storage configuration rejected in production"},
+    {"name": "Frontend and server typechecks", "status": "passed"},
+    {"name": "Frontend and server builds", "status": "passed"},
+    {"name": "Existing test suite without QA_BASE_URL", "status": "passed", "passed": 25, "failed": 0, "skipped": 22, "detail": "Integration prerequisites absent from this invocation; skipped scenarios are not accepted"},
+    {"name": "Gateway and browser upload against rebuilt containers", "status": "running", "owner": "PRODUCT-12-A"}
+  ],
+  "review": "pending independent audit after reviewer plugin process failure; retry dispatched",
+  "decision": "Hooks integrated; container runtime gate remains open"
+}
