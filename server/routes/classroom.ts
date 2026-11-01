@@ -2089,13 +2089,16 @@ export function classroomRouter(config: AppConfig) {
         return fail(res, 400, "VALIDATION_ERROR", "ID không hợp lệ");
       const session = await db.session.findUnique({
         where: { id: req.params.id },
+        include: { teacherIdRef: { select: { name: true } } },
       });
       if (!session)
         return fail(res, 404, "NOT_FOUND", "Không tìm thấy buổi học");
       const actor = res.locals.actor as TeacherActor | StudentActor;
+      let displayName = "";
       if (actor.role === "teacher") {
         if (session.teacherId !== actor.id)
           return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập");
+        displayName = session.teacherIdRef?.name || "Giáo viên";
       } else {
         if (actor.sessionId !== session.id)
           return fail(
@@ -2107,21 +2110,86 @@ export function classroomRouter(config: AppConfig) {
         const member = await db.roomMember.findUnique({
           where: { id: actor.memberId },
         });
-        if (!member || member.state !== "joined" || session.status !== "live")
+        const grant = await db.studentRoomSession.findUnique({
+          where: { id: actor.grantId },
+        });
+        if (
+          !member ||
+          member.state !== "joined" ||
+          session.status !== "live" ||
+          !grant ||
+          grant.revokedAt ||
+          grant.expiresAt <= new Date()
+        )
           return fail(
             res,
             403,
             "PERMISSION_DENIED",
             "Chỉ học sinh đã được duyệt trong buổi học trực tuyến mới nhận được video token",
           );
+        displayName =
+          (actor as StudentActor).displayName ||
+          member.displayName ||
+          "Học sinh";
       }
-      if (!process.env.ZOOM_SDK_KEY || !process.env.ZOOM_SDK_SECRET)
+
+      const reqBodyProvider =
+        typeof req.body === "object" && req.body !== null
+          ? req.body.provider
+          : undefined;
+      const requestedProvider = reqBodyProvider || req.query.provider;
+      const isProduction = config.mode === "production";
+      const allowMock =
+        !isProduction &&
+        (config.mode === "test" ||
+          config.mode === "local_mock" ||
+          process.env.MEDIA_PROVIDER === "mock" ||
+          process.env.ENABLE_MOCK_MEDIA === "true");
+
+      if (requestedProvider === "mock") {
+        if (isProduction || !allowMock) {
+          return fail(
+            res,
+            403,
+            "PERMISSION_DENIED",
+            "Môi trường giả lập không được phép trên production",
+          );
+        }
+        return res.json({
+          provider: "mock",
+          token: `mock-video-token-${actor.id}`,
+          topic: session.id,
+          sessionName: session.id,
+          userName: displayName,
+          isHost: actor.role === "teacher",
+          roleType: actor.role === "teacher" ? 1 : 0,
+        });
+      }
+
+      const hasZoomCreds = Boolean(
+        process.env.ZOOM_SDK_KEY && process.env.ZOOM_SDK_SECRET,
+      );
+
+      if (!requestedProvider && !hasZoomCreds && allowMock) {
+        return res.json({
+          provider: "mock",
+          token: `mock-video-token-${actor.id}`,
+          topic: session.id,
+          sessionName: session.id,
+          userName: displayName,
+          isHost: actor.role === "teacher",
+          roleType: actor.role === "teacher" ? 1 : 0,
+        });
+      }
+
+      if (!hasZoomCreds) {
         return fail(
           res,
           503,
           "MEDIA_UNAVAILABLE",
           "Zoom Video SDK chưa được cấu hình trên môi trường này",
         );
+      }
       const token = await new SignJWT({
         app_key: process.env.ZOOM_SDK_KEY,
         tpc: session.id,
@@ -2133,7 +2201,15 @@ export function classroomRouter(config: AppConfig) {
         .setIssuedAt()
         .setExpirationTime("2h")
         .sign(new TextEncoder().encode(process.env.ZOOM_SDK_SECRET));
-      return res.json({ token, topic: session.id });
+      return res.json({
+        provider: "zoom",
+        token,
+        topic: session.id,
+        sessionName: session.id,
+        userName: displayName,
+        isHost: actor.role === "teacher",
+        roleType: actor.role === "teacher" ? 1 : 0,
+      });
     }),
   );
 

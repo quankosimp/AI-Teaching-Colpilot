@@ -7,6 +7,7 @@ import { SubmissionForm } from "./SubmissionForm";
 import { OnlineBoard, type BoardState } from "./OnlineBoard";
 import { MaterialViewer } from "./MaterialViewer";
 import { BoundedReconnectQueue } from "./reconnectQueue";
+import { MediaHost } from "./media/MediaHost";
 
 type Grant = {
   accessToken: string;
@@ -510,7 +511,21 @@ export function LiveRoom({
           </p>
           <div className={`online-room__workspace${grant ? "" : " online-room__workspace--teacher"}`}>
           <div className="online-room__stage" aria-label="Sân khấu lớp học">
-            <p>Video chưa cấu hình; khu vực video sẽ sẵn sàng khi dịch vụ được kết nối.</p>
+            <MediaHost
+              sessionId={sessionId}
+              isLive={s.status === "live"}
+              role={grant ? "student" : "teacher"}
+              displayName={
+                grant
+                  ? members.find((m) => m.studentId === grant.studentId)?.displayName ||
+                    grant.displayName ||
+                    "Học sinh"
+                  : "Giáo viên"
+              }
+              userId={grant?.studentId || teacherId || "teacher"}
+              request={request}
+              onError={(err) => console.warn("[LiveRoom Media]", err)}
+            />
             {!grant && (
               <div aria-label="Chọn nội dung chung">
                 {([ ["document", "Học liệu"], ["board", "Bảng"], ["check", "Kiểm tra"] ] as const).map(([value, label]) => (
