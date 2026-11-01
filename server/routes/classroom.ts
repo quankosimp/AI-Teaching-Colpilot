@@ -3318,6 +3318,17 @@ export function classroomRouter(config: AppConfig) {
       const { updatedSubmission, evidence } = await db.$transaction(
         async (tx) => {
           await lockSession(tx, submission.sessionId);
+          const currentSubmission = await tx.submission.findUniqueOrThrow({
+            where: { id: submission.id },
+          });
+          if (
+            currentSubmission.sessionId !== submission.sessionId ||
+            (expected !== null && currentSubmission.version !== expected)
+          )
+            throw new SessionConflict(
+              "VERSION_CONFLICT",
+              "Bài nộp đã thay đổi phiên bản",
+            );
           const updated = await tx.submission.update({
             where: { id: submission.id },
             data: {

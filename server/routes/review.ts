@@ -59,25 +59,26 @@ async function resolveCurrentSourceVersion(
   sourceId: string | null,
   sessionId: string,
   client: Prisma.TransactionClient = db,
+  studentId?: string,
 ): Promise<number> {
   if (!sourceId || !safeId.safeParse(sourceId).success) return 1;
   if (sourceType === "submission") {
     const sub = await client.submission.findFirst({
-      where: { id: sourceId, sessionId },
+      where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
       select: { version: true },
     });
     return sub?.version ?? 0;
   }
   if (sourceType === "board_attempt") {
     const att = await client.boardAttempt.findFirst({
-      where: { id: sourceId, sessionId },
+      where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
       select: { id: true },
     });
     return att ? 1 : 0;
   }
   if (sourceType === "check_response") {
     const resp = await client.checkResponse.findFirst({
-      where: { id: sourceId, sessionId },
+      where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
       select: { id: true },
     });
     return resp ? 1 : 0;
@@ -285,6 +286,21 @@ export function reviewRouter(config: AppConfig) {
         res,
         `/sessions/${session.id}/evidence`,
         async (tx) => {
+          await lockSession(tx, session.id);
+          if (
+            sourceType !== "note" &&
+            (await resolveCurrentSourceVersion(
+              sourceType,
+              sourceId,
+              session.id,
+              tx,
+              parsed.data.studentId,
+            )) !== sourceVersion
+          )
+            throw new SessionConflict(
+              "VERSION_CONFLICT",
+              "Nguồn minh chứng không còn hợp lệ",
+            );
           const ev = await tx.evidence.create({
             data: {
               sessionId: session.id,
@@ -912,6 +928,22 @@ export function reviewRouter(config: AppConfig) {
                 "VALIDATION_ERROR",
                 "Minh chứng không còn hợp lệ",
               );
+            for (const item of currentEvidence) {
+              if (
+                item.sourceType !== "note" &&
+                (await resolveCurrentSourceVersion(
+                  item.sourceType,
+                  item.sourceId ?? item.submissionId,
+                  item.sessionId,
+                  tx,
+                  item.studentId,
+                )) !== item.sourceVersion
+              )
+                throw new SessionConflict(
+                  "VERSION_CONFLICT",
+                  "Nguồn minh chứng đã thay đổi",
+                );
+            }
             if (current.status === "reviewed") {
               const reopened = await tx.session.update({
                 where: { id: session.id },
@@ -1021,6 +1053,21 @@ export function reviewRouter(config: AppConfig) {
               "VERSION_CONFLICT",
               "Minh chứng đã thay đổi",
             );
+          for (const item of liveObservations) {
+            if (
+              item.sourceType !== "note" &&
+              (await resolveCurrentSourceVersion(
+                item.sourceType,
+                item.sourceId ?? item.submissionId,
+                item.sessionId,
+                tx,
+              )) !== item.sourceVersion
+            )
+              throw new SessionConflict(
+                "VERSION_CONFLICT",
+                "Nguồn minh chứng đã thay đổi",
+              );
+          }
           if (current.status === "reviewed") {
             const reopened = await tx.session.update({
               where: { id: session.id },
