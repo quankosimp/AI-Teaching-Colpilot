@@ -228,7 +228,31 @@ test(
         chat: false,
       });
 
-      // Malformed tools on session: default deny
+      // CG2-01: Global tools false + member override true => capabilities false
+      await db.session.update({
+        where: { id },
+        data: {
+          tools: { board: false, upload: false, check: false, chat: false },
+        },
+      });
+      await db.roomMember.update({
+        where: { id: g1.memberId },
+        data: {
+          canWrite: true,
+          toolOverrides: { board: true, upload: true, check: true, chat: true },
+        },
+      });
+      const roomGlobalDisabled = await (
+        await call("/room/state", g1.accessToken)
+      ).json();
+      assert.deepEqual(roomGlobalDisabled.capabilities, {
+        boardWrite: false,
+        upload: false,
+        check: false,
+        chat: false,
+      });
+
+      // CG2-01: Malformed tools on session + override true: default deny all
       await db.session.update({
         where: { id },
         data: { tools: { invalid: "broken" } as never },
@@ -241,6 +265,53 @@ test(
         upload: false,
         check: false,
         chat: false,
+      });
+
+      // CG2-01: Global tools true + member override false => deny overridden tools
+      await db.session.update({
+        where: { id },
+        data: {
+          tools: { board: true, upload: true, check: true, chat: true },
+        },
+      });
+      await db.roomMember.update({
+        where: { id: g1.memberId },
+        data: {
+          canWrite: true,
+          toolOverrides: {
+            board: false,
+            upload: false,
+            check: false,
+            chat: false,
+          },
+        },
+      });
+      const roomMemberDisabled = await (
+        await call("/room/state", g1.accessToken)
+      ).json();
+      assert.deepEqual(roomMemberDisabled.capabilities, {
+        boardWrite: false,
+        upload: false,
+        check: false,
+        chat: false,
+      });
+
+      // CG2-01: Global tools true + override undefined/true => allowed
+      await db.roomMember.update({
+        where: { id: g1.memberId },
+        data: {
+          canWrite: true,
+          toolOverrides: { board: true },
+        },
+      });
+      const roomAllowed = await (
+        await call("/room/state", g1.accessToken)
+      ).json();
+      assert.deepEqual(roomAllowed.capabilities, {
+        boardWrite: true,
+        upload: true,
+        check: true,
+        chat: true,
       });
 
       // Restore session and member settings
@@ -594,6 +665,240 @@ test(
       });
       await call(`/sessions/${id}/members/${g2.memberId}`, a, "PATCH", {
         toolOverrides: { chat: true, upload: true },
+      });
+
+      // CG2-01: Regression verification for tool permissions across all 4 tools
+      const toolPermCheckResp = await call(`/sessions/${id}/checks`, a, "POST", {
+        activityId,
+        question: "Tool permission regression check",
+      });
+      assert.equal(toolPermCheckResp.status, 201);
+      const toolPermCheck = (await toolPermCheckResp.json()).check;
+
+      // 1. global false + member true => capabilities false and student commands 403 for ALL 4 tools
+      await db.session.update({
+        where: { id },
+        data: {
+          tools: { board: false, upload: false, check: false, chat: false },
+        },
+      });
+      await db.roomMember.update({
+        where: { id: g2.memberId },
+        data: {
+          canWrite: true,
+          toolOverrides: { board: true, upload: true, check: true, chat: true },
+        },
+      });
+      const roomGlobalOff = await (
+        await call("/room/state", g2.accessToken)
+      ).json();
+      assert.deepEqual(roomGlobalOff.capabilities, {
+        boardWrite: false,
+        upload: false,
+        check: false,
+        chat: false,
+      });
+      const [cmdBoard1, cmdUpload1, cmdChat1, cmdCheck1] = await Promise.all([
+        call(`/sessions/${id}/boards/own`, g2.accessToken, "PUT", {
+          operation: "clearOwnStrokes",
+        }),
+        call(`/sessions/${id}/submissions`, g2.accessToken, "POST", {
+          title: "disallowed",
+          answer: "fail",
+        }),
+        call(`/sessions/${id}/messages`, g2.accessToken, "POST", {
+          text: "disallowed chat",
+        }),
+        call(`/checks/${toolPermCheck.id}/responses`, g2.accessToken, "POST", {
+          answer: "disallowed check",
+        }),
+      ]);
+      assert.equal(cmdBoard1.status, 403);
+      assert.equal(cmdUpload1.status, 403);
+      assert.equal(cmdChat1.status, 403);
+      assert.equal(cmdCheck1.status, 403);
+
+      // 2. malformed global + override true deny
+      await db.session.update({
+        where: { id },
+        data: { tools: { invalid: "broken" } as never },
+      });
+      const [cmdBoard2, cmdUpload2, cmdChat2, cmdCheck2] = await Promise.all([
+        call(`/sessions/${id}/boards/own`, g2.accessToken, "PUT", {
+          operation: "clearOwnStrokes",
+        }),
+        call(`/sessions/${id}/submissions`, g2.accessToken, "POST", {
+          title: "disallowed",
+          answer: "fail",
+        }),
+        call(`/sessions/${id}/messages`, g2.accessToken, "POST", {
+          text: "disallowed chat",
+        }),
+        call(`/checks/${toolPermCheck.id}/responses`, g2.accessToken, "POST", {
+          answer: "disallowed check",
+        }),
+      ]);
+      assert.equal(cmdBoard2.status, 403);
+      assert.equal(cmdUpload2.status, 403);
+      assert.equal(cmdChat2.status, 403);
+      assert.equal(cmdCheck2.status, 403);
+
+      // 3. global true + member false deny
+      await db.session.update({
+        where: { id },
+        data: {
+          tools: { board: true, upload: true, check: true, chat: true },
+        },
+      });
+      await db.roomMember.update({
+        where: { id: g2.memberId },
+        data: {
+          canWrite: true,
+          toolOverrides: {
+            board: false,
+            upload: false,
+            check: false,
+            chat: false,
+          },
+        },
+      });
+      const [cmdBoard3, cmdUpload3, cmdChat3, cmdCheck3] = await Promise.all([
+        call(`/sessions/${id}/boards/own`, g2.accessToken, "PUT", {
+          operation: "clearOwnStrokes",
+        }),
+        call(`/sessions/${id}/submissions`, g2.accessToken, "POST", {
+          title: "disallowed",
+          answer: "fail",
+        }),
+        call(`/sessions/${id}/messages`, g2.accessToken, "POST", {
+          text: "disallowed chat",
+        }),
+        call(`/checks/${toolPermCheck.id}/responses`, g2.accessToken, "POST", {
+          answer: "disallowed check",
+        }),
+      ]);
+      assert.equal(cmdBoard3.status, 403);
+      assert.equal(cmdUpload3.status, 403);
+      assert.equal(cmdChat3.status, 403);
+      assert.equal(cmdCheck3.status, 403);
+
+      // 4. global true + override undefined/true allowed
+      await db.roomMember.update({
+        where: { id: g2.memberId },
+        data: {
+          canWrite: true,
+          toolOverrides: { board: true, upload: true, check: true, chat: true },
+        },
+      });
+      const [cmdBoard4, cmdUpload4, cmdChat4, cmdCheck4] = await Promise.all([
+        call(`/sessions/${id}/boards/own`, g2.accessToken, "PUT", {
+          operation: "clearOwnStrokes",
+        }),
+        call(`/sessions/${id}/submissions`, g2.accessToken, "POST", {
+          title: "allowed",
+          answer: "success",
+        }),
+        call(`/sessions/${id}/messages`, g2.accessToken, "POST", {
+          text: "allowed chat",
+        }),
+        call(`/checks/${toolPermCheck.id}/responses`, g2.accessToken, "POST", {
+          answer: "allowed check",
+        }),
+      ]);
+      assert.equal(cmdBoard4.status, 200);
+      assert.equal(cmdUpload4.status, 201);
+      assert.equal(cmdChat4.status, 201);
+      assert.equal(cmdCheck4.status, 201);
+
+      // boardWrite gated by canWrite while upload/check/chat independent
+      await db.roomMember.update({
+        where: { id: g2.memberId },
+        data: { canWrite: false },
+      });
+      const roomNoWriteG2 = await (
+        await call("/room/state", g2.accessToken)
+      ).json();
+      assert.deepEqual(roomNoWriteG2.capabilities, {
+        boardWrite: false,
+        upload: true,
+        check: true,
+        chat: true,
+      });
+      assert.equal(
+        (
+          await call(`/sessions/${id}/boards/own`, g2.accessToken, "PUT", {
+            operation: "clearOwnStrokes",
+          })
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await call(`/sessions/${id}/messages`, g2.accessToken, "POST", {
+            text: "chat still works when canWrite is false",
+          })
+        ).status,
+        201,
+      );
+
+      // 5. Controlled race: global disable before retry locked write revalidates deny
+      await db.roomMember.update({
+        where: { id: g2.memberId },
+        data: { canWrite: true, toolOverrides: { board: true, chat: true } },
+      });
+      const sBeforeBoardRace = await db.session.findUniqueOrThrow({
+        where: { id },
+      });
+      const [disableBoardRace, lateBoardWrite] = await orderedRace(
+        () =>
+          call(
+            `/sessions/${id}`,
+            a,
+            "PATCH",
+            { tools: { board: false } },
+            { "If-Match-Version": String(sBeforeBoardRace.version) },
+          ),
+        () =>
+          call(`/sessions/${id}/boards/own`, g2.accessToken, "PUT", {
+            operation: "clearOwnStrokes",
+          }),
+      );
+      assert.equal(disableBoardRace.status, 200);
+      assert.equal(lateBoardWrite.status, 403);
+
+      const sBeforeChatRace = await db.session.findUniqueOrThrow({
+        where: { id },
+      });
+      const [disableChatRace, lateChatWrite] = await orderedRace(
+        () =>
+          call(
+            `/sessions/${id}`,
+            a,
+            "PATCH",
+            { tools: { chat: false } },
+            { "If-Match-Version": String(sBeforeChatRace.version) },
+          ),
+        () =>
+          call(`/sessions/${id}/messages`, g2.accessToken, "POST", {
+            text: "late chat during race",
+          }),
+      );
+      assert.equal(disableChatRace.status, 200);
+      assert.equal(lateChatWrite.status, 403);
+
+      // Close the tool check and restore session tools + member settings
+      await call(`/checks/${toolPermCheck.id}`, a, "PATCH", {
+        status: "closed",
+      });
+      await db.session.update({
+        where: { id },
+        data: {
+          tools: { board: true, upload: true, check: true, chat: true },
+        },
+      });
+      await db.roomMember.update({
+        where: { id: g2.memberId },
+        data: { canWrite: true, toolOverrides: {} },
       });
       const bytes = Buffer.from("%PDF-1.4\nprivate submission\n%%EOF\n");
       const intentResponse = await call(

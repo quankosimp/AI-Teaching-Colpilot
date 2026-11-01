@@ -189,13 +189,13 @@ async function checkStudentToolAccess(
   const overrides =
     Tools.partial().safeParse(member.toolOverrides ?? {}).data ?? {};
   const toolEnabled =
-    toolKey === "reaction" ? true : Boolean(sessionTools[toolKey]);
+    toolKey === "reaction"
+      ? true
+      : parsedTools.success && sessionTools[toolKey] === true;
   const memberToolEnabled =
     toolKey === "reaction"
       ? true
-      : overrides[toolKey] !== undefined
-        ? Boolean(overrides[toolKey])
-        : true;
+      : overrides[toolKey] !== false;
   const ctx = StudentToolWriteContext.safeParse({
     status: session.status,
     memberState: member.state,
@@ -243,21 +243,18 @@ async function lockLiveAccess(
       tx.roomMember.findUnique({ where: { id: actor.memberId } }),
       tx.studentRoomSession.findUnique({ where: { id: actor.grantId } }),
     ]);
-    const tools = Tools.safeParse(session.tools).data ?? {
-      board: false,
-      upload: false,
-      check: false,
-      chat: false,
-    };
-    const overrides = Tools.partial().safeParse(
-      member?.toolOverrides ?? {},
-    ).data;
+    const toolsParsed = Tools.safeParse(session.tools);
+    const globalTools = toolsParsed.success
+      ? toolsParsed.data
+      : { board: false, upload: false, check: false, chat: false };
+    const overrides =
+      Tools.partial().safeParse(member?.toolOverrides ?? {}).data ?? {};
     const toolAllowed =
       tool === "reaction"
         ? true
-        : overrides?.[tool] !== undefined
-          ? overrides[tool]
-          : tools[tool];
+        : toolsParsed.success &&
+          globalTools[tool] === true &&
+          overrides[tool] !== false;
     if (
       !member ||
       member.sessionId !== sessionId ||
@@ -1959,10 +1956,11 @@ export function classroomRouter(config: AppConfig) {
         toolKey: "board" | "upload" | "check" | "chat",
       ) => {
         if (!isLiveJoinedGranted) return false;
-        if (memberOverrides[toolKey] !== undefined) {
-          return Boolean(memberOverrides[toolKey]);
-        }
-        return Boolean(sessionTools[toolKey]);
+        if (!parsedTools.success) return false;
+        return (
+          sessionTools[toolKey] === true &&
+          memberOverrides[toolKey] !== false
+        );
       };
 
       const capabilities = {
@@ -2242,17 +2240,21 @@ export function classroomRouter(config: AppConfig) {
             const grant = await tx.studentRoomSession.findUnique({
               where: { id: actor.grantId },
             });
-            const tools = Tools.safeParse(currentSession.tools).data ?? {
-              board: false,
-              upload: false,
-              check: false,
-              chat: false,
-            };
-            const overrides = Tools.partial().safeParse(
-              member?.toolOverrides ?? {},
-            ).data;
+            const toolsParsed = Tools.safeParse(currentSession.tools);
+            const tools = toolsParsed.success
+              ? toolsParsed.data
+              : {
+                  board: false,
+                  upload: false,
+                  check: false,
+                  chat: false,
+                };
+            const overrides =
+              Tools.partial().safeParse(member?.toolOverrides ?? {}).data ?? {};
             const boardEnabled =
-              overrides?.board !== undefined ? overrides.board : tools.board;
+              toolsParsed.success &&
+              tools.board === true &&
+              overrides.board !== false;
             if (
               !grant ||
               grant.revokedAt ||
@@ -3594,10 +3596,8 @@ export function classroomRouter(config: AppConfig) {
             "SESSION_NOT_LIVE",
             "Buổi học chưa bắt đầu hoặc đã kết thúc",
           );
-        const tools = Tools.safeParse(session.tools).success
-          ? Tools.parse(session.tools)
-          : { board: false, upload: false, check: false, chat: false };
-        if (!tools.chat)
+        const toolsParsed = Tools.safeParse(session.tools);
+        if (!toolsParsed.success || !toolsParsed.data.chat)
           return fail(
             res,
             403,
