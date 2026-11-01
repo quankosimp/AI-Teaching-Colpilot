@@ -198,9 +198,7 @@ export function reviewRouter(config: AppConfig) {
   // 1. Evidence List (Session-scoped and Workspace-scoped with filters + pagination)
   r.get(
     "/sessions/:id/evidence",
-    asyncRoute(async (req, res) =>
-      handleEvidenceList(req, res, req.params.id),
-    ),
+    asyncRoute(async (req, res) => handleEvidenceList(req, res, req.params.id)),
   );
   r.get(
     "/evidence",
@@ -386,6 +384,14 @@ export function reviewRouter(config: AppConfig) {
           : parsed.data.status === "corrected"
             ? "active"
             : (parsed.data.status ?? evidence.status);
+      if (
+        (parsed.data.detail === undefined ||
+          parsed.data.detail === evidence.detail) &&
+        (parsed.data.support === undefined ||
+          parsed.data.support === evidence.support) &&
+        nextStatus === evidence.status
+      )
+        return res.json({ evidence });
       const reasonCode =
         nextStatus === "deleted" ? "source_deleted" : "source_corrected";
 
@@ -557,7 +563,12 @@ export function reviewRouter(config: AppConfig) {
         );
       const expected = versionHeader(req);
       if (expected === -1)
-        return fail(res, 400, "VALIDATION_ERROR", "If-Match-Version không hợp lệ");
+        return fail(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "If-Match-Version không hợp lệ",
+        );
 
       const submission = await db.submission.findUnique({
         where: { id: req.params.id },
@@ -830,8 +841,7 @@ export function reviewRouter(config: AppConfig) {
           "Dữ liệu dự thảo nhận định không hợp lệ",
         );
 
-      const targetStudentId =
-        parsed.data.studentId ?? session.primaryStudentId;
+      const targetStudentId = parsed.data.studentId ?? session.primaryStudentId;
 
       if (parsed.data.text && parsed.data.evidenceIds) {
         const uniqueIds = [...new Set(parsed.data.evidenceIds)];
@@ -1011,7 +1021,12 @@ export function reviewRouter(config: AppConfig) {
       }
       const headerVer = versionHeader(req);
       if (headerVer === -1)
-        return fail(res, 400, "VALIDATION_ERROR", "If-Match-Version không hợp lệ");
+        return fail(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "If-Match-Version không hợp lệ",
+        );
       if (
         claim.revision !== parsed.data.revision ||
         (headerVer !== null && claim.revision !== headerVer)
@@ -1026,7 +1041,12 @@ export function reviewRouter(config: AppConfig) {
       const cmd = parsed.data;
       if (cmd.action === "approve" || cmd.action === "edit") {
         if (cmd.evidenceIds.some((id) => !safeId.safeParse(id).success))
-          return fail(res, 400, "VALIDATION_ERROR", "ID minh chứng không hợp lệ");
+          return fail(
+            res,
+            400,
+            "VALIDATION_ERROR",
+            "ID minh chứng không hợp lệ",
+          );
         const evidenceRows = await db.evidence.findMany({
           where: { id: { in: cmd.evidenceIds } },
           include: { sessionIdRef: { select: { teacherId: true } } },
@@ -1135,10 +1155,7 @@ export function reviewRouter(config: AppConfig) {
           },
         });
 
-        if (
-          cmd.action === "edit" &&
-          claim.sessionIdRef.status === "reviewed"
-        ) {
+        if (cmd.action === "edit" && claim.sessionIdRef.status === "reviewed") {
           const reopened = nextSessionStatus(
             claim.sessionIdRef.status,
             "review_reopened",
@@ -1183,8 +1200,7 @@ export function reviewRouter(config: AppConfig) {
             metadata: {
               previousStatus: claim.status,
               nextStatus,
-              reasonCode:
-                cmd.action === "edit" ? "claim_edited" : "manual",
+              reasonCode: cmd.action === "edit" ? "claim_edited" : "manual",
               revision: cmd.revision + 1,
             },
           },

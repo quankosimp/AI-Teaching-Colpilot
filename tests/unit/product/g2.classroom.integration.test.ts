@@ -477,6 +477,24 @@ test(
         (await call(`/sessions/${id}/complete-review`, a, "POST", {})).status,
         200,
       );
+      const noop = await call(
+        `/evidence/${evidence.id}`,
+        a,
+        "PATCH",
+        { detail: evidence.detail },
+        { "If-Match-Version": String(evidence.version) },
+      );
+      assert.equal(noop.status, 200);
+      assert.equal((await noop.json()).evidence.version, evidence.version);
+      const beforeCorrection = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      assert.equal(beforeCorrection.session.status, "reviewed");
+      assert.equal(
+        beforeCorrection.claims.find((c: { id: string }) => c.id === claim.id)
+          .status,
+        "approved",
+      );
       assert.equal(
         (
           await call(
