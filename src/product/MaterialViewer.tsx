@@ -4,11 +4,21 @@ import { AnnotationLayer } from "./presentation";
 import { Modal } from "./ui";
 import { api } from "./onlineApi";
 
-type Annotation = {
+type SavedAnnotation = {
   id: string;
   materialId: string;
   materialVersion: number;
   activityId: string;
+  page: number;
+  x: number;
+  y: number;
+  text: string;
+};
+type Annotation = {
+  id: string;
+  materialId?: string;
+  materialVersion?: number;
+  activityId?: string;
   page: number;
   x: number;
   y: number;
@@ -26,7 +36,7 @@ type Props = {
   sessionId?: string;
   activityId?: string;
   students?: { id: string; name: string }[];
-  onSaved?: (annotation: Annotation) => void;
+  onSaved?: (annotation: SavedAnnotation) => void;
 };
 
 export function MaterialViewer({
@@ -57,6 +67,7 @@ export function MaterialViewer({
   const [opened, setOpened] = useState("");
   const [text, setText] = useState("");
   const [studentId, setStudentId] = useState("");
+  const [sharedWithClass, setSharedWithClass] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [renderedPage, setRenderedPage] = useState(0);
@@ -194,9 +205,9 @@ export function MaterialViewer({
   const visible = annotations
     .filter(
       (item) =>
-        item.materialId === materialId &&
-        item.materialVersion === version &&
-        (!activityId || item.activityId === activityId),
+        (!item.materialId || item.materialId === materialId) &&
+        (!item.materialVersion || item.materialVersion === version) &&
+        (!activityId || !item.activityId || item.activityId === activityId),
     )
     .map((item) => ({ ...item, page: item.page + 1 }));
   return (
@@ -253,6 +264,7 @@ export function MaterialViewer({
           onCreatePin={(position) => {
             setText("");
             setStudentId("");
+            setSharedWithClass(false);
             setPin(position);
           }}
           onOpenAnnotation={setOpened}
@@ -272,7 +284,7 @@ export function MaterialViewer({
               event.preventDefault();
               setSaving(true);
               setSaveError("");
-              void api<{ annotation: Annotation }>(
+              void api<{ annotation: SavedAnnotation }>(
                 `/sessions/${sessionId}/annotations`,
                 {
                   method: "POST",
@@ -284,7 +296,11 @@ export function MaterialViewer({
                     x: pin.x,
                     y: pin.y,
                     text: text.trim(),
-                    ...(studentId ? { studentId } : {}),
+                    ...(studentId
+                      ? { studentId }
+                      : sharedWithClass
+                        ? { sharedWithClass: true }
+                        : {}),
                   }),
                 },
               )
@@ -313,7 +329,10 @@ export function MaterialViewer({
               Gắn học sinh
               <select
                 value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
+                onChange={(e) => {
+                  setStudentId(e.target.value);
+                  if (e.target.value) setSharedWithClass(false);
+                }}
               >
                 <option value="">Chỉ chú thích</option>
                 {students.map((student) => (
@@ -323,6 +342,16 @@ export function MaterialViewer({
                 ))}
               </select>
             </label>
+            {!studentId && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={sharedWithClass}
+                  onChange={(e) => setSharedWithClass(e.target.checked)}
+                />{" "}
+                Chia sẻ chú thích với cả lớp
+              </label>
+            )}
             {saveError && <p role="alert">{saveError}</p>}
             <button
               className="button primary"
