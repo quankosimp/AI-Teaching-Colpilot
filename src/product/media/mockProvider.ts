@@ -28,6 +28,7 @@ export function createMockSession(
   let audioMuted = false;
   let videoOn = true;
   let isSharing = false;
+  let isDestroyed = false;
 
   const permissions: MediaDevicePermissions = {
     audio: "granted",
@@ -74,7 +75,7 @@ export function createMockSession(
     });
   }
 
-  // Render mock UI inside container
+  // Render mock UI inside container using strict DOM manipulation (no innerHTML interpolation)
   container.innerHTML = "";
   const mockRoot = document.createElement("div");
   mockRoot.className = "mock-media";
@@ -92,6 +93,7 @@ export function createMockSession(
   mockRoot.appendChild(grid);
 
   function renderTiles() {
+    if (isDestroyed) return;
     grid.innerHTML = "";
     participantsMap.forEach((p) => {
       const tile = document.createElement("div");
@@ -101,12 +103,14 @@ export function createMockSession(
 
       const avatar = document.createElement("div");
       avatar.className = "mock-media__avatar";
-      avatar.textContent = p.name.slice(0, 2).toUpperCase();
+      avatar.textContent = (p.name || "").slice(0, 2).toUpperCase();
 
       if (p.videoOn) {
         const preview = document.createElement("div");
         preview.className = "mock-media__video-sim";
-        preview.innerHTML = `<span>[Video: ${p.name}]</span>`;
+        const simSpan = document.createElement("span");
+        simSpan.textContent = `[Video: ${p.name}]`;
+        preview.appendChild(simSpan);
         tile.appendChild(preview);
       } else {
         tile.appendChild(avatar);
@@ -114,10 +118,17 @@ export function createMockSession(
 
       const info = document.createElement("div");
       info.className = "mock-media__tile-info";
-      info.innerHTML = `
-        <span class="mock-media__tile-name">${p.name}${p.isSelf ? " (Bạn)" : ""}${p.isHost ? " ★" : ""}</span>
-        <span class="mock-media__tile-status">${p.audioMuted ? "🔇 Mic tắt" : "🎙️ Mic bật"}${p.isSharing ? " · 🖥️ Đang chia sẻ" : ""}</span>
-      `;
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "mock-media__tile-name";
+      nameSpan.textContent = `${p.name}${p.isSelf ? " (Bạn)" : ""}${p.isHost ? " ★" : ""}`;
+
+      const statusSpan = document.createElement("span");
+      statusSpan.className = "mock-media__tile-status";
+      statusSpan.textContent = `${p.audioMuted ? "🔇 Mic tắt" : "🎙️ Mic bật"}${p.isSharing ? " · 🖥️ Đang chia sẻ" : ""}`;
+
+      info.appendChild(nameSpan);
+      info.appendChild(statusSpan);
       tile.appendChild(info);
       grid.appendChild(tile);
     });
@@ -126,8 +137,10 @@ export function createMockSession(
   container.appendChild(mockRoot);
   renderTiles();
 
-  // Async simulated connection
-  setTimeout(() => {
+  // Async simulated connection with timer handle for cleanup
+  let connectTimer: any = setTimeout(() => {
+    connectTimer = null;
+    if (isDestroyed) return;
     status = "connected";
     emit("status-change", status);
     emit("participants-change", Array.from(participantsMap.values()));
@@ -145,6 +158,7 @@ export function createMockSession(
     getDevicePermissions: () => ({ ...permissions }),
 
     async toggleAudio(muted?: boolean) {
+      if (isDestroyed) return false;
       audioMuted = muted !== undefined ? muted : !audioMuted;
       const self = participantsMap.get(config.userId);
       if (self) {
@@ -163,6 +177,7 @@ export function createMockSession(
     },
 
     async toggleVideo(on?: boolean) {
+      if (isDestroyed) return false;
       videoOn = on !== undefined ? on : !videoOn;
       const self = participantsMap.get(config.userId);
       if (self) self.videoOn = videoOn;
@@ -172,6 +187,7 @@ export function createMockSession(
     },
 
     async toggleShare(sharing?: boolean) {
+      if (isDestroyed) return false;
       isSharing = sharing !== undefined ? sharing : !isSharing;
       const self = participantsMap.get(config.userId);
       if (self) self.isSharing = isSharing;
@@ -187,6 +203,11 @@ export function createMockSession(
     },
 
     async leave() {
+      if (connectTimer) {
+        clearTimeout(connectTimer);
+        connectTimer = null;
+      }
+      isDestroyed = true;
       status = "disconnected";
       emit("status-change", status);
     },

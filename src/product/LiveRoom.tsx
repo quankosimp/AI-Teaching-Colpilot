@@ -276,6 +276,10 @@ export function LiveRoom({
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [connected, setConnected] = useState(false);
+  const [mediaVideoStatus, setMediaVideoStatus] = useState("chưa cấu hình");
+  const handleMediaError = useCallback((err: string) => {
+    console.warn("[LiveRoom Media]", err);
+  }, []);
   const [unsentStroke, setUnsentStroke] = useState<{
     operation: "addStroke";
     stroke: import("./OnlineBoard").BoardStroke;
@@ -471,8 +475,8 @@ export function LiveRoom({
         </button>
         <h1>{s?.title || "Phòng chờ"}</h1>
         <p>
-          Kết nối dữ liệu: {connected ? "đang kết nối" : "mất kết nối"} · Video:
-          chưa cấu hình
+          Kết nối dữ liệu: {connected ? "đang kết nối" : "mất kết nối"} · Video:{" "}
+          {mediaVideoStatus}
         </p>
         {!grant && s && <div className="online-room__lifecycle">
               <button
@@ -524,7 +528,8 @@ export function LiveRoom({
               }
               userId={grant?.studentId || teacherId || "teacher"}
               request={request}
-              onError={(err) => console.warn("[LiveRoom Media]", err)}
+              onError={handleMediaError}
+              onStatusChange={setMediaVideoStatus}
             />
             {!grant && (
               <div aria-label="Chọn nội dung chung">
