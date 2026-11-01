@@ -27,7 +27,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import http from 'node:http';
 
 // CLI / Environment Configuration
@@ -79,13 +79,17 @@ function logInfo(title, detail = '') {
 function requestHttp(url, options = {}, bodyBuffer = null) {
   return new Promise((resolve) => {
     const parsed = new URL(url);
+    const headers = { ...(options.headers || {}) };
+    if (bodyBuffer && !headers['Content-Length'] && !headers['content-length']) {
+      headers['Content-Length'] = Buffer.byteLength(bodyBuffer);
+    }
     const reqOptions = {
       protocol: parsed.protocol,
       hostname: parsed.hostname,
       port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
       path: parsed.pathname + parsed.search,
       method: options.method || 'GET',
-      headers: options.headers || {},
+      headers,
       timeout: options.timeout || 5000,
     };
 
@@ -486,6 +490,7 @@ async function main() {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${teacherAToken}`,
               Origin: GATEWAY_URL,
+              'Idempotency-Key': randomUUID(),
             },
           },
           Buffer.from(
