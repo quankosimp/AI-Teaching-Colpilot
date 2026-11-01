@@ -8,6 +8,8 @@
 - Independent static audit1955fca returned NEEDS_FIXES with six concrete findings: private next-session activity titles, quick-check regrading revisions/invalidation, stale status during submission regrading, annotation/student provenance, concurrent tool-override merges and outbox failure ordering. Product and QA received exact fixes/regression cases. Evidence: evidence/g2-independent-review-1955fca.md. Supervisor continues to hold G2 open.
 - Preferred Review providers are quota-blocked (Gemini34h, Opus155h); independent Codex reviewer865d2663 completed Docker remediation audit and is reviewing G2. Product/Ops code writers remain separate from reviewer. At most three workers execute concurrently.
 
+- Dedicated UI worker60cbc5dd launched on the existing separate UI worktree to finish classroom/lobby/tools/review presentation and 360px/light/dark/keyboard checks against exact G2 source1955fca. Product owns container wiring; UI edits remain restricted to presentation/CSS/ui.tsx. Current concurrent workers: Product, QA and UI; independent reviewer is idle after reporting.
+
 ### Earlier execution records
 
 - Root baseline c0c7841 now includes reviewed G0 via merge 8b7063e; QA contract tests and UI presentations integrated through 426e971, test CI/harness through 653f3a0.

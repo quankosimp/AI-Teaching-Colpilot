@@ -403,7 +403,7 @@
       "id": "UI-03",
       "owner": "UI",
       "title": "Invite, consent, lobby, denial and expired/revoked states",
-      "status": "in_review",
+      "status": "running",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
@@ -419,7 +419,7 @@
       "id": "UI-04",
       "owner": "UI",
       "title": "Classroom/media and separate realtime/video status",
-      "status": "in_review",
+      "status": "running",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
@@ -435,7 +435,7 @@
       "id": "UI-05",
       "owner": "UI",
       "title": "Board/annotation/check/submission/support presentation",
-      "status": "in_review",
+      "status": "running",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
@@ -451,7 +451,7 @@
       "id": "UI-06",
       "owner": "UI",
       "title": "Source/AI/per-student review and approved-vs-draft presentation",
-      "status": "in_review",
+      "status": "running",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
@@ -467,7 +467,7 @@
       "id": "UI-07",
       "owner": "UI",
       "title": "360px responsive, light/dark, keyboard, contrast and unavailable features",
-      "status": "in_review",
+      "status": "running",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
@@ -1009,6 +1009,11 @@
       "task": "PRODUCT-12-A",
       "scope": "Same preserved operations worktree and exclusive Docker/deploy files; previous worker output ended in provider filter error after clean commit c681776.",
       "last_event": "PRODUCT-12-A accepted locally at583784d after independent review and supervisor runtime checks; executor idle, parent PRODUCT-12 operations still incomplete."
+    },
+    "UI": {
+      "agentId": "60cbc5dd-5411-4b1f-a67c-7bef517cbd18",
+      "provider": "codex-alt/gpt-6.1-terra",
+      "scope": "Dedicated UI writer in preserved UI worktree; only ui.tsx, CSS and presentation components; auditing exact G2 UI1955fca with own test services/fixtures."
     }
   }
 }
