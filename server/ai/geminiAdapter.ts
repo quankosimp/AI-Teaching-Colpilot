@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { z } from "zod";
 import type {
   AIAdapter,
   CircuitStatus,
@@ -9,26 +10,42 @@ import type {
   TeachingRequestInput,
   TeachingSuggestionResult,
 } from "./types.js";
-import { CircuitBreaker } from "./circuitBreaker.js";
+import { CircuitBreaker, type CircuitBreakerConfig } from "./circuitBreaker.js";
 import { sanitizeContext, sanitizeErrorMessage } from "./sanitizer.js";
+
+const ClaimCandidateOutputSchema = z.strictObject({
+  text: z.string().min(5).max(1000),
+  evidenceIds: z.array(z.string().uuid()).min(1).max(10),
+  reasoning: z.string().max(500).optional(),
+});
+
+const ClaimsDraftOutputSchema = z.strictObject({
+  claims: z.array(ClaimCandidateOutputSchema).max(10),
+  summary: z.string().max(1000).optional(),
+});
 
 export interface GeminiAdapterConfig {
   apiKey: string;
   model: string;
   timeoutMs?: number;
+  circuitConfig?: CircuitBreakerConfig;
 }
 
 export class RealGeminiAdapter implements AIAdapter {
   readonly provider = "gemini" as const;
   readonly model: string;
-  private readonly client: GoogleGenAI;
-  private readonly timeoutMs: number;
-  private breaker = new CircuitBreaker();
+  private client: GoogleGenAI;
+  private breaker: CircuitBreaker;
+  private timeoutMs: number;
 
   constructor(config: GeminiAdapterConfig) {
+    if (!config.apiKey || !config.model) {
+      throw new Error("GEMINI_API_KEY and GEMINI_MODEL are required for RealGeminiAdapter");
+    }
     this.model = config.model;
     this.timeoutMs = config.timeoutMs ?? 10_000;
     this.client = new GoogleGenAI({ apiKey: config.apiKey });
+    this.breaker = new CircuitBreaker(config.circuitConfig);
   }
 
   getCircuitStatus(): CircuitStatus {
@@ -53,7 +70,7 @@ export class RealGeminiAdapter implements AIAdapter {
 
   private checkCircuit(): void {
     if (!this.breaker.canExecute()) {
-      throw new Error("AI_CIRCUIT_OPEN: Gemini tạm thời gián đoạn do lỗi liên tiếp; vui lòng thử lại sau.");
+      throw new Error("AI_CIRCUIT_OPEN: Dịch vụ AI tạm gián đoạn do lỗi liên tiếp; vui lòng thử lại sau.");
     }
   }
 
@@ -62,9 +79,14 @@ export class RealGeminiAdapter implements AIAdapter {
   ): Promise<TeachingSuggestionResult> {
     this.checkCircuit();
 
-    const cleanPrompt = sanitizeContext(input.prompt);
-    const cleanActivity = sanitizeContext(input.activity.title);
-    const cleanClaims = (input.priorApprovedClaims || []).map((c) => sanitizeContext(c));
+    const names = input.studentNames || [];
+    const cleanPrompt = sanitizeContext(input.prompt, names);
+    const cleanActivity = sanitizeContext(input.activity.title, names);
+    const cleanDesc = sanitizeContext(input.activity.description || "", names);
+    const cleanSubject = sanitizeContext(input.student.subject || "", names);
+    const cleanGrade = sanitizeContext(input.student.grade || "", names);
+    const cleanGoal = sanitizeContext(input.student.goal || "", names);
+    const cleanClaims = (input.priorApprovedClaims || []).map((c) => sanitizeContext(c, names));
 
     const modeLabels: Record<string, string> = {
       explain: "Giải thích lại khái niệm một cách trực quan, dễ hiểu",
@@ -77,8 +99,10 @@ export class RealGeminiAdapter implements AIAdapter {
       "Bạn là trợ lý sư phạm cho giáo viên trong lớp học trực tuyến.",
       `Yêu cầu: ${modeLabels[input.mode] || "Hỗ trợ sư phạm"}.`,
       `Hoạt động hiện tại: ${cleanActivity}.`,
-      input.student.subject ? `Môn: ${sanitizeContext(input.student.subject)}.` : "",
-      input.student.grade ? `Khối lớp: ${sanitizeContext(input.student.grade)}.` : "",
+      cleanDesc ? `Mô tả hoạt động: ${cleanDesc}.` : "",
+      cleanSubject ? `Môn: ${cleanSubject}.` : "",
+      cleanGrade ? `Khối lớp: ${cleanGrade}.` : "",
+      cleanGoal ? `Mục tiêu học tập: ${cleanGoal}.` : "",
       cleanPrompt ? `Lưu ý từ giáo viên: ${cleanPrompt}.` : "",
       cleanClaims.length > 0 ? `Lịch sử nhận định năng lực đã duyệt: ${cleanClaims.join("; ")}.` : "",
       "Quy tắc nghiêm ngặt: Trả lời ngắn gọn bằng tiếng Việt, thiết thực, không nhắc tên riêng học sinh, không bịa đặt thông tin cá nhân.",
@@ -97,7 +121,6 @@ export class RealGeminiAdapter implements AIAdapter {
 
       const text = response.text?.trim();
       if (!text) {
-        this.recordFailure();
         throw new Error("Gemini không trả gợi ý nội dung");
       }
 
@@ -108,7 +131,7 @@ export class RealGeminiAdapter implements AIAdapter {
         model: this.model,
         modelVersion: response.modelVersion || this.model,
         contextSummary: `Mode=${input.mode}; Activity=${cleanActivity}`,
-        promptUsed: cleanPrompt,
+        promptUsed: instructions,
         promptVersion: `teach-${input.mode}-v1`,
       };
     } catch (err) {
@@ -123,6 +146,9 @@ export class RealGeminiAdapter implements AIAdapter {
   ): Promise<ClaimDraftResult> {
     this.checkCircuit();
 
+    const names = input.studentNames || [];
+    const cleanExtra = sanitizeContext(input.extraPrompt || "", names);
+
     // 0-observation guard: no evidence -> no competence claim (SRS AI 004)
     if (!input.observations || input.observations.length === 0) {
       this.recordSuccess();
@@ -133,24 +159,34 @@ export class RealGeminiAdapter implements AIAdapter {
         model: this.model,
         modelVersion: this.model,
         contextSummary: "0 observations",
-        promptUsed: sanitizeContext(input.extraPrompt || ""),
+        promptUsed: cleanExtra,
         promptVersion: "claim-draft-v1",
       };
     }
 
-    const obsDescriptions = input.observations.map(
-      (o, idx) => `[ID: ${o.id}] Tiêu đề: ${sanitizeContext(o.title)}, Hỗ trợ: ${o.support}, Chi tiết: ${sanitizeContext(o.detail)}`,
+    const cleanObservations = input.observations.map((o) => ({
+      ...o,
+      title: sanitizeContext(o.title, names),
+      detail: sanitizeContext(o.detail, names),
+    }));
+
+    const cleanGoal = sanitizeContext(input.student.goal || "", names);
+    const obsDescriptions = cleanObservations.map(
+      (o) => `[ID: ${o.id}] Tiêu đề: ${o.title}, Hỗ trợ: ${o.support}, Chi tiết: ${o.detail}`,
     );
 
     const instructions = [
       "Bạn là trợ lý đánh giá năng lực học sinh sau buổi học.",
+      `Học sinh môn: ${sanitizeContext(input.student.subject || "", names)}, khối: ${sanitizeContext(input.student.grade || "", names)}.`,
+      cleanGoal ? `Mục tiêu học tập: ${cleanGoal}.` : "",
+      cleanExtra ? `Yêu cầu thêm từ giáo viên: ${cleanExtra}.` : "",
       "Nhiệm vụ: Tổng hợp các minh chứng quan sát thực tế thành 1 đến 2 nhận định năng lực dạng dự thảo (pending).",
       "Quy tắc nghiêm ngặt:",
       "1. Mỗi nhận định BẮT BUỘC phải trích dẫn đúng ID của ít nhất một minh chứng cung cấp bên dưới.",
-      "2. Không tạo nhận định mà không có ID minh chứng đính kèm.",
-      "3. Trả lời định dạng JSON với cấu trúc: {\"claims\": [{\"text\": \"...\", \"evidenceIds\": [\"id1\", \"id2\"]}]}",
+      "2. Không tạo nhận định mà không có ID minh chứng đính kèm. Không bịa đặt ID.",
+      "3. Trả lời định dạng JSON với cấu trúc: {\"claims\": [{\"text\": \"...\", \"evidenceIds\": [\"uuid\"]}]}",
       `Dữ liệu minh chứng quan sát:\n${obsDescriptions.join("\n")}`,
-    ].join("\n");
+    ].filter(Boolean).join("\n");
 
     try {
       const response = await this.client.models.generateContent({
@@ -165,27 +201,42 @@ export class RealGeminiAdapter implements AIAdapter {
       });
 
       const rawJson = response.text?.trim() || "{}";
-      let parsed: { claims?: Array<{ text?: string; evidenceIds?: string[] }> };
+      let parsedJson: unknown;
       try {
-        parsed = JSON.parse(rawJson);
+        parsedJson = JSON.parse(rawJson);
       } catch {
-        parsed = {};
+        parsedJson = { claims: [] };
+      }
+
+      const parsed = ClaimsDraftOutputSchema.safeParse(parsedJson);
+      if (!parsed.success) {
+        throw new Error("Dữ liệu nhận định từ Gemini không đúng định dạng yêu cầu");
       }
 
       const validEvidenceIdSet = new Set(input.observations.map((o) => o.id));
       const validClaims: ClaimDraftResult["claims"] = [];
 
-      for (const item of parsed.claims || []) {
-        if (!item.text || typeof item.text !== "string") continue;
-        const validIds = (item.evidenceIds || []).filter((id) =>
-          validEvidenceIdSet.has(id),
-        );
-        if (validIds.length > 0) {
-          validClaims.push({
-            text: item.text.trim(),
-            evidenceIds: validIds,
-          });
+      for (const item of parsed.data.claims) {
+        const text = item.text.trim();
+        if (text.length < 5) continue;
+
+        // Discard candidate wholly if duplicate evidence references exist
+        const uniqueIds = new Set(item.evidenceIds);
+        if (uniqueIds.size !== item.evidenceIds.length) {
+          continue;
         }
+
+        // Discard candidate wholly if ANY reference is hallucinated, peer or unknown
+        const allExist = item.evidenceIds.every((id) => validEvidenceIdSet.has(id));
+        if (!allExist || item.evidenceIds.length === 0) {
+          continue;
+        }
+
+        validClaims.push({
+          text,
+          evidenceIds: item.evidenceIds,
+          reasoning: item.reasoning?.trim(),
+        });
       }
 
       this.recordSuccess();
@@ -196,7 +247,7 @@ export class RealGeminiAdapter implements AIAdapter {
         model: this.model,
         modelVersion: response.modelVersion || this.model,
         contextSummary: `${input.observations.length} observations analyzed`,
-        promptUsed: sanitizeContext(input.extraPrompt || ""),
+        promptUsed: instructions,
         promptVersion: "claim-draft-v1",
       };
     } catch (err) {
@@ -211,10 +262,16 @@ export class RealGeminiAdapter implements AIAdapter {
   ): Promise<PlanSuggestionResult> {
     this.checkCircuit();
 
-    const cleanClaims = input.eligibleClaims.map((c) => sanitizeContext(c));
+    const names = input.studentNames || [];
+    const cleanClaims = input.eligibleClaims.map((c) => sanitizeContext(c, names));
+    const cleanSubject = sanitizeContext(input.subject || "", names);
+    const cleanGrade = sanitizeContext(input.grade || "", names);
+    const cleanGoal = sanitizeContext(input.goal || "", names);
+
     const prompt = [
       "Đề xuất một hoạt động ngắn cho giáo viên. Không đưa tên riêng, thông tin cá nhân hoặc kết luận mới. Trả lời ngắn bằng tiếng Việt.",
-      input.subject && input.grade ? `Môn: ${sanitizeContext(input.subject)}; lớp: ${sanitizeContext(input.grade)}.` : "",
+      cleanSubject && cleanGrade ? `Môn: ${cleanSubject}; lớp: ${cleanGrade}.` : "",
+      cleanGoal ? `Mục tiêu học tập: ${cleanGoal}.` : "",
       ...cleanClaims.map((c) => `Nhận định đã duyệt: ${c}`),
     ].filter(Boolean).join("\n");
 
@@ -231,7 +288,6 @@ export class RealGeminiAdapter implements AIAdapter {
 
       const text = response.text?.trim();
       if (!text) {
-        this.recordFailure();
         throw new Error("Gemini không trả gợi ý; có thể thử lại");
       }
 

@@ -124,6 +124,10 @@ enum AIKind {
   claim_draft
   plan_suggestion
   grading_hint
+  explain
+  leading_question
+  example
+  difficulty
 }
 
 enum AIProvider {

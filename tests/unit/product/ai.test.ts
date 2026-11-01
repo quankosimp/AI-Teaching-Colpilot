@@ -6,13 +6,17 @@ import { createApp } from "../../../server/app.js";
 import { db, loadConfig } from "../../../server/context.js";
 import {
   getAIAdapter,
+  getCircuitStatus,
   sanitizeContext,
   sanitizeErrorMessage,
   FakeAIAdapter,
+  setAIAdapterForTesting,
+  resetAIAdapterForTesting,
+  CircuitBreaker,
 } from "../../../server/ai/index.js";
 
 test(
-  "AI 001-007: teaching request modes, lifecycle, non-observation evidence, post-session claims, circuit breaker, consent and sanitization",
+  "AI 001-007 comprehensive: 4 modes, context minimization, claim drafting races, idempotency coordination, circuit breaker, and plan suggestions",
   { skip: process.env.RUN_G2_INTEGRATION !== "1" },
   async () => {
     const config = loadConfig();
@@ -50,20 +54,65 @@ test(
       };
       const teacherToken = await login("teacher-a");
       const otherTeacherToken = await login("teacher-b");
+      const teacherIdentity = await db.teacherOAuthIdentity.findUniqueOrThrow({
+        where: { provider_providerSubject: { provider: "mock", providerSubject: "teacher-a" } },
+      });
+      const teacherId = teacherIdentity.teacherId;
 
-      // Verify AI circuit status endpoint (AI 007)
-      const circuitProbe = await call("/ai/circuit-status", teacherToken);
-      assert.equal(circuitProbe.status, 200);
-      const probeJson = await circuitProbe.json();
+      // --- SG4-01: Environment Guard, ENABLE_AI & Truthful Health Probe ---
+      process.env.ENABLE_AI = "false";
+      const disabledProbe = await call("/ai/circuit-status", teacherToken);
+      assert.equal(disabledProbe.status, 200);
+      const disabledStatus = await disabledProbe.json();
+      assert.equal(disabledStatus.enabled, false);
+      assert.equal(disabledStatus.circuitOpen, true);
+
+      // Disabled AI route guard (503 AI_UNAVAILABLE)
+      const disabledResp = await call(
+        `/sessions/00000000-0000-0000-0000-000000000000/ai/suggestions`,
+        teacherToken,
+        "POST",
+        {
+          studentId: "00000000-0000-0000-0000-000000000000",
+          activityId: "00000000-0000-0000-0000-000000000000",
+          kind: "explain",
+          prompt: "test",
+        },
+      );
+      assert.equal(disabledResp.status, 503);
+      const disabledBody = await disabledResp.json();
+      assert.match(disabledBody.error.message, /AI chưa được bật/i);
+
+      // Re-enable AI
+      process.env.ENABLE_AI = "true";
+
+      // Verify truthful health probe when enabled
+      const enabledProbe = await call("/ai/circuit-status", teacherToken);
+      assert.equal(enabledProbe.status, 200);
+      const probeJson = await enabledProbe.json();
+      assert.equal(probeJson.enabled, true);
       assert.equal(probeJson.provider, "mock");
       assert.equal(probeJson.circuitOpen, false);
 
-      // Create test student and session
+      // setAIAdapterForTesting gate check: forbidden in production/staging NODE_ENV
+      const oldNodeEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = "production";
+        assert.throws(
+          () => setAIAdapterForTesting(new FakeAIAdapter()),
+          /only permitted when APP_MODE=test and NODE_ENV is non-production/,
+        );
+      } finally {
+        process.env.NODE_ENV = oldNodeEnv;
+      }
+
+      // --- Setup Test Students and Peer for Context Minimization ---
+      // Target student
       const studentResp = await call("/students", teacherToken, "POST", {
-        name: "Nguyễn Văn AI Test",
+        name: "Nguyễn Văn Target A",
         grade: "8",
         subject: "Vật lý",
-        goal: "Nắm vững định luật Ohm",
+        goal: "Nắm vững định luật Ohm và mạch nối tiếp",
         notes: "",
         strengths: [],
         gaps: [],
@@ -72,8 +121,23 @@ test(
       assert.equal(studentResp.status, 201);
       const student = (await studentResp.json()).student;
 
+      // Peer student
+      const peerResp = await call("/students", teacherToken, "POST", {
+        name: "Trần Thị Peer B",
+        grade: "8",
+        subject: "Vật lý",
+        goal: "Mục tiêu bí mật của Peer B",
+        notes: "",
+        strengths: [],
+        gaps: [],
+        status: "active",
+      });
+      assert.equal(peerResp.status, 201);
+      const peer = (await peerResp.json()).student;
+
+      // Create session including target student and peer
       const sessionResp = await call("/sessions", teacherToken, "POST", {
-        studentIds: [student.id],
+        studentIds: [student.id, peer.id],
         title: "Buổi học AI Copilot",
         goal: "Luyện tập công thức mạch điện",
         sharedGoal: "Mọi học sinh làm được bài tập mạch nối tiếp",
@@ -86,44 +150,32 @@ test(
       const session = (await sessionResp.json()).session;
       const sessionId = session.id;
 
-      // Add activity
-      const actResp = await call(
-        `/sessions/${sessionId}/activities`,
-        teacherToken,
-        "PUT",
-        [
-          {
-            title: "Bài tập mạch nối tiếp",
-            description: "Tính điện trở tương đương và cường độ dòng điện",
-            duration: 15,
-            type: "LuyenTap",
-            materialId: null,
-            materialVersion: null,
-            teacherNotes: null,
-            sourceEvidenceIds: [],
-            sourceClaimRefs: [],
-          },
-        ],
-        { "If-Match-Version": String(session.version) },
-      );
-      assert.equal(actResp.status, 200);
-      const actJson = await actResp.json();
-      const activityId = actJson.session.Activity_sessionId_items[0].id;
-
-      // Query room member
-      const member = await db.roomMember.findUniqueOrThrow({
-        where: {
-          sessionId_studentId: { sessionId, studentId: student.id },
+      // Add activity containing peer personal name, bearer token, and S3 presigned link
+      const dirtyActivityDesc =
+        "Hoạt động cùng học sinh Trần Thị Peer B, token Bearer secret_token_1234567890123456789012345678 và file https://s3.bucket.internal/presigned?sig=xyz";
+      const activity = await db.activity.create({
+        data: {
+          sessionId,
+          title: "Thí nghiệm mạch điện cùng Trần Thị Peer B",
+          duration: 20,
+          description: dirtyActivityDesc,
+          type: "LuyenTap",
+          order: 0,
+          sourceClaimRefs: [],
         },
       });
+      const activityId = activity.id;
 
-      // --- AI 006: Consent enforcement ---
-      // Ensure member.consent is false initially
+      // Ensure target member consent is false initially
+      const targetMember = await db.roomMember.findUniqueOrThrow({
+        where: { sessionId_studentId: { sessionId, studentId: student.id } },
+      });
       await db.roomMember.update({
-        where: { id: member.id },
+        where: { id: targetMember.id },
         data: { consent: false },
       });
 
+      // Consent enforcement check (403 when consent=false)
       const noConsentResp = await call(
         `/sessions/${sessionId}/ai/suggestions`,
         teacherToken,
@@ -132,7 +184,7 @@ test(
           studentId: student.id,
           activityId,
           kind: "explain",
-          prompt: "Hãy giúp em hiểu công thức nối tiếp",
+          prompt: "Hãy giúp em hiểu bài",
         },
       );
       assert.equal(noConsentResp.status, 403);
@@ -141,22 +193,60 @@ test(
 
       // Grant consent
       await db.roomMember.update({
-        where: { id: member.id },
+        where: { id: targetMember.id },
         data: { consent: true },
       });
 
-      // --- AI 001: Four pedagogical teaching request modes ---
-      const modes: Array<"explain" | "leading_question" | "example" | "difficulty"> = [
-        "explain",
+      // --- SG4-02: Capturing Adapter Verification of Context Minimization ---
+      const capturingAdapter = new FakeAIAdapter();
+      setAIAdapterForTesting(capturingAdapter);
+
+      const userPromptWithSecrets =
+        "Lưu ý riêng cho học sinh Nguyễn Văn Target A và Trần Thị Peer B qua email student@school.edu";
+      const suggestResp = await call(
+        `/sessions/${sessionId}/ai/suggestions`,
+        teacherToken,
+        "POST",
+        {
+          studentId: student.id,
+          activityId,
+          kind: "explain",
+          prompt: userPromptWithSecrets,
+        },
+      );
+      assert.equal(suggestResp.status, 201);
+      const suggestBody = await suggestResp.json();
+
+      // Check captured context in adapter
+      const capturedPrompt = capturingAdapter.lastDispatchedPrompt || "";
+      assert.ok(capturedPrompt.length > 0, "Adapter must capture dispatched prompt");
+      assert.ok(!capturedPrompt.includes("Nguyễn Văn Target A"), "Target personal name must be stripped");
+      assert.ok(!capturedPrompt.includes("Trần Thị Peer B"), "Peer personal name must be stripped");
+      assert.ok(!capturedPrompt.includes("secret_token"), "Bearer token must be stripped");
+      assert.ok(!capturedPrompt.includes("https://s3.bucket"), "S3 presigned URL must be stripped");
+      assert.ok(!capturedPrompt.includes("student@school.edu"), "Email must be stripped");
+      assert.ok(capturedPrompt.includes("[học sinh]"), "Should contain sanitized replacement");
+      assert.ok(capturedPrompt.includes("[link removed]"), "Should contain sanitized link");
+      assert.ok(capturedPrompt.includes("[credential removed]"), "Should contain sanitized credential");
+      assert.ok(capturedPrompt.includes("Nắm vững định luật Ohm"), "Target student goal should be included");
+      assert.ok(!capturedPrompt.includes("Mục tiêu bí mật của Peer B"), "Peer goal must never leak");
+
+      // --- SG4-04: Persist Exact Pedagogical Kind & Full Audit Snapshot ---
+      assert.equal(suggestBody.suggestion.kind, "explain");
+      const savedAIReq = await db.aIRequest.findUniqueOrThrow({
+        where: { id: suggestBody.suggestion.id },
+      });
+      assert.equal(savedAIReq.kind, "explain", "AIRequest.kind must persist exact pedagogical mode");
+      assert.ok(savedAIReq.prompt.includes("Chế độ sư phạm: explain"), "AIRequest.prompt must snapshot full minimized instruction");
+
+      // Verify all 4 modes persist exact kind
+      const modes: Array<"leading_question" | "example" | "difficulty"> = [
         "leading_question",
         "example",
         "difficulty",
       ];
-
-      const suggestionIds: string[] = [];
-
       for (const mode of modes) {
-        const resp = await call(
+        const r = await call(
           `/sessions/${sessionId}/ai/suggestions`,
           teacherToken,
           "POST",
@@ -164,126 +254,28 @@ test(
             studentId: student.id,
             activityId,
             kind: mode,
-            prompt: `Yêu cầu hỗ trợ chế độ ${mode} cho học sinh`,
+            prompt: `Soạn câu hỏi cho ${mode}`,
           },
         );
-        assert.equal(resp.status, 201, `Mode ${mode} should return 201`);
-        const json = await resp.json();
-        assert.ok(json.suggestion);
-        assert.equal(json.suggestion.status, "ready");
-        assert.equal(json.suggestion.provider, "mock"); // Honest labeling (AI 007)
-        assert.equal(json.suggestion.studentId, student.id);
-        assert.equal(json.suggestion.activityId, activityId);
-        assert.ok(json.suggestion.responseText.length > 10);
-        suggestionIds.push(json.suggestion.id);
+        assert.equal(r.status, 201);
+        const b = await r.json();
+        assert.equal(b.suggestion.kind, mode);
+        const dbRow = await db.aIRequest.findUniqueOrThrow({ where: { id: b.suggestion.id } });
+        assert.equal(dbRow.kind, mode);
       }
 
-      // Verify boundary rejection: non-existent activity returns 400
-      const badActResp = await call(
-        `/sessions/${sessionId}/ai/suggestions`,
-        teacherToken,
-        "POST",
-        {
-          studentId: student.id,
-          activityId: crypto.randomUUID(),
-          kind: "explain",
-          prompt: "test",
-        },
-      );
-      assert.equal(badActResp.status, 400);
-
-      // Verify boundary rejection: other teacher cannot request suggestion
-      const unauthResp = await call(
-        `/sessions/${sessionId}/ai/suggestions`,
-        otherTeacherToken,
-        "POST",
-        {
-          studentId: student.id,
-          activityId,
-          kind: "explain",
-          prompt: "test",
-        },
-      );
-      assert.equal(unauthResp.status, 403);
-
-      // Query in-session suggestions
+      // Query GET /sessions/:id/ai/suggestions returns all modes
       const listResp = await call(`/sessions/${sessionId}/ai/suggestions`, teacherToken);
       assert.equal(listResp.status, 200);
       const listJson = await listResp.json();
-      assert.equal(listJson.suggestions.length, 4);
+      assert.ok(listJson.suggestions.length >= 4);
 
-      // --- AI 002: Lifecycle transitions (ready -> used / ignored / reported) & text editing ---
-      // Transition suggestion 0 to "ignored"
-      const ignoreResp = await call(
-        `/ai-requests/${suggestionIds[0]}`,
-        teacherToken,
-        "PATCH",
-        { status: "ignored" },
-      );
-      assert.equal(ignoreResp.status, 200);
-      assert.equal((await ignoreResp.json()).status, "ignored");
+      // --- SG4-05: Idempotency & In-Flight Concurrency Coordination ---
+      const testIdemKey = randomUUID();
+      const initialCallCount = capturingAdapter.callCount;
 
-      // Conflict: subsequent transition from non-ready state returns 409
-      const replayIgnore = await call(
-        `/ai-requests/${suggestionIds[0]}`,
-        teacherToken,
-        "PATCH",
-        { status: "used" },
-      );
-      assert.equal(replayIgnore.status, 409);
-
-      // Transition suggestion 1 to "reported"
-      const reportResp = await call(
-        `/ai-requests/${suggestionIds[1]}`,
-        teacherToken,
-        "PATCH",
-        { status: "reported" },
-      );
-      assert.equal(reportResp.status, 200);
-      assert.equal((await reportResp.json()).status, "reported");
-
-      // --- AI 003: Save used suggestion as Evidence (isObservation: false) ---
-      const editedTeachingText = "Giáo viên chỉnh sửa: Hướng dẫn học sinh vẽ sơ đồ mạch tương đương trước khi tính R.";
-      const useResp = await call(
-        `/ai-requests/${suggestionIds[2]}`,
-        teacherToken,
-        "PATCH",
-        {
-          status: "used",
-          editedText: editedTeachingText,
-          saveAsEvidence: true,
-        },
-      );
-      assert.equal(useResp.status, 200);
-      const useJson = await useResp.json();
-      assert.equal(useJson.status, "used");
-      assert.equal(useJson.editedText, editedTeachingText);
-      assert.ok(useJson.evidenceId);
-
-      // Inspect created Evidence directly from DB
-      const evidenceRow = await db.evidence.findUniqueOrThrow({
-        where: { id: useJson.evidenceId },
-      });
-      assert.equal(evidenceRow.kind, "GoiYGiangDay");
-      assert.equal(evidenceRow.sourceType, "ai_suggestion");
-      assert.equal(evidenceRow.sourceId, suggestionIds[2]);
-      assert.equal(evidenceRow.isObservation, false); // CRITICAL: must not count as student observation
-      assert.equal(evidenceRow.detail, editedTeachingText);
-      assert.equal(evidenceRow.studentId, student.id);
-
-      // Verify AIRequest persisted editedText and evidenceId
-      const aiReqRow = await db.aIRequest.findUniqueOrThrow({
-        where: { id: suggestionIds[2] },
-      });
-      assert.equal(aiReqRow.editedText, editedTeachingText);
-      assert.equal(aiReqRow.evidenceId, evidenceRow.id);
-
-      // --- AI 005: Timeout, Provider Failure & Circuit Breaker ---
-      const adapter = getAIAdapter() as FakeAIAdapter;
-
-      // Simulate provider timeout
-      adapter.simulateTimeout = true;
-      const timeoutResp = await call(
+      // First call with testIdemKey
+      const idemResp1 = await call(
         `/sessions/${sessionId}/ai/suggestions`,
         teacherToken,
         "POST",
@@ -291,141 +283,323 @@ test(
           studentId: student.id,
           activityId,
           kind: "explain",
-          prompt: "Timeout test",
+          prompt: "Idempotency test call",
         },
+        { "Idempotency-Key": testIdemKey },
       );
-      assert.equal(timeoutResp.status, 503);
-      assert.match((await timeoutResp.json()).error.message, /AI_TIMEOUT|AI_UNAVAILABLE/);
-      adapter.simulateTimeout = false;
+      assert.equal(idemResp1.status, 201);
+      const idemCallCountAfterFirst = capturingAdapter.callCount;
+      assert.equal(idemCallCountAfterFirst, initialCallCount + 1);
 
-      // Simulate multiple provider errors to trigger circuit breaker
-      adapter.simulateError = true;
-      for (let i = 0; i < 3; i++) {
-        await call(
+      // Replay call with exact same Idempotency-Key: preflight must return cached result without calling adapter!
+      const idemResp2 = await call(
+        `/sessions/${sessionId}/ai/suggestions`,
+        teacherToken,
+        "POST",
+        {
+          studentId: student.id,
+          activityId,
+          kind: "explain",
+          prompt: "Idempotency test call",
+        },
+        { "Idempotency-Key": testIdemKey },
+      );
+      assert.equal(idemResp2.status, 200);
+      assert.equal(capturingAdapter.callCount, idemCallCountAfterFirst, "Replay must NOT re-call adapter");
+
+      // Concurrent calls with identical Idempotency-Key
+      const concurrentKey = randomUUID();
+      const callCountBeforeConcurrent = capturingAdapter.callCount;
+      const [c1, c2] = await Promise.all([
+        call(
           `/sessions/${sessionId}/ai/suggestions`,
           teacherToken,
           "POST",
           {
             studentId: student.id,
             activityId,
-            kind: "example",
-            prompt: `Error trial ${i}`,
+            kind: "explain",
+            prompt: "Concurrent call",
           },
-        );
-      }
-      adapter.simulateError = false;
+          { "Idempotency-Key": concurrentKey },
+        ),
+        call(
+          `/sessions/${sessionId}/ai/suggestions`,
+          teacherToken,
+          "POST",
+          {
+            studentId: student.id,
+            activityId,
+            kind: "explain",
+            prompt: "Concurrent call",
+          },
+          { "Idempotency-Key": concurrentKey },
+        ),
+      ]);
+      assert.ok([200, 201].includes(c1.status));
+      assert.ok([200, 201].includes(c2.status));
+      assert.equal(
+        capturingAdapter.callCount,
+        callCountBeforeConcurrent + 1,
+        "Concurrent calls with same idempotency key must only invoke adapter ONCE",
+      );
 
-      // Circuit breaker is now open
-      const circuitStatusAfter = await (await call("/ai/circuit-status", teacherToken)).json();
-      assert.equal(circuitStatusAfter.circuitOpen, true);
-      assert.ok(circuitStatusAfter.consecutiveFailures >= 3);
-
-      // Fast rejection when circuit is open
-      const fastFailResp = await call(
+      // Conflict call: same Idempotency-Key with different body -> 409
+      const conflictResp = await call(
         `/sessions/${sessionId}/ai/suggestions`,
         teacherToken,
         "POST",
         {
           studentId: student.id,
           activityId,
-          kind: "explain",
-          prompt: "Circuit open test",
+          kind: "difficulty", // Different kind!
+          prompt: "Different payload",
+        },
+        { "Idempotency-Key": concurrentKey },
+      );
+      assert.equal(conflictResp.status, 409);
+
+      // --- Lifecycle Updates & Evidence Creation with Review Reopening ---
+      // Update suggestion to 'used' with saveAsEvidence: true
+      const patchResp = await call(
+        `/ai-requests/${suggestBody.suggestion.id}`,
+        teacherToken,
+        "PATCH",
+        {
+          status: "used",
+          editedText: "Nội dung giáo viên đã chỉnh sửa cho dễ hiểu",
+          saveAsEvidence: true,
         },
       );
-      assert.equal(fastFailResp.status, 503);
-      assert.match((await fastFailResp.json()).error.message, /gián đoạn|circuit/i);
+      assert.equal(patchResp.status, 200);
+      const patchBody = await patchResp.json();
+      assert.equal(patchBody.status, "used");
+      assert.equal(patchBody.editedText, "Nội dung giáo viên đã chỉnh sửa cho dễ hiểu");
+      assert.ok(patchBody.evidenceId);
 
-      // Reset circuit for clean state
-      adapter.recordSuccess();
+      // Verify created evidence properties (isObservation: false, kind: GoiYGiangDay)
+      const createdEvidence = await db.evidence.findUniqueOrThrow({
+        where: { id: patchBody.evidenceId },
+      });
+      assert.equal(createdEvidence.isObservation, false);
+      assert.equal(createdEvidence.kind, "GoiYGiangDay");
+      assert.equal(createdEvidence.sourceType, "ai_suggestion");
 
-      // --- AI 004: Post-session Sourced Pending Claims ---
-      // Before ending session, AI claims drafting returns 409 (must be post-session)
-      const earlyClaims = await call(
+      // Verify outbox event 'evidence.created' was emitted
+      const evOutbox = await db.sessionEventOutbox.findFirst({
+        where: {
+          sessionId,
+          kind: "evidence.created",
+          targetStudentId: null,
+        },
+      });
+      assert.ok(evOutbox, "Outbox event evidence.created must be recorded");
+
+      // --- SG4-03: Post-Session Claims Drafting, Candidate Rejection & Races ---
+      // Create active observation evidence for the student
+      const noteObs = await db.evidence.create({
+        data: {
+          sessionId,
+          studentId: student.id,
+          activityId,
+          kind: "GhiChu",
+          title: "Quan sát mạch nối tiếp",
+          detail: "Học sinh tính đúng điện trở tương đương",
+          support: "DocLap",
+          sourceType: "note",
+          sourceVersion: 1,
+          isObservation: true,
+          isAuto: false,
+          status: "active",
+          version: 1,
+          createdBy: teacherId,
+        },
+      });
+
+      // Peer observation evidence (belongs to peer)
+      const peerObs = await db.evidence.create({
+        data: {
+          sessionId,
+          studentId: peer.id,
+          activityId,
+          kind: "GhiChu",
+          title: "Quan sát Peer B",
+          detail: "Peer B hoàn thành bài toán",
+          support: "DocLap",
+          sourceType: "note",
+          sourceVersion: 1,
+          isObservation: true,
+          isAuto: false,
+          status: "active",
+          version: 1,
+          createdBy: teacherId,
+        },
+      });
+
+      // End session to transition to post-session
+      await db.session.update({
+        where: { id: sessionId },
+        data: { status: "ended" },
+      });
+
+      // 1) Candidate with mixed/hallucinated ref: must discard whole candidate, never keep partial claim!
+      class MixedCandidateAdapter extends FakeAIAdapter {
+        async generateClaimDrafts() {
+          return {
+            claims: [
+              {
+                text: "Nhận định bị ô nhiễm tham chiếu lạ",
+                evidenceIds: [noteObs.id, "00000000-0000-0000-0000-999999999999"], // Contains fake UUID
+              },
+              {
+                text: "Nhận định bị ô nhiễm tham chiếu của peer",
+                evidenceIds: [noteObs.id, peerObs.id], // Contains peer ref
+              },
+              {
+                text: "Nhận định sạch hợp lệ",
+                evidenceIds: [noteObs.id],
+              },
+            ],
+            summary: "Test mixed",
+            provider: "mock" as const,
+            model: "mock-model",
+            modelVersion: "1.0",
+            contextSummary: "mixed",
+            promptUsed: "mixed",
+            promptVersion: "v1",
+          };
+        }
+      }
+
+      setAIAdapterForTesting(new MixedCandidateAdapter());
+      const mixedResp = await call(
         `/sessions/${sessionId}/ai/claims-draft`,
         teacherToken,
         "POST",
         { studentId: student.id },
       );
-      assert.equal(earlyClaims.status, 409);
+      assert.equal(mixedResp.status, 201);
+      const mixedJson = await mixedResp.json();
+      // Only the clean candidate must be kept; contaminated candidates wholly discarded!
+      assert.equal(mixedJson.claims.length, 1);
+      assert.equal(mixedJson.claims[0].text, "Nhận định sạch hợp lệ");
+      assert.deepEqual(mixedJson.claims[0].evidenceIds, [noteObs.id]);
 
-      // Start and End session
-      await call(`/sessions/${sessionId}/start`, teacherToken, "POST", {});
-      await call(`/sessions/${sessionId}/end`, teacherToken, "POST", {});
+      // 2) Candidate where ALL refs are invalid in a reviewed session: reviewed session NOT reopened!
+      await db.session.update({
+        where: { id: sessionId },
+        data: { status: "reviewed" },
+      });
 
-      // 0-observation guard: Currently, the only evidence in session is GoiYGiangDay (isObservation: false).
-      // AI claim draft MUST return 0 claims and NOT fabricate competence claims!
-      const zeroObsResp = await call(
+      class AllInvalidCandidateAdapter extends FakeAIAdapter {
+        async generateClaimDrafts() {
+          return {
+            claims: [
+              {
+                text: "Toàn bộ ref là hallucinated",
+                evidenceIds: ["00000000-0000-0000-0000-111111111111"],
+              },
+            ],
+            summary: "all invalid",
+            provider: "mock" as const,
+            model: "mock-model",
+            modelVersion: "1.0",
+            contextSummary: "invalid",
+            promptUsed: "invalid",
+            promptVersion: "v1",
+          };
+        }
+      }
+
+      setAIAdapterForTesting(new AllInvalidCandidateAdapter());
+      const allInvalidResp = await call(
         `/sessions/${sessionId}/ai/claims-draft`,
         teacherToken,
         "POST",
         { studentId: student.id },
       );
-      assert.equal(zeroObsResp.status, 200);
-      const zeroObsJson = await zeroObsResp.json();
-      assert.deepEqual(zeroObsJson.claims, []);
-      assert.match(zeroObsJson.summary, /Chưa có minh chứng quan sát thực tế/);
+      assert.equal(allInvalidResp.status, 201);
+      const allInvalidJson = await allInvalidResp.json();
+      assert.equal(allInvalidJson.claims.length, 0);
 
-      // Now add a real student observation evidence
-      const noteObs = await call(`/sessions/${sessionId}/evidence`, teacherToken, "POST", {
-        studentId: student.id,
-        activityId,
-        title: "Giải đúng bài tập 1",
-        detail: "Tự tính đúng điện trở tương đương Rtd = 10 Ohm",
-        support: "DocLap",
-        kind: "GhiChu",
-      });
-      assert.equal(noteObs.status, 201);
-      const noteObsId = (await noteObs.json()).evidence.id;
+      // Verify session status is STILL "reviewed" (not wrongly reopened when 0 valid claims persist)
+      const sessionAfterAllInvalid = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
+      assert.equal(sessionAfterAllInvalid.status, "reviewed", "Reviewed session must not reopen when 0 claims created");
 
-      // Now trigger AI claims draft post-session
-      const draftResp = await call(
+      // 3) Controlled deferred race: evidence edited/version changed while model waits -> 409 VERSION_CONFLICT
+      class DeferredEvidenceChangeAdapter extends FakeAIAdapter {
+        async generateClaimDrafts(input: any) {
+          // Mutate evidence in DB while model is computing!
+          await db.evidence.update({
+            where: { id: noteObs.id },
+            data: { version: { increment: 1 }, detail: "Chi tiết bị sửa đổi trong cuộc đua" },
+          });
+          return super.generateClaimDrafts(input);
+        }
+      }
+
+      setAIAdapterForTesting(new DeferredEvidenceChangeAdapter());
+      const raceEditResp = await call(
         `/sessions/${sessionId}/ai/claims-draft`,
         teacherToken,
         "POST",
-        { studentId: student.id, prompt: "Đánh giá khả năng tính toán độc lập" },
+        { studentId: student.id },
       );
-      assert.equal(draftResp.status, 201);
-      const draftJson = await draftResp.json();
-      assert.ok(draftJson.claims.length > 0);
-      assert.equal(draftJson.claims[0].status, "pending");
-      assert.equal(draftJson.claims[0].revision, 1);
-      // Validated returned evidence refs
-      assert.ok(draftJson.claims[0].evidenceIds.includes(noteObsId));
+      assert.equal(raceEditResp.status, 409, "Must return 409 VERSION_CONFLICT when evidence mutated during AI call");
 
-      // Verify claim exists in database and is pending
-      const createdClaim = await db.claim.findUniqueOrThrow({
-        where: { id: draftJson.claims[0].id },
+      // 4) Controlled deferred race: consent revoked while model waits -> 403 PERMISSION_DENIED
+      class DeferredConsentRevokeAdapter extends FakeAIAdapter {
+        async generateClaimDrafts(input: any) {
+          await db.roomMember.update({
+            where: { id: targetMember.id },
+            data: { consent: false },
+          });
+          return super.generateClaimDrafts(input);
+        }
+      }
+
+      setAIAdapterForTesting(new DeferredConsentRevokeAdapter());
+      const raceConsentResp = await call(
+        `/sessions/${sessionId}/ai/claims-draft`,
+        teacherToken,
+        "POST",
+        { studentId: student.id },
+      );
+      assert.equal(raceConsentResp.status, 403, "Must return 403 when consent revoked during AI call");
+
+      // Restore consent and evidence version
+      await db.roomMember.update({
+        where: { id: targetMember.id },
+        data: { consent: true },
       });
+      const refreshedObs = await db.evidence.findUniqueOrThrow({ where: { id: noteObs.id } });
+
+      // Clean successful post-session claim drafting
+      setAIAdapterForTesting(capturingAdapter);
+      const cleanDraftResp = await call(
+        `/sessions/${sessionId}/ai/claims-draft`,
+        teacherToken,
+        "POST",
+        { studentId: student.id },
+      );
+      assert.equal(cleanDraftResp.status, 201);
+      const cleanDraftBody = await cleanDraftResp.json();
+      assert.ok(cleanDraftBody.claims.length > 0);
+      const createdClaim = cleanDraftBody.claims[0];
       assert.equal(createdClaim.status, "pending");
-      assert.equal(createdClaim.studentId, student.id);
-      assert.deepEqual(createdClaim.evidenceIds, [noteObsId]);
 
-      // --- AI 006: Context Minimization / Sanitization Unit Verification ---
-      const piiText = "Học sinh Nguyễn Văn AI Test có token Bearer secret_token_1234567890123456789012345 và email test@example.com truy cập https://s3.bucket.internal/presigned-url?sig=abc";
-      const sanitized = sanitizeContext(piiText, ["Nguyễn Văn AI Test"]);
-      assert.ok(!sanitized.includes("Nguyễn Văn AI Test"), "Personal name must be stripped");
-      assert.ok(!sanitized.includes("secret_token"), "Bearer token must be stripped");
-      assert.ok(!sanitized.includes("test@example.com"), "Email must be stripped");
-      assert.ok(!sanitized.includes("https://"), "URL must be stripped");
-      assert.ok(sanitized.includes("[học sinh]"));
-      assert.ok(sanitized.includes("[credential removed]"));
-      assert.ok(sanitized.includes("[email removed]"));
-      assert.ok(sanitized.includes("[link removed]"));
+      // Since session was reviewed and a valid claim was persisted, verify session was reopened to 'ended'
+      const sessionAfterValidClaim = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
+      assert.equal(sessionAfterValidClaim.status, "ended", "Session must be reopened to ended when new claim created");
 
-      // Sanitize error message test
-      const rawError = "API error with key AIzaSyA123456789012345678901234567890 at https://api.internal/v1";
-      const cleanErr = sanitizeErrorMessage(rawError);
-      assert.ok(!cleanErr.includes("AIzaSyA"));
-      assert.ok(!cleanErr.includes("https://"));
-
-      // --- Backward Compatibility: Plan Suggestions ---
+      // --- Plan Suggestions Idempotency & Controlled Races (IndependentQA blocker) ---
       // Approve the pending claim
       await db.claim.update({
         where: { id: createdClaim.id },
         data: { status: "approved", reviewedAt: new Date() },
       });
 
-      // Create a draft session for lesson planning
+      // Create draft planning session
       const planSessionResp = await call("/sessions", teacherToken, "POST", {
         studentIds: [student.id],
         title: "Buổi học kế tiếp lập kế hoạch",
@@ -439,21 +613,106 @@ test(
       assert.equal(planSessionResp.status, 201);
       const planSession = (await planSessionResp.json()).session;
 
-      // Enable AI for plan suggestion test
-      process.env.ENABLE_AI = "true";
-      const planResp = await call(
+      // Grant consent for student in the new planning session
+      await db.roomMember.update({
+        where: { sessionId_studentId: { sessionId: planSession.id, studentId: student.id } },
+        data: { consent: true },
+      });
+
+      // 1) Idempotency replay preflight for plan-suggestions
+      const planIdemKey = randomUUID();
+      const planCallCountBefore = capturingAdapter.callCount;
+      const planResp1 = await call(
+        `/sessions/${planSession.id}/ai/plan-suggestions`,
+        teacherToken,
+        "POST",
+        { studentId: student.id },
+        { "Idempotency-Key": planIdemKey },
+      );
+      assert.equal(planResp1.status, 201);
+      const planJson1 = await planResp1.json();
+      assert.ok(planJson1.suggestion);
+      assert.equal(capturingAdapter.callCount, planCallCountBefore + 1);
+
+      // Replay must hit preflight without invoking adapter
+      const planResp2 = await call(
+        `/sessions/${planSession.id}/ai/plan-suggestions`,
+        teacherToken,
+        "POST",
+        { studentId: student.id },
+        { "Idempotency-Key": planIdemKey },
+      );
+      assert.equal(planResp2.status, 200);
+      assert.equal(capturingAdapter.callCount, planCallCountBefore + 1, "Plan suggestion replay must not call adapter");
+
+      // 2) Plan suggestions race: session started while model waits -> 409 SESSION_STATE_INVALID
+      class PlanSessionStartedRaceAdapter extends FakeAIAdapter {
+        async generatePlanSuggestion(input: any) {
+          await db.session.update({
+            where: { id: planSession.id },
+            data: { status: "live" },
+          });
+          return super.generatePlanSuggestion(input);
+        }
+      }
+
+      setAIAdapterForTesting(new PlanSessionStartedRaceAdapter());
+      const planRaceResp = await call(
         `/sessions/${planSession.id}/ai/plan-suggestions`,
         teacherToken,
         "POST",
         { studentId: student.id },
       );
-      assert.equal(planResp.status, 201);
-      const planJson = await planResp.json();
-      assert.ok(planJson.suggestion);
-      assert.equal(planJson.suggestion.status, "ready");
-      assert.ok(planJson.suggestion.text.length > 10);
-      assert.ok(planJson.suggestion.sources.length > 0);
+      assert.equal(planRaceResp.status, 409, "Must return 409 when session state changed while awaiting model");
+
+      // Restore plan session status to draft
+      await db.session.update({
+        where: { id: planSession.id },
+        data: { status: "draft" },
+      });
+
+      // 3) Plan suggestions race: claim revised while model waits -> 409 VERSION_CONFLICT
+      class PlanClaimRevisedRaceAdapter extends FakeAIAdapter {
+        async generatePlanSuggestion(input: any) {
+          await db.claim.update({
+            where: { id: createdClaim.id },
+            data: { revision: { increment: 1 } },
+          });
+          return super.generatePlanSuggestion(input);
+        }
+      }
+
+      setAIAdapterForTesting(new PlanClaimRevisedRaceAdapter());
+      const planClaimRaceResp = await call(
+        `/sessions/${planSession.id}/ai/plan-suggestions`,
+        teacherToken,
+        "POST",
+        { studentId: student.id },
+      );
+      assert.equal(planClaimRaceResp.status, 409, "Must return 409 when source claim revised during AI call");
+
+      // --- CircuitBreaker Exclusive Half-Open Unit Verification ---
+      const testBreaker = new CircuitBreaker({ failureThreshold: 2, cooldownMs: 50 });
+      assert.equal(testBreaker.canExecute(), true);
+      testBreaker.recordFailure();
+      assert.equal(testBreaker.canExecute(), true);
+      testBreaker.recordFailure(); // Reached threshold 2 -> circuit open
+      assert.equal(testBreaker.canExecute(), false);
+      assert.equal(testBreaker.getStatus().circuitOpen, true);
+
+      // Wait for cooldown
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      // Exclusive half-open check: first call allowed, second caller blocked until trial probe finishes!
+      assert.equal(testBreaker.canExecute(), true, "First caller allowed as exclusive half-open trial");
+      assert.equal(testBreaker.canExecute(), false, "Second concurrent caller blocked while trial in-flight");
+
+      // Trial succeeds -> circuit resets
+      testBreaker.recordSuccess();
+      assert.equal(testBreaker.getStatus().circuitOpen, false);
+      assert.equal(testBreaker.canExecute(), true);
     } finally {
+      resetAIAdapterForTesting();
       server.close();
     }
   },

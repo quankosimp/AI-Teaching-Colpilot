@@ -9,12 +9,14 @@ import {
   type AppConfig,
 } from "../context.js";
 import { lockSession, SessionConflict } from "../sessionLock.js";
-import { createOnce } from "../idempotency.js";
-import { appendOutboxEvent } from "../realtime.js";
+import { createOnce, lookupReplay } from "../idempotency.js";
+import { appendOutboxEvent, triggerOutboxPublish } from "../realtime.js";
+import { resolveCurrentSourceVersion } from "./review.js";
 import {
   getAIAdapter,
   getCircuitStatus,
   sanitizeContext,
+  isAIEnabled,
 } from "../ai/index.js";
 import {
   AIRequestInput,
@@ -24,6 +26,23 @@ import {
 
 const safeId = z.string().uuid();
 
+// In-flight request coordinator to serialize duplicate concurrent calls with identical Idempotency-Key
+const inFlightRequests = new Map<string, Promise<void>>();
+
+function createInFlightBarrier(lockKey: string): { release: () => void } {
+  let releaseBarrier!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    releaseBarrier = resolve;
+  });
+  inFlightRequests.set(lockKey, promise);
+  return {
+    release: () => {
+      inFlightRequests.delete(lockKey);
+      releaseBarrier();
+    },
+  };
+}
+
 export function aiRouter(config: AppConfig) {
   const r = Router();
   r.use(requireTeacher(config));
@@ -32,6 +51,14 @@ export function aiRouter(config: AppConfig) {
   r.post(
     "/sessions/:id/ai/suggestions",
     asyncRoute(async (req, res) => {
+      if (!isAIEnabled()) {
+        return fail(res, 503, "AI_UNAVAILABLE", "AI chưa được bật");
+      }
+      const adapter = getAIAdapter();
+      if (!adapter) {
+        return fail(res, 503, "AI_UNAVAILABLE", "Dịch vụ AI không khả dụng trong môi trường hiện tại");
+      }
+
       if (!safeId.safeParse(req.params.id).success)
         return fail(res, 400, "VALIDATION_ERROR", "ID buổi học không hợp lệ");
 
@@ -65,16 +92,13 @@ export function aiRouter(config: AppConfig) {
       });
       if (!member)
         return fail(res, 403, "PERMISSION_DENIED", "Học sinh không thuộc buổi học");
-
-      // Consent check (AI 006: consent-filtered context)
-      if (!member.consent) {
+      if (!member.consent)
         return fail(
           res,
           403,
           "PERMISSION_DENIED",
           "Học sinh chưa có sự đồng ý (consent) để sử dụng hỗ trợ AI",
         );
-      }
 
       const activity = await db.activity.findFirst({
         where: {
@@ -96,130 +120,214 @@ export function aiRouter(config: AppConfig) {
         );
       }
 
-      // Query student personal names for context anonymization
-      const studentNames = (
-        await db.student.findMany({
-          where: { teacherId: res.locals.actor.id },
-          select: { name: true },
-        })
-      ).map((s) => s.name);
+      const routeKey = `/sessions/${session.id}/ai/suggestions`;
 
-      // Minimized prior approved claims for this targeted student
-      const priorApproved = await db.claim.findMany({
-        where: {
-          studentId: parsed.data.studentId,
-          status: "approved",
-          sessionIdRef: { teacherId: res.locals.actor.id },
-        },
-        take: 3,
-        orderBy: { reviewedAt: "desc" },
-        select: { text: true },
+      const formatSuggestion = (item: any) => ({
+        id: item.id,
+        sessionId: item.sessionId,
+        studentId: item.studentId,
+        activityId: item.activityId,
+        kind: item.kind,
+        prompt: item.prompt,
+        responseText: item.responseText,
+        editedText: item.editedText,
+        evidenceId: item.evidenceId,
+        provider: item.provider,
+        model: item.model,
+        modelVersion: item.modelVersion,
+        status: item.status,
+        actorId: item.actorId,
+        createdAt: item.createdAt.toISOString(),
       });
 
-      const adapter = getAIAdapter();
-
-      // Dispatch to AI adapter OUTSIDE transaction lock (never call model holding lock)
-      let aiResult;
-      try {
-        aiResult = await adapter.generateTeachingSuggestion({
-          mode: parsed.data.kind,
-          prompt: sanitizeContext(parsed.data.prompt, studentNames),
-          student: {
-            id: member.studentId,
-            subject: member.studentIdRef.subject,
-            grade: member.studentIdRef.grade,
-          },
-          activity: {
-            id: activity.id,
-            title: activity.title,
-            description: activity.description,
-            type: activity.type,
-          },
-          priorApprovedClaims: priorApproved.map((c) => c.text),
+      // Preflight replay check: avoid calling provider if key already processed
+      const prior = await lookupReplay(req, res, routeKey);
+      if (prior === null) return;
+      if (prior) {
+        const existing = await db.aIRequest.findUniqueOrThrow({
+          where: { id: prior.resourceId },
         });
-      } catch (err: unknown) {
-        const errorMsg =
-          err instanceof Error ? err.message : "Dịch vụ AI không khả dụng";
-        return fail(
-          res,
-          503,
-          "AI_UNAVAILABLE",
-          errorMsg.startsWith("AI_")
-            ? errorMsg
-            : "Gemini tạm không khả dụng; giáo viên có thể tiếp tục ghi chú thủ công",
-        );
+        return res.status(200).json({
+          suggestion: formatSuggestion(existing),
+        });
       }
 
-      // Revalidate and persist UNDER SESSION LOCK
-      const routeKey = `/sessions/${session.id}/ai/suggestions`;
-      const result = await createOnce(req, res, routeKey, async (tx) => {
-        await lockSession(tx, session.id);
+      const idempotencyKey = req.get("Idempotency-Key") || "";
+      const lockKey = `${res.locals.actor.id}:${routeKey}:${idempotencyKey}`;
 
-        const currentSession = await tx.session.findUniqueOrThrow({
-          where: { id: session.id },
+      if (idempotencyKey) {
+        const inFlight = inFlightRequests.get(lockKey);
+        if (inFlight) {
+          // Concurrent request in flight: await settlement and return cached replay
+          await inFlight.catch(() => {});
+          const postReplay = await lookupReplay(req, res, routeKey);
+          if (postReplay === null) return;
+          if (postReplay) {
+            const existing = await db.aIRequest.findUniqueOrThrow({
+              where: { id: postReplay.resourceId },
+            });
+            return res.status(200).json({
+              suggestion: formatSuggestion(existing),
+            });
+          }
+        }
+      }
+
+      const barrier = idempotencyKey ? createInFlightBarrier(lockKey) : null;
+      try {
+        // Query ALL student personal names in workspace for context anonymization (target + all peers)
+        const allStudents = await db.student.findMany({
+          where: { teacherId: res.locals.actor.id },
+          select: { name: true },
         });
-        if (!["draft", "scheduled", "live"].includes(currentSession.status))
-          throw new SessionConflict("SESSION_STATE_INVALID", "Trạng thái buổi học đã thay đổi");
+        const studentNames = allStudents.map((s) => s.name.trim()).filter((n) => n.length > 1);
 
-        const currentMember = await tx.roomMember.findUnique({
+        // Minimized prior approved claims using reused G1 eligibility and consent rules
+        const rawClaims = await db.claim.findMany({
           where: {
-            sessionId_studentId: {
+            studentId: parsed.data.studentId,
+            status: "approved",
+            sessionIdRef: {
+              teacherId: res.locals.actor.id,
+              RoomMember_sessionId_items: {
+                some: { studentId: parsed.data.studentId, consent: true },
+              },
+            },
+          },
+          orderBy: { reviewedAt: "desc" },
+          select: {
+            id: true,
+            revision: true,
+            text: true,
+            evidenceIds: true,
+            sessionId: true,
+            studentId: true,
+            status: true,
+          },
+        });
+        const eligiblePrior = (await filterEligibleApprovedClaims(rawClaims, res.locals.actor.id)).slice(0, 3);
+
+        // Sanitize every field at provider boundary
+        const cleanPrompt = sanitizeContext(parsed.data.prompt, studentNames);
+        const cleanActivityTitle = sanitizeContext(activity.title, studentNames);
+        const cleanActivityDesc = sanitizeContext(activity.description || "", studentNames);
+        const cleanSubject = sanitizeContext(member.studentIdRef.subject || "", studentNames);
+        const cleanGrade = sanitizeContext(member.studentIdRef.grade || "", studentNames);
+        const cleanGoal = sanitizeContext(member.studentIdRef.goal || "", studentNames);
+        const cleanPriorClaims = eligiblePrior.map((c) => sanitizeContext(c.text, studentNames));
+
+        // Dispatch to AI adapter OUTSIDE transaction lock (never hold lock while awaiting model)
+        let aiResult;
+        try {
+          aiResult = await adapter.generateTeachingSuggestion({
+            mode: parsed.data.kind,
+            prompt: cleanPrompt,
+            student: {
+              id: member.studentId,
+              subject: cleanSubject,
+              grade: cleanGrade,
+              goal: cleanGoal,
+            },
+            activity: {
+              id: activity.id,
+              title: cleanActivityTitle,
+              description: cleanActivityDesc,
+              type: activity.type,
+            },
+            priorApprovedClaims: cleanPriorClaims,
+            studentNames,
+          });
+        } catch (err: unknown) {
+          const errorMsg =
+            err instanceof Error ? err.message : "Dịch vụ AI không khả dụng";
+          return fail(
+            res,
+            503,
+            "AI_UNAVAILABLE",
+            errorMsg.startsWith("AI_")
+              ? errorMsg
+              : "Gemini tạm không khả dụng; giáo viên có thể tiếp tục ghi chú thủ công",
+          );
+        }
+
+        // Revalidate and persist UNDER SESSION LOCK
+        const result = await createOnce(req, res, routeKey, async (tx) => {
+          await lockSession(tx, session.id);
+
+          const currentSession = await tx.session.findUniqueOrThrow({
+            where: { id: session.id },
+          });
+          if (!["draft", "scheduled", "live"].includes(currentSession.status))
+            throw new SessionConflict("SESSION_STATE_INVALID", "Trạng thái buổi học đã thay đổi");
+
+          const currentMember = await tx.roomMember.findUnique({
+            where: {
+              sessionId_studentId: {
+                sessionId: session.id,
+                studentId: parsed.data.studentId,
+              },
+            },
+          });
+          if (!currentMember || !currentMember.consent)
+            throw new SessionConflict("PERMISSION_DENIED", "Học sinh không còn quyền hoặc thiếu consent");
+
+          // Persist actual pedagogical kind and full sanitized instruction snapshot for audit
+          const created = await tx.aIRequest.create({
+            data: {
               sessionId: session.id,
               studentId: parsed.data.studentId,
-            },
-          },
-        });
-        if (!currentMember || !currentMember.consent)
-          throw new SessionConflict("PERMISSION_DENIED", "Học sinh không còn quyền hoặc thiếu consent");
-
-        const created = await tx.aIRequest.create({
-          data: {
-            sessionId: session.id,
-            studentId: parsed.data.studentId,
-            activityId: activity.id,
-            kind: "suggestion",
-            prompt: aiResult.promptUsed,
-            promptVersion: aiResult.promptVersion,
-            responseText: aiResult.text.slice(0, 4000),
-            contextSummary: aiResult.contextSummary,
-            provider: aiResult.provider,
-            model: aiResult.model,
-            modelVersion: aiResult.modelVersion,
-            status: "ready",
-            actorId: res.locals.actor.id,
-          },
-        });
-
-        await tx.auditLog.create({
-          data: {
-            workspaceId: res.locals.actor.workspaceId,
-            actorId: res.locals.actor.id,
-            actorRole: "teacher",
-            action: "ai.suggestion_requested",
-            targetType: "ai_request",
-            targetId: created.id,
-            sessionId: session.id,
-            requestId: res.locals.requestId,
-            metadata: {
+              activityId: activity.id,
               kind: parsed.data.kind,
+              prompt: aiResult.promptUsed,
+              promptVersion: aiResult.promptVersion,
+              responseText: aiResult.text,
+              contextSummary: aiResult.contextSummary,
               provider: aiResult.provider,
               model: aiResult.model,
+              modelVersion: aiResult.modelVersion,
+              status: "ready",
+              actorId: res.locals.actor.id,
             },
-          },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              workspaceId: res.locals.actor.workspaceId,
+              actorId: res.locals.actor.id,
+              actorRole: "teacher",
+              action: "ai.suggestion_requested",
+              targetType: "ai_request",
+              targetId: created.id,
+              sessionId: session.id,
+              requestId: res.locals.requestId,
+              metadata: {
+                mode: parsed.data.kind,
+                activityId: activity.id,
+                studentId: parsed.data.studentId,
+                provider: aiResult.provider,
+                model: aiResult.model,
+              },
+            },
+          });
+
+          return created.id;
         });
 
-        return created.id;
-      });
+        if (!result) return;
+        const item = await db.aIRequest.findUniqueOrThrow({
+          where: { id: result.resourceId },
+        });
 
-      if (!result) return;
-      const suggestion = await db.aIRequest.findUniqueOrThrow({
-        where: { id: result.resourceId },
-      });
-      return res.status(201).json({ suggestion });
+        return res.status(201).json({
+          suggestion: formatSuggestion(item),
+        });
+      } finally {
+        barrier?.release();
+      }
     }),
   );
 
-  // 2. Lifecycle Status Transitions & Optional Evidence Creation (PATCH /ai-requests/:id - AI 002 & AI 003)
+  // 2. Suggestion Lifecycle Transition & Optional Evidence Creation (PATCH /ai-requests/:id - AI 002, AI 003)
   r.patch(
     "/ai-requests/:id",
     asyncRoute(async (req, res) => {
@@ -253,11 +361,49 @@ export function aiRouter(config: AppConfig) {
         if (freshItem.status !== "ready")
           throw new SessionConflict("VERSION_CONFLICT", "Gợi ý đã được xử lý bởi thao tác khác");
 
+        const currentSession = await tx.session.findUniqueOrThrow({
+          where: { id: freshItem.sessionId },
+        });
+
         let evidenceId: string | null = null;
         let createdEvidence: unknown = null;
 
         // AI 003: Save used suggestion as Evidence of kind GoiYGiangDay with isObservation: false
         if (saveAsEvidence) {
+          // If session was reviewed, adding new evidence requires reopening to ended
+          if (currentSession.status === "reviewed") {
+            const reopened = await tx.session.update({
+              where: { id: currentSession.id },
+              data: { status: "ended", version: { increment: 1 } },
+            });
+            await appendOutboxEvent(tx, {
+              sessionId: currentSession.id,
+              type: "review.reopened",
+              label: "Mở lại duyệt do thêm minh chứng gợi ý giảng dạy từ AI",
+              actorId: res.locals.actor.id,
+              visibility: { scope: "teacher" },
+              resourceId: currentSession.id,
+              version: reopened.version,
+            });
+            await tx.auditLog.create({
+              data: {
+                workspaceId: res.locals.actor.workspaceId,
+                actorId: res.locals.actor.id,
+                actorRole: "teacher",
+                action: "review.reopened",
+                targetType: "session",
+                targetId: currentSession.id,
+                sessionId: currentSession.id,
+                requestId: res.locals.requestId,
+                metadata: {
+                  previousStatus: "reviewed",
+                  nextStatus: "ended",
+                  reasonCode: "evidence_created_from_ai",
+                },
+              },
+            });
+          }
+
           const detail = editedText || freshItem.responseText;
           const ev = await tx.evidence.create({
             data: {
@@ -280,6 +426,15 @@ export function aiRouter(config: AppConfig) {
           });
           evidenceId = ev.id;
           createdEvidence = ev;
+
+          await appendOutboxEvent(tx, {
+            sessionId: freshItem.sessionId,
+            type: "evidence.created",
+            label: "Gợi ý giảng dạy đã lưu làm minh chứng",
+            actorId: res.locals.actor.id,
+            visibility: { scope: "teacher" },
+            resourceId: ev.id,
+          });
 
           await tx.auditLog.create({
             data: {
@@ -331,8 +486,10 @@ export function aiRouter(config: AppConfig) {
           },
         });
 
-        return { next, createdEvidence };
+        return { next, createdEvidence, sessionId: freshItem.sessionId };
       });
+
+      triggerOutboxPublish(updated.sessionId);
 
       return res.json({
         id: updated.next.id,
@@ -348,6 +505,14 @@ export function aiRouter(config: AppConfig) {
   r.post(
     "/sessions/:id/ai/claims-draft",
     asyncRoute(async (req, res) => {
+      if (!isAIEnabled()) {
+        return fail(res, 503, "AI_UNAVAILABLE", "AI chưa được bật");
+      }
+      const adapter = getAIAdapter();
+      if (!adapter) {
+        return fail(res, 503, "AI_UNAVAILABLE", "Dịch vụ AI không khả dụng trong môi trường hiện tại");
+      }
+
       if (!safeId.safeParse(req.params.id).success)
         return fail(res, 400, "VALIDATION_ERROR", "ID buổi học không hợp lệ");
 
@@ -386,24 +551,26 @@ export function aiRouter(config: AppConfig) {
       if (!member.consent)
         return fail(res, 403, "PERMISSION_DENIED", "Học sinh chưa có sự đồng ý (consent) để sử dụng AI");
 
-      // Gather active observation evidences for the student (excluding teaching aids and AI suggestions)
-      const observations = await db.evidence.findMany({
-        where: {
-          sessionId: session.id,
-          studentId: targetStudentId,
-          status: "active",
-          isObservation: true,
-          kind: { not: "GoiYGiangDay" },
-          sourceType: { not: "ai_suggestion" },
-        },
-        orderBy: { createdAt: "asc" },
-      });
+      const routeKey = `/sessions/${session.id}/ai/claims-draft`;
 
-      // 0-observation guard (SRS AI 004: if no source observations, do NOT fabricate competence claims)
-      if (observations.length === 0) {
+      // Preflight replay check
+      const prior = await lookupReplay(req, res, routeKey);
+      if (prior === null) return;
+      if (prior) {
+        const ids = prior.resourceId ? prior.resourceId.split(",").filter(Boolean) : [];
+        const claims = ids.length
+          ? await db.claim.findMany({ where: { id: { in: ids } } })
+          : [];
         return res.status(200).json({
-          claims: [],
-          summary: "Chưa có minh chứng quan sát thực tế để tạo nhận định năng lực",
+          claims: claims.map((c) => ({
+            id: c.id,
+            studentId: c.studentId,
+            text: c.text,
+            evidenceIds: c.evidenceIds,
+            status: c.status,
+            revision: c.revision,
+          })),
+          summary: "Nhận định dự thảo đã được tạo trước đó",
         });
       }
 
@@ -418,180 +585,362 @@ export function aiRouter(config: AppConfig) {
         );
       }
 
-      const adapter = getAIAdapter();
+      // Gather active observation evidences for the student (excluding teaching aids and AI suggestions)
+      const rawObservations = await db.evidence.findMany({
+        where: {
+          sessionId: session.id,
+          studentId: targetStudentId,
+          status: "active",
+          isObservation: true,
+          kind: { not: "GoiYGiangDay" },
+          sourceType: { not: "ai_suggestion" },
+        },
+        orderBy: { createdAt: "asc" },
+      });
 
-      // Dispatch to AI adapter OUTSIDE transaction lock
-      let aiDrafts;
-      try {
-        aiDrafts = await adapter.generateClaimDrafts({
-          student: {
-            id: member.studentId,
-            subject: member.studentIdRef.subject,
-            grade: member.studentIdRef.grade,
-          },
-          observations: observations.map((o) => ({
-            id: o.id,
-            studentId: o.studentId,
-            title: o.title,
-            detail: o.detail,
-            support: o.support,
-            kind: o.kind,
-            sourceType: o.sourceType,
-            sourceVersion: o.sourceVersion,
-          })),
-          extraPrompt: parsed.data.prompt,
-        });
-      } catch (err: unknown) {
-        const errorMsg =
-          err instanceof Error ? err.message : "Dịch vụ AI không khả dụng";
-        return fail(
-          res,
-          503,
-          "AI_UNAVAILABLE",
-          errorMsg.startsWith("AI_")
-            ? errorMsg
-            : "Gemini tạm không khả dụng; giáo viên có thể tạo nhận định thủ công",
+      // Filter out stale observations using current G2 source version resolution
+      const nonStaleObservations: typeof rawObservations = [];
+      for (const obs of rawObservations) {
+        const curVer = await resolveCurrentSourceVersion(
+          obs.sourceType,
+          obs.sourceId,
+          session.id,
+          db,
+          targetStudentId,
         );
+        if (obs.sourceVersion !== null && curVer !== obs.sourceVersion) {
+          // Stale observation, ignore
+          continue;
+        }
+        nonStaleObservations.push(obs);
       }
 
-      // Revalidate and persist UNDER SESSION LOCK
-      const routeKey = `/sessions/${session.id}/ai/claims-draft`;
-      const result = await createOnce(req, res, routeKey, async (tx) => {
-        const current = await lockSession(tx, session.id);
-        if (!["ended", "reviewed"].includes(current.status))
-          throw new SessionConflict("SESSION_STATE_INVALID", "Trạng thái buổi học không hợp lệ");
-
-        // Fresh observation evidence revalidation under lock
-        const liveObs = await tx.evidence.findMany({
-          where: {
-            id: { in: observations.map((o) => o.id) },
-            sessionId: session.id,
-            studentId: targetStudentId,
-            status: "active",
-            isObservation: true,
-            kind: { not: "GoiYGiangDay" },
-            sourceType: { not: "ai_suggestion" },
-          },
+      // 0-observation guard (SRS AI 004: if no source observations, do NOT fabricate competence claims)
+      if (nonStaleObservations.length === 0) {
+        return res.status(200).json({
+          claims: [],
+          summary: "Chưa có minh chứng quan sát thực tế để tạo nhận định năng lực",
         });
-        const liveObsMap = new Map(liveObs.map((o) => [o.id, o]));
+      }
 
-        // Reopen reviewed session if new claims are being drafted
-        if (current.status === "reviewed" && aiDrafts.claims.length > 0) {
-          const reopened = await tx.session.update({
+      // Snapshot pre-SDK observation versions for race detection
+      const preSnapshotObsMap = new Map(
+        nonStaleObservations.map((o) => [
+          o.id,
+          {
+            id: o.id,
+            version: o.version,
+            sourceVersion: o.sourceVersion,
+            sourceType: o.sourceType,
+            sourceId: o.sourceId,
+          },
+        ]),
+      );
+
+      const idempotencyKey = req.get("Idempotency-Key") || "";
+      const lockKey = `${res.locals.actor.id}:${routeKey}:${idempotencyKey}`;
+
+      if (idempotencyKey) {
+        const inFlight = inFlightRequests.get(lockKey);
+        if (inFlight) {
+          await inFlight.catch(() => {});
+          const postReplay = await lookupReplay(req, res, routeKey);
+          if (postReplay === null) return;
+          if (postReplay) {
+            const ids = postReplay.resourceId ? postReplay.resourceId.split(",").filter(Boolean) : [];
+            const claims = ids.length
+              ? await db.claim.findMany({ where: { id: { in: ids } } })
+              : [];
+            return res.status(200).json({
+              claims: claims.map((c) => ({
+                id: c.id,
+                studentId: c.studentId,
+                text: c.text,
+                evidenceIds: c.evidenceIds,
+                status: c.status,
+                revision: c.revision,
+              })),
+              summary: "Nhận định dự thảo đã được tạo trước đó",
+            });
+          }
+        }
+      }
+
+      const barrier = idempotencyKey ? createInFlightBarrier(lockKey) : null;
+      try {
+        // Query all student names in workspace for comprehensive context minimization
+        const allStudents = await db.student.findMany({
+          where: { teacherId: res.locals.actor.id },
+          select: { name: true },
+        });
+        const studentNames = allStudents.map((s) => s.name.trim()).filter((n) => n.length > 1);
+
+        const cleanSubject = sanitizeContext(member.studentIdRef.subject || "", studentNames);
+        const cleanGrade = sanitizeContext(member.studentIdRef.grade || "", studentNames);
+        const cleanGoal = sanitizeContext(member.studentIdRef.goal || "", studentNames);
+        const cleanExtraPrompt = sanitizeContext(parsed.data.prompt || "", studentNames);
+
+        // Dispatch to AI adapter OUTSIDE transaction lock
+        let aiDrafts;
+        try {
+          aiDrafts = await adapter.generateClaimDrafts({
+            student: {
+              id: member.studentId,
+              subject: cleanSubject,
+              grade: cleanGrade,
+              goal: cleanGoal,
+            },
+            observations: nonStaleObservations.map((o) => ({
+              id: o.id,
+              studentId: o.studentId,
+              title: sanitizeContext(o.title, studentNames),
+              detail: sanitizeContext(o.detail, studentNames),
+              support: o.support,
+              kind: o.kind,
+              sourceType: o.sourceType,
+              sourceVersion: o.sourceVersion,
+            })),
+            extraPrompt: cleanExtraPrompt,
+            studentNames,
+          });
+        } catch (err: unknown) {
+          const errorMsg =
+            err instanceof Error ? err.message : "Dịch vụ AI không khả dụng";
+          return fail(
+            res,
+            503,
+            "AI_UNAVAILABLE",
+            errorMsg.startsWith("AI_")
+              ? errorMsg
+              : "Gemini tạm không khả dụng; giáo viên có thể tạo nhận định thủ công",
+          );
+        }
+
+        // Revalidate and persist UNDER SESSION LOCK
+        const result = await createOnce(req, res, routeKey, async (tx) => {
+          await lockSession(tx, session.id);
+
+          const current = await tx.session.findUniqueOrThrow({
             where: { id: session.id },
-            data: { status: "ended", version: { increment: 1 } },
           });
-          await appendOutboxEvent(tx, {
-            sessionId: session.id,
-            type: "review.reopened",
-            label: "Mở lại duyệt do tạo nhận định dự thảo từ AI",
-            actorId: res.locals.actor.id,
-            visibility: { scope: "teacher" },
-            resourceId: session.id,
-            version: reopened.version,
-          });
-          await tx.auditLog.create({
-            data: {
-              workspaceId: res.locals.actor.workspaceId,
-              actorId: res.locals.actor.id,
-              actorRole: "teacher",
-              action: "review.reopened",
-              targetType: "session",
-              targetId: session.id,
-              sessionId: session.id,
-              requestId: res.locals.requestId,
-              metadata: {
-                previousStatus: "reviewed",
-                nextStatus: "ended",
-                reasonCode: "ai_claims_drafted",
+          if (!["ended", "reviewed"].includes(current.status))
+            throw new SessionConflict(
+              "SESSION_STATE_INVALID",
+              "Trạng thái buổi học đã thay đổi trong khi chờ AI",
+            );
+
+          // Recheck member consent under session lock
+          const currentMember = await tx.roomMember.findUnique({
+            where: {
+              sessionId_studentId: {
+                sessionId: session.id,
+                studentId: targetStudentId,
               },
             },
           });
-        }
+          if (!currentMember || !currentMember.consent) {
+            throw new SessionConflict(
+              "PERMISSION_DENIED",
+              "Học sinh đã thu hồi sự đồng ý sử dụng AI",
+            );
+          }
 
-        const createdClaimIds: string[] = [];
-        for (const candidate of aiDrafts.claims) {
-          // Strictly validate that returned evidenceIds exist and belong to the student
-          const validIds = candidate.evidenceIds.filter((id) => liveObsMap.has(id));
-          if (validIds.length === 0) continue;
+          // Query live observation evidence in DB under lock to verify intactness
+          const liveObs = await tx.evidence.findMany({
+            where: {
+              sessionId: session.id,
+              studentId: targetStudentId,
+              status: "active",
+              isObservation: true,
+              kind: { not: "GoiYGiangDay" },
+              sourceType: { not: "ai_suggestion" },
+            },
+          });
+          const liveObsMap = new Map(liveObs.map((o) => [o.id, o]));
 
-          const created = await tx.claim.create({
+          // Compare referenced observations against pre-SDK snapshot for any edit/delete/regrade race
+          for (const candidate of aiDrafts.claims) {
+            for (const refId of candidate.evidenceIds) {
+              const snapshot = preSnapshotObsMap.get(refId);
+              const live = liveObsMap.get(refId);
+              if (!snapshot || !live) {
+                // If referenced evidence was deleted or missing from snapshot
+                continue;
+              }
+              const curLiveSourceVer = await resolveCurrentSourceVersion(
+                live.sourceType,
+                live.sourceId,
+                session.id,
+                tx,
+                targetStudentId,
+              );
+              if (
+                live.version !== snapshot.version ||
+                live.sourceVersion !== snapshot.sourceVersion ||
+                curLiveSourceVer !== snapshot.sourceVersion
+              ) {
+                throw new SessionConflict(
+                  "VERSION_CONFLICT",
+                  "Minh chứng quan sát đã bị thay đổi trong quá trình xử lý AI",
+                );
+              }
+            }
+          }
+
+          // Strictly filter candidate claims: REJECT whole candidate if ANY ref is invalid/duplicate/stale/peer
+          const validCandidates: typeof aiDrafts.claims = [];
+          for (const candidate of aiDrafts.claims) {
+            if (!candidate.text || candidate.text.trim().length < 5) continue;
+            if (!candidate.evidenceIds || candidate.evidenceIds.length === 0) continue;
+
+            // Check for duplicate evidence IDs in candidate
+            const uniqueIds = new Set(candidate.evidenceIds);
+            if (uniqueIds.size !== candidate.evidenceIds.length) {
+              // Discard whole candidate if duplicate references exist
+              continue;
+            }
+
+            // Check if ALL ids belong to live valid observations belonging to the student
+            const allValid = candidate.evidenceIds.every((id) => liveObsMap.has(id));
+            if (!allValid) {
+              // Discard whole candidate with ANY hallucinated/peer/unknown ref
+              continue;
+            }
+
+            validCandidates.push(candidate);
+          }
+
+          const createdClaimIds: string[] = [];
+
+          // Reopen reviewed session ONLY if at least one valid claim will actually persist
+          if (current.status === "reviewed" && validCandidates.length > 0) {
+            const reopened = await tx.session.update({
+              where: { id: session.id },
+              data: { status: "ended", version: { increment: 1 } },
+            });
+            await appendOutboxEvent(tx, {
+              sessionId: session.id,
+              type: "review.reopened",
+              label: "Mở lại duyệt do tạo nhận định dự thảo từ AI",
+              actorId: res.locals.actor.id,
+              visibility: { scope: "teacher" },
+              resourceId: session.id,
+              version: reopened.version,
+            });
+            await tx.auditLog.create({
+              data: {
+                workspaceId: res.locals.actor.workspaceId,
+                actorId: res.locals.actor.id,
+                actorRole: "teacher",
+                action: "review.reopened",
+                targetType: "session",
+                targetId: session.id,
+                sessionId: session.id,
+                requestId: res.locals.requestId,
+                metadata: {
+                  previousStatus: "reviewed",
+                  nextStatus: "ended",
+                  reasonCode: "ai_claims_drafted",
+                },
+              },
+            });
+          }
+
+          for (const candidate of validCandidates) {
+            const created = await tx.claim.create({
+              data: {
+                sessionId: session.id,
+                studentId: targetStudentId,
+                text: candidate.text,
+                evidenceIds: candidate.evidenceIds,
+                status: "pending", // Sourced pending claims only
+                revision: 1,
+              },
+            });
+            createdClaimIds.push(created.id);
+
+            await tx.auditLog.create({
+              data: {
+                workspaceId: res.locals.actor.workspaceId,
+                actorId: res.locals.actor.id,
+                actorRole: "teacher",
+                action: "claim.draft_created",
+                targetType: "claim",
+                targetId: created.id,
+                sessionId: session.id,
+                requestId: res.locals.requestId,
+                metadata: {
+                  source: "ai_draft",
+                  provider: aiDrafts.provider,
+                  model: aiDrafts.model,
+                  evidenceCount: candidate.evidenceIds.length,
+                },
+              },
+            });
+          }
+
+          // Record AIRequest audit
+          await tx.aIRequest.create({
             data: {
               sessionId: session.id,
               studentId: targetStudentId,
-              text: candidate.text,
-              evidenceIds: validIds,
-              status: "pending", // Sourced pending claims only
-              revision: 1,
-            },
-          });
-          createdClaimIds.push(created.id);
-
-          await tx.auditLog.create({
-            data: {
-              workspaceId: res.locals.actor.workspaceId,
+              kind: "claim_draft",
+              prompt: aiDrafts.promptUsed,
+              promptVersion: aiDrafts.promptVersion,
+              responseText: JSON.stringify(validCandidates),
+              contextSummary: aiDrafts.contextSummary,
+              provider: aiDrafts.provider,
+              model: aiDrafts.model,
+              modelVersion: aiDrafts.modelVersion,
+              status: "ready",
               actorId: res.locals.actor.id,
-              actorRole: "teacher",
-              action: "claim.draft_created",
-              targetType: "claim",
-              targetId: created.id,
-              sessionId: session.id,
-              requestId: res.locals.requestId,
-              metadata: {
-                source: "ai_draft",
-                provider: aiDrafts.provider,
-                model: aiDrafts.model,
-                evidenceCount: validIds.length,
-              },
             },
           });
-        }
 
-        // Record AIRequest audit
-        await tx.aIRequest.create({
-          data: {
-            sessionId: session.id,
-            studentId: targetStudentId,
-            kind: "claim_draft",
-            prompt: aiDrafts.promptUsed,
-            promptVersion: aiDrafts.promptVersion,
-            responseText: JSON.stringify(aiDrafts.claims),
-            contextSummary: aiDrafts.contextSummary,
-            provider: aiDrafts.provider,
-            model: aiDrafts.model,
-            modelVersion: aiDrafts.modelVersion,
-            status: "ready",
-            actorId: res.locals.actor.id,
-          },
+          return createdClaimIds.join(",");
         });
 
-        return createdClaimIds.join(",");
-      });
+        if (!result) return;
+        const ids = result.resourceId ? result.resourceId.split(",").filter(Boolean) : [];
+        const claims = ids.length
+          ? await db.claim.findMany({ where: { id: { in: ids } } })
+          : [];
 
-      if (!result) return;
-      const ids = result.resourceId ? result.resourceId.split(",").filter(Boolean) : [];
-      const claims = ids.length
-        ? await db.claim.findMany({ where: { id: { in: ids } } })
-        : [];
+        triggerOutboxPublish(session.id);
 
-      return res.status(201).json({
-        claims,
-        summary: aiDrafts.summary,
-      });
+        return res.status(201).json({
+          claims: claims.map((c) => ({
+            id: c.id,
+            studentId: c.studentId,
+            text: c.text,
+            evidenceIds: c.evidenceIds,
+            status: c.status,
+            revision: c.revision,
+          })),
+          summary: aiDrafts.summary,
+        });
+      } finally {
+        barrier?.release();
+      }
     }),
   );
 
-  // 4. Backward-Compatible Plan Suggestions (POST /sessions/:id/ai/plan-suggestions)
+  // 4. Backward-Compatible Lesson Plan Suggestions (POST /sessions/:id/ai/plan-suggestions)
   r.post(
     "/sessions/:id/ai/plan-suggestions",
     asyncRoute(async (req, res) => {
-      if (process.env.ENABLE_AI !== "true")
+      if (!isAIEnabled()) {
         return fail(res, 503, "AI_UNAVAILABLE", "AI chưa được bật");
+      }
+      const adapter = getAIAdapter();
+      if (!adapter) {
+        return fail(res, 503, "AI_UNAVAILABLE", "Dịch vụ AI không khả dụng trong môi trường hiện tại");
+      }
 
       const parsed = z
-        .strictObject({ studentId: z.uuid() })
+        .strictObject({ studentId: z.string().uuid() })
         .safeParse(req.body);
-      if (!parsed.success || !z.uuid().safeParse(req.params.id).success)
+      if (!parsed.success || !safeId.safeParse(req.params.id).success)
         return fail(res, 400, "VALIDATION_ERROR", "Yêu cầu không hợp lệ");
 
       const session = await db.session.findUnique({
@@ -625,7 +974,34 @@ export function aiRouter(config: AppConfig) {
           "PERMISSION_DENIED",
           "Học sinh không thuộc buổi học",
         );
+      if (!member.consent)
+        return fail(
+          res,
+          403,
+          "PERMISSION_DENIED",
+          "Học sinh chưa có sự đồng ý (consent) để sử dụng hỗ trợ AI",
+        );
 
+      const routeKey = `/sessions/${session.id}/ai/plan-suggestions`;
+
+      // Preflight replay check
+      const prior = await lookupReplay(req, res, routeKey);
+      if (prior === null) return;
+      if (prior) {
+        const existing = await db.aIRequest.findUniqueOrThrow({
+          where: { id: prior.resourceId },
+        });
+        return res.status(200).json({
+          suggestion: {
+            id: existing.id,
+            text: existing.responseText,
+            status: existing.status,
+            sources: [],
+          },
+        });
+      }
+
+      // Query past approved claims for student with historical consent
       const claims = await db.claim.findMany({
         where: {
           studentId: parsed.data.studentId,
@@ -661,79 +1037,184 @@ export function aiRouter(config: AppConfig) {
           "Chưa có lịch sử đã duyệt và đồng ý sử dụng cho AI",
         );
 
-      const observations = await db.evidence.findMany({
-        where: {
-          id: { in: eligible.flatMap((claim) => claim.evidenceIds) },
-          status: "active",
-          isObservation: true,
-          kind: { not: "GoiYGiangDay" },
-          sourceType: { not: "ai_suggestion" },
-          sessionIdRef: { teacherId: res.locals.actor.id },
-        },
-        select: { id: true, sessionId: true, studentId: true },
-      });
+      // Snapshot eligible claims to detect races while awaiting model
+      const preSnapshotClaims = eligible.map((c) => ({
+        id: c.id,
+        revision: c.revision,
+        evidenceIds: c.evidenceIds,
+      }));
 
-      const studentNames = (
-        await db.student.findMany({
-          where: { teacherId: res.locals.actor.id },
-          select: { name: true },
-        })
-      ).map((student) => student.name);
+      const idempotencyKey = req.get("Idempotency-Key") || "";
+      const lockKey = `${res.locals.actor.id}:${routeKey}:${idempotencyKey}`;
 
-      const adapter = getAIAdapter();
-      let aiResult;
-      try {
-        aiResult = await adapter.generatePlanSuggestion({
-          studentId: member.studentId,
-          subject: member.studentIdRef.subject,
-          grade: member.studentIdRef.grade,
-          eligibleClaims: eligible.map((c) => sanitizeContext(c.text, studentNames)),
-        });
-      } catch {
-        return fail(
-          res,
-          503,
-          "AI_UNAVAILABLE",
-          "Gemini tạm không khả dụng; vẫn có thể soạn thủ công",
-        );
+      if (idempotencyKey) {
+        const inFlight = inFlightRequests.get(lockKey);
+        if (inFlight) {
+          await inFlight.catch(() => {});
+          const postReplay = await lookupReplay(req, res, routeKey);
+          if (postReplay === null) return;
+          if (postReplay) {
+            const existing = await db.aIRequest.findUniqueOrThrow({
+              where: { id: postReplay.resourceId },
+            });
+            return res.status(200).json({
+              suggestion: {
+                id: existing.id,
+                text: existing.responseText,
+                status: existing.status,
+                sources: [],
+              },
+            });
+          }
+        }
       }
 
-      const request = await db.aIRequest.create({
-        data: {
-          sessionId: session.id,
-          studentId: parsed.data.studentId,
-          kind: "plan_suggestion",
-          prompt: aiResult.promptUsed,
-          promptVersion: aiResult.promptVersion,
-          responseText: aiResult.text.slice(0, 4000),
-          contextSummary: aiResult.contextSummary,
-          provider: aiResult.provider,
-          model: aiResult.model,
-          modelVersion: aiResult.modelVersion,
-          status: "ready",
-          actorId: res.locals.actor.id,
-        },
-      });
+      const barrier = idempotencyKey ? createInFlightBarrier(lockKey) : null;
+      try {
+        // Query student personal names for context minimization
+        const allStudents = await db.student.findMany({
+          where: { teacherId: res.locals.actor.id },
+          select: { name: true },
+        });
+        const studentNames = allStudents.map((s) => s.name.trim()).filter((n) => n.length > 1);
 
-      return res.status(201).json({
-        suggestion: {
-          id: request.id,
-          text: request.responseText,
-          status: request.status,
-          sources: eligible.map((c) => ({
-            claimId: c.id,
-            revision: c.revision,
-            evidenceIds: c.evidenceIds.filter((id) =>
-              observations.some(
-                (item) =>
-                  item.id === id &&
-                  item.sessionId === c.sessionId &&
-                  item.studentId === c.studentId,
+        const cleanSubject = sanitizeContext(member.studentIdRef.subject || "", studentNames);
+        const cleanGrade = sanitizeContext(member.studentIdRef.grade || "", studentNames);
+        const cleanGoal = sanitizeContext(member.studentIdRef.goal || "", studentNames);
+        const cleanClaims = eligible.map((c) => sanitizeContext(c.text, studentNames));
+
+        // Dispatch to AI adapter outside lock
+        let aiResult;
+        try {
+          aiResult = await adapter.generatePlanSuggestion({
+            studentId: member.studentId,
+            subject: cleanSubject,
+            grade: cleanGrade,
+            goal: cleanGoal,
+            eligibleClaims: cleanClaims,
+            studentNames,
+          });
+        } catch (err: unknown) {
+          const errorMsg =
+            err instanceof Error ? err.message : "Dịch vụ AI không khả dụng";
+          return fail(
+            res,
+            503,
+            "AI_UNAVAILABLE",
+            errorMsg.startsWith("AI_")
+              ? errorMsg
+              : "Gemini tạm không khả dụng; có thể chuẩn bị giáo án thủ công",
+          );
+        }
+
+        // Revalidate and persist UNDER SESSION LOCK
+        const result = await createOnce(req, res, routeKey, async (tx) => {
+          await lockSession(tx, session.id);
+
+          const currentSession = await tx.session.findUniqueOrThrow({
+            where: { id: session.id },
+          });
+          if (!["draft", "scheduled"].includes(currentSession.status)) {
+            throw new SessionConflict(
+              "SESSION_STATE_INVALID",
+              "Trạng thái buổi học đã thay đổi trong khi chờ AI",
+            );
+          }
+
+          const currentMember = await tx.roomMember.findUnique({
+            where: {
+              sessionId_studentId: {
+                sessionId: session.id,
+                studentId: parsed.data.studentId,
+              },
+            },
+          });
+          if (!currentMember || !currentMember.consent) {
+            throw new SessionConflict(
+              "PERMISSION_DENIED",
+              "Học sinh đã thu hồi sự đồng ý sử dụng AI",
+            );
+          }
+
+          // Recheck that eligible claims have not been revised or unapproved
+          const liveClaims = await tx.claim.findMany({
+            where: {
+              id: { in: preSnapshotClaims.map((c) => c.id) },
+              status: "approved",
+            },
+          });
+          const liveClaimMap = new Map(liveClaims.map((c) => [c.id, c]));
+
+          for (const snap of preSnapshotClaims) {
+            const live = liveClaimMap.get(snap.id);
+            if (!live || live.revision !== snap.revision) {
+              throw new SessionConflict(
+                "VERSION_CONFLICT",
+                "Nhận định năng lực dùng làm căn cứ đã bị thay đổi trong khi chờ AI",
+              );
+            }
+          }
+
+          const request = await tx.aIRequest.create({
+            data: {
+              sessionId: session.id,
+              studentId: parsed.data.studentId,
+              kind: "plan_suggestion",
+              prompt: aiResult.promptUsed,
+              promptVersion: aiResult.promptVersion,
+              responseText: aiResult.text.slice(0, 4000),
+              contextSummary: aiResult.contextSummary,
+              provider: aiResult.provider,
+              model: aiResult.model,
+              modelVersion: aiResult.modelVersion,
+              status: "ready",
+              actorId: res.locals.actor.id,
+            },
+          });
+
+          return request.id;
+        });
+
+        if (!result) return;
+        const request = await db.aIRequest.findUniqueOrThrow({
+          where: { id: result.resourceId },
+        });
+
+        // Re-read active observations for sources output
+        const observations = await db.evidence.findMany({
+          where: {
+            id: { in: eligible.flatMap((claim) => claim.evidenceIds) },
+            status: "active",
+            isObservation: true,
+            kind: { not: "GoiYGiangDay" },
+            sourceType: { not: "ai_suggestion" },
+            sessionIdRef: { teacherId: res.locals.actor.id },
+          },
+          select: { id: true, sessionId: true, studentId: true },
+        });
+
+        return res.status(201).json({
+          suggestion: {
+            id: request.id,
+            text: request.responseText,
+            status: request.status,
+            sources: eligible.map((c) => ({
+              claimId: c.id,
+              revision: c.revision,
+              evidenceIds: c.evidenceIds.filter((id) =>
+                observations.some(
+                  (item) =>
+                    item.id === id &&
+                    item.sessionId === c.sessionId &&
+                    item.studentId === c.studentId,
+                ),
               ),
-            ),
-          })),
-        },
-      });
+            })),
+          },
+        });
+      } finally {
+        barrier?.release();
+      }
     }),
   );
 
@@ -755,7 +1236,7 @@ export function aiRouter(config: AppConfig) {
       const items = await db.aIRequest.findMany({
         where: {
           sessionId: session.id,
-          kind: "suggestion",
+          kind: { in: ["explain", "leading_question", "example", "difficulty", "suggestion"] },
         },
         orderBy: { createdAt: "desc" },
         take: 50,

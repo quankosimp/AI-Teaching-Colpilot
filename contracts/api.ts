@@ -254,6 +254,7 @@ export const API_ROUTES = {
   aiSuggest: ["POST", "/api/v1/sessions/:id/ai/suggestions"],
   aiUpdate: ["PATCH", "/api/v1/ai-requests/:id"],
   aiClaimsDraft: ["POST", "/api/v1/sessions/:id/ai/claims-draft"],
+  aiPlanSuggestions: ["POST", "/api/v1/sessions/:id/ai/plan-suggestions"],
   claimsList: ["GET", "/api/v1/sessions/:id/claims"],
   claimDraft: ["POST", "/api/v1/sessions/:id/claims/draft"],
   claimReview: ["PATCH", "/api/v1/claims/:id/review"],
@@ -443,6 +444,7 @@ export const REPLAY_ROUTES = [
   "POST /api/v1/sessions/:id/evidence",
   "POST /api/v1/sessions/:id/ai/suggestions",
   "POST /api/v1/sessions/:id/ai/claims-draft",
+  "POST /api/v1/sessions/:id/ai/plan-suggestions",
   "POST /api/v1/sessions/:id/claims/draft",
   "POST /api/v1/sessions/:id/next-session",
 ] as const;

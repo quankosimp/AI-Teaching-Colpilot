@@ -40,7 +40,7 @@ export const AISuggestionItem = z.strictObject({
   sessionId: Id,
   studentId: Id,
   activityId: Id.nullable(),
-  kind: z.string(),
+  kind: z.union([TeachingRequestMode, z.literal("suggestion")]),
   prompt: z.string(),
   responseText: z.string(),
   editedText: z.string().nullable().optional(),

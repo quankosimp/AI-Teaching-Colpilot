@@ -7,8 +7,9 @@ export class CircuitBreaker {
   private failures = 0;
   private isOpen = false;
   private lastFailureTime = 0;
-  private readonly failureThreshold: number;
-  private readonly cooldownMs: number;
+  private halfOpenInFlight = false;
+  readonly failureThreshold: number;
+  readonly cooldownMs: number;
 
   constructor(config: CircuitBreakerConfig = {}) {
     this.failureThreshold = config.failureThreshold ?? 3;
@@ -19,8 +20,12 @@ export class CircuitBreaker {
     if (!this.isOpen) return true;
     const now = Date.now();
     if (now - this.lastFailureTime >= this.cooldownMs) {
-      // Half-open: allow a trial request
-      return true;
+      // Exclusive half-open: allow exactly one trial request
+      if (!this.halfOpenInFlight) {
+        this.halfOpenInFlight = true;
+        return true;
+      }
+      return false;
     }
     return false;
   }
@@ -29,9 +34,11 @@ export class CircuitBreaker {
     this.failures = 0;
     this.isOpen = false;
     this.lastFailureTime = 0;
+    this.halfOpenInFlight = false;
   }
 
   recordFailure(): void {
+    this.halfOpenInFlight = false;
     this.failures += 1;
     this.lastFailureTime = Date.now();
     if (this.failures >= this.failureThreshold) {
@@ -47,6 +54,7 @@ export class CircuitBreaker {
       circuitOpen: effectiveOpen,
       consecutiveFailures: this.failures,
       lastFailureTime: this.lastFailureTime || null,
+      cooldownMs: this.cooldownMs,
     };
   }
 
@@ -54,5 +62,6 @@ export class CircuitBreaker {
     this.failures = 0;
     this.isOpen = false;
     this.lastFailureTime = 0;
+    this.halfOpenInFlight = false;
   }
 }

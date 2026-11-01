@@ -9,6 +9,7 @@ export interface TeachingRequestInput {
     id: string;
     subject?: string;
     grade?: string;
+    goal?: string;
   };
   activity: {
     id: string;
@@ -17,6 +18,7 @@ export interface TeachingRequestInput {
     type?: string;
   };
   priorApprovedClaims?: string[];
+  studentNames?: string[];
 }
 
 export interface TeachingSuggestionResult {
@@ -45,9 +47,11 @@ export interface ClaimDraftRequestInput {
     id: string;
     subject?: string;
     grade?: string;
+    goal?: string;
   };
   observations: ObservationEvidenceItem[];
   extraPrompt?: string;
+  studentNames?: string[];
 }
 
 export interface ClaimDraftCandidate {
@@ -71,7 +75,9 @@ export interface PlanSuggestionInput {
   studentId: string;
   subject?: string;
   grade?: string;
+  goal?: string;
   eligibleClaims: string[];
+  studentNames?: string[];
 }
 
 export interface PlanSuggestionResult {

@@ -8,18 +8,27 @@ import type {
   TeachingRequestInput,
   TeachingSuggestionResult,
 } from "./types.js";
-import { CircuitBreaker } from "./circuitBreaker.js";
+import { CircuitBreaker, type CircuitBreakerConfig } from "./circuitBreaker.js";
 import { sanitizeContext } from "./sanitizer.js";
 
 export class FakeAIAdapter implements AIAdapter {
   readonly provider = "mock" as const;
   readonly model = "mock-gemini-2.5-flash";
   readonly modelVersion = "mock-v1";
-  private breaker = new CircuitBreaker();
+  private breaker: CircuitBreaker;
 
-  // Test hooks for fault injection
+  // Test hooks for fault injection and context capture
   simulateTimeout = false;
   simulateError = false;
+  callCount = 0;
+  lastTeachingInput?: TeachingRequestInput;
+  lastClaimInput?: ClaimDraftRequestInput;
+  lastPlanInput?: PlanSuggestionInput;
+  lastDispatchedPrompt?: string;
+
+  constructor(circuitConfig?: CircuitBreakerConfig) {
+    this.breaker = new CircuitBreaker(circuitConfig);
+  }
 
   getCircuitStatus(): CircuitStatus {
     const status = this.breaker.getStatus();
@@ -58,11 +67,32 @@ export class FakeAIAdapter implements AIAdapter {
   async generateTeachingSuggestion(
     input: TeachingRequestInput,
   ): Promise<TeachingSuggestionResult> {
+    this.callCount += 1;
+    this.lastTeachingInput = input;
     this.checkCircuit();
 
-    const cleanPrompt = sanitizeContext(input.prompt);
-    const cleanActivity = sanitizeContext(input.activity.title);
+    const names = input.studentNames || [];
+    const cleanPrompt = sanitizeContext(input.prompt, names);
+    const cleanActivity = sanitizeContext(input.activity.title, names);
+    const cleanDesc = sanitizeContext(input.activity.description || "", names);
+    const cleanSubject = sanitizeContext(input.student.subject || "", names);
+    const cleanGrade = sanitizeContext(input.student.grade || "", names);
+    const cleanGoal = sanitizeContext(input.student.goal || "", names);
+    const cleanClaims = (input.priorApprovedClaims || []).map((c) => sanitizeContext(c, names));
     const mode = input.mode;
+
+    const fullInstruction = [
+      `Chế độ sư phạm: ${mode}.`,
+      `Hoạt động: ${cleanActivity}.`,
+      cleanDesc ? `Mô tả hoạt động: ${cleanDesc}.` : "",
+      cleanSubject ? `Môn học: ${cleanSubject}.` : "",
+      cleanGrade ? `Khối lớp: ${cleanGrade}.` : "",
+      cleanGoal ? `Mục tiêu học tập: ${cleanGoal}.` : "",
+      cleanPrompt ? `Lưu ý từ giáo viên: ${cleanPrompt}.` : "",
+      cleanClaims.length > 0 ? `Lịch sử nhận định đã duyệt: ${cleanClaims.join("; ")}.` : "",
+    ].filter(Boolean).join("\n");
+
+    this.lastDispatchedPrompt = fullInstruction;
 
     let responseText = "";
     switch (mode) {
@@ -88,8 +118,8 @@ export class FakeAIAdapter implements AIAdapter {
       provider: this.provider,
       model: this.model,
       modelVersion: this.modelVersion,
-      contextSummary: `Mode=${mode}; Activity=${cleanActivity}; Grade=${input.student.grade || "default"}`,
-      promptUsed: cleanPrompt,
+      contextSummary: `Mode=${mode}; Activity=${cleanActivity}; Grade=${cleanGrade || "default"}`,
+      promptUsed: fullInstruction,
       promptVersion: `teach-${mode}-v1`,
     };
   }
@@ -97,7 +127,12 @@ export class FakeAIAdapter implements AIAdapter {
   async generateClaimDrafts(
     input: ClaimDraftRequestInput,
   ): Promise<ClaimDraftResult> {
+    this.callCount += 1;
+    this.lastClaimInput = input;
     this.checkCircuit();
+
+    const names = input.studentNames || [];
+    const cleanExtra = sanitizeContext(input.extraPrompt || "", names);
 
     // 0-observation guard: no evidence -> no competence claim (SRS AI 004)
     if (!input.observations || input.observations.length === 0) {
@@ -109,13 +144,30 @@ export class FakeAIAdapter implements AIAdapter {
         model: this.model,
         modelVersion: this.modelVersion,
         contextSummary: "0 observations",
-        promptUsed: sanitizeContext(input.extraPrompt || ""),
+        promptUsed: cleanExtra,
         promptVersion: "claim-draft-v1",
       };
     }
 
-    const independentObs = input.observations.filter((o) => o.support === "DocLap");
-    const guidedObs = input.observations.filter((o) => o.support !== "DocLap");
+    const cleanObservations = input.observations.map((o) => ({
+      ...o,
+      title: sanitizeContext(o.title, names),
+      detail: sanitizeContext(o.detail, names),
+    }));
+
+    const cleanGoal = sanitizeContext(input.student.goal || "", names);
+    const fullInstruction = [
+      `Học sinh môn: ${sanitizeContext(input.student.subject || "", names)}, khối: ${sanitizeContext(input.student.grade || "", names)}.`,
+      cleanGoal ? `Mục tiêu học tập: ${cleanGoal}.` : "",
+      cleanExtra ? `Yêu cầu thêm từ giáo viên: ${cleanExtra}.` : "",
+      "Danh sách minh chứng quan sát:",
+      ...cleanObservations.map((o) => `- [${o.id}] (${o.support}): ${o.title}. ${o.detail}`),
+    ].filter(Boolean).join("\n");
+
+    this.lastDispatchedPrompt = fullInstruction;
+
+    const independentObs = cleanObservations.filter((o) => o.support === "DocLap");
+    const guidedObs = cleanObservations.filter((o) => o.support !== "DocLap");
 
     const claims: ClaimDraftResult["claims"] = [];
 
@@ -143,7 +195,7 @@ export class FakeAIAdapter implements AIAdapter {
       model: this.model,
       modelVersion: this.modelVersion,
       contextSummary: `${input.observations.length} observations evaluated`,
-      promptUsed: sanitizeContext(input.extraPrompt || ""),
+      promptUsed: fullInstruction,
       promptVersion: "claim-draft-v1",
     };
   }
@@ -151,12 +203,28 @@ export class FakeAIAdapter implements AIAdapter {
   async generatePlanSuggestion(
     input: PlanSuggestionInput,
   ): Promise<PlanSuggestionResult> {
+    this.callCount += 1;
+    this.lastPlanInput = input;
     this.checkCircuit();
 
-    const cleanClaims = input.eligibleClaims.map((c) => sanitizeContext(c));
+    const names = input.studentNames || [];
+    const cleanClaims = input.eligibleClaims.map((c) => sanitizeContext(c, names));
+    const cleanSubject = sanitizeContext(input.subject || "", names);
+    const cleanGrade = sanitizeContext(input.grade || "", names);
+    const cleanGoal = sanitizeContext(input.goal || "", names);
+
+    const fullInstruction = [
+      "Đề xuất một hoạt động ngắn cho giáo viên. Không đưa tên riêng, thông tin cá nhân hoặc kết luận mới. Trả lời ngắn bằng tiếng Việt.",
+      cleanSubject && cleanGrade ? `Môn: ${cleanSubject}; lớp: ${cleanGrade}.` : "",
+      cleanGoal ? `Mục tiêu học tập: ${cleanGoal}.` : "",
+      ...cleanClaims.map((c) => `Nhận định đã duyệt: ${c}`),
+    ].filter(Boolean).join("\n");
+
+    this.lastDispatchedPrompt = fullInstruction;
+
     const text = cleanClaims.length > 0
-      ? `Đề xuất hoạt động củng cố trọng tâm dựa trên ${cleanClaims.length} nhận định đã duyệt: Ôn tập kỹ năng thông qua bài tập thực hành theo nhóm và phiếu học tập tự đánh giá.`
-      : "Đề xuất hoạt động củng cố cơ bản: Khởi động với câu hỏi tương tác ngắn và bài tập khởi động.";
+      ? `Đề xuất hoạt động bổ trợ: Dựa trên nhận định "${cleanClaims[0].slice(0, 80)}...", giáo viên nên mở đầu bằng một bài tập kết nối ngắn để củng cố kỹ năng trước khi giao nhiệm vụ nâng cao.`
+      : "Đề xuất hoạt động khởi động: Ôn tập lại kiến thức trọng tâm bài trước thông qua câu hỏi trắc nghiệm tương tác nhanh.";
 
     this.recordSuccess();
     return {
@@ -164,8 +232,8 @@ export class FakeAIAdapter implements AIAdapter {
       provider: this.provider,
       model: this.model,
       modelVersion: this.modelVersion,
-      contextSummary: `${cleanClaims.length} eligible claims`,
-      promptUsed: cleanClaims.join("; "),
+      contextSummary: `EligibleClaims=${cleanClaims.length}`,
+      promptUsed: fullInstruction,
       promptVersion: "plan-v1",
     };
   }
