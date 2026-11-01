@@ -1,6 +1,9 @@
 import type { ActionResult } from "../../contracts/ui";
 
 let token = "";
+export function getAccessToken() {
+  return token;
+}
 let pendingRefresh: Promise<boolean> | null = null;
 export type ApiFailure = Extract<ActionResult<unknown>, { ok: false }>;
 export class ApiError extends Error {

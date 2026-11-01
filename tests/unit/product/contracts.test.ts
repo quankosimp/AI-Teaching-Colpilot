@@ -18,6 +18,7 @@ import {
   MAX_UPLOAD_BYTES,
   ObservationInput,
   StudentSubmission,
+  AnnotationInput,
 } from "../../../contracts/index";
 
 const observation = {
@@ -466,4 +467,147 @@ test("shared board must match the selected owner and actually be shared", () => 
     ).success,
     false,
   );
+});
+
+test("student room capabilities and safe annotation mark projections", () => {
+  const baseSession = {
+    id: "room1",
+    title: "Class",
+    sharedGoal: "Learn",
+    status: "live" as const,
+    currentActivityId: null,
+    sharedView: "document" as const,
+    sharedBoardOwnerId: "common",
+    materialPage: 0,
+    tools: { board: true, check: true, upload: true, chat: true },
+  };
+  const baseRoom = {
+    session: baseSession,
+    activities: [],
+    currentMaterial: null,
+    commonBoard: null,
+    sharedBoard: null,
+    ownBoard: null,
+    ownAttempts: [],
+    ownSubmissions: [],
+    activeQuickCheck: null,
+    ownCheckResponse: null,
+    roomMessages: [],
+    members: [],
+    lastEventSeq: 0,
+  };
+
+  // 1. Backward compat: capabilities omitted or partial boardWrite
+  const parsedOmitted = StudentRoomViewModel.safeParse(baseRoom);
+  assert.equal(parsedOmitted.success, true);
+  if (parsedOmitted.success) {
+    assert.deepEqual(parsedOmitted.data.annotations, []);
+    assert.equal(parsedOmitted.data.capabilities, undefined);
+  }
+
+  const parsedPartial = StudentRoomViewModel.safeParse({
+    ...baseRoom,
+    capabilities: { boardWrite: true },
+  });
+  assert.equal(parsedPartial.success, true);
+  if (parsedPartial.success) {
+    assert.deepEqual(parsedPartial.data.capabilities, {
+      boardWrite: true,
+      upload: false,
+      check: false,
+      chat: false,
+    });
+  }
+
+  // 2. Safe marks in annotations
+  const parsedWithAnnot = StudentRoomViewModel.safeParse({
+    ...baseRoom,
+    annotations: [
+      { id: "a1", page: 0, x: 12.5, y: 34.2, text: "Class shared note" },
+    ],
+  });
+  assert.equal(parsedWithAnnot.success, true);
+
+  // 3. Rejects leaking raw tokens, studentId, authorId or storageKey into annotation marks
+  const parsedLeakingAnnot = StudentRoomViewModel.safeParse({
+    ...baseRoom,
+    annotations: [
+      {
+        id: "a1",
+        page: 0,
+        x: 12.5,
+        y: 34.2,
+        text: "Note",
+        studentId: "s1",
+      },
+    ],
+  });
+  assert.equal(parsedLeakingAnnot.success, false);
+
+  const parsedLeakingKey = StudentRoomViewModel.safeParse({
+    ...baseRoom,
+    annotations: [
+      {
+        id: "a1",
+        page: 0,
+        x: 12.5,
+        y: 34.2,
+        text: "Note",
+        storageKey: "secret/path",
+      },
+    ],
+  });
+  assert.equal(parsedLeakingKey.success, false);
+});
+
+test("AnnotationInput strict validation on sharedWithClass and student attribution", () => {
+  const baseInput = {
+    activityId: "act1",
+    materialId: "mat1",
+    materialVersion: 1,
+    page: 0,
+    x: 10,
+    y: 20,
+    text: "Review prompt",
+  };
+
+  // Default sharedWithClass is false
+  const defParsed = AnnotationInput.safeParse(baseInput);
+  assert.equal(defParsed.success, true);
+  if (defParsed.success) {
+    assert.equal(defParsed.data.sharedWithClass, false);
+  }
+
+  // Unattributed class shared annotation is valid
+  const classShared = AnnotationInput.safeParse({
+    ...baseInput,
+    sharedWithClass: true,
+  });
+  assert.equal(classShared.success, true);
+  if (classShared.success) {
+    assert.equal(classShared.data.sharedWithClass, true);
+  }
+
+  // Attributed student annotation without class shared is valid
+  const studentAnnot = AnnotationInput.safeParse({
+    ...baseInput,
+    studentId: "stu1",
+    sharedWithClass: false,
+  });
+  assert.equal(studentAnnot.success, true);
+
+  // Reject attributed student + sharedWithClass
+  const conflicting = AnnotationInput.safeParse({
+    ...baseInput,
+    studentId: "stu1",
+    sharedWithClass: true,
+  });
+  assert.equal(conflicting.success, false);
+  if (!conflicting.success) {
+    assert.ok(
+      conflicting.error.issues.some((i) =>
+        i.message.includes("Không thể chia sẻ toàn lớp chú thích"),
+      ),
+    );
+  }
 });

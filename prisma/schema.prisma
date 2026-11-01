@@ -166,6 +166,7 @@ model Teacher {
   Evidence_createdBy_items             Evidence[]             @relation("Evidence_createdBy")
   EvidenceRevision_changedBy_items     EvidenceRevision[]     @relation("EvidenceRevision_changedBy")
   Claim_reviewedBy_items               Claim[]                @relation("Claim_reviewedBy")
+  StudentRoomSession_teacherId_items   StudentRoomSession[]   @relation("StudentRoomSession_teacherId")
 }
 
 model TeacherOAuthIdentity {
@@ -221,6 +222,7 @@ model Student {
   Claim_studentId_items                    Claim[]              @relation("Claim_studentId")
   AIRequest_studentId_items                AIRequest[]          @relation("AIRequest_studentId")
   SessionEventOutbox_targetStudentId_items SessionEventOutbox[] @relation("SessionEventOutbox_targetStudentId")
+  StudentRoomSession_studentId_items       StudentRoomSession[] @relation("StudentRoomSession_studentId")
 
   @@index([teacherId, status])
 }
@@ -332,6 +334,7 @@ model Session {
   AIRequest_sessionId_items          AIRequest[]          @relation("AIRequest_sessionId")
   SessionEventOutbox_sessionId_items SessionEventOutbox[] @relation("SessionEventOutbox_sessionId")
   AuditLog_sessionId_items           AuditLog[]           @relation("AuditLog_sessionId")
+  StudentRoomSession_sessionId_items StudentRoomSession[] @relation("StudentRoomSession_sessionId")
 }
 
 model Activity {
@@ -363,39 +366,65 @@ model Activity {
 }
 
 model RoomMember {
-  id            String      @id @default(uuid()) @db.Uuid
-  sessionId     String      @db.Uuid
-  studentId     String      @db.Uuid
-  state         MemberState @default(invited)
-  canWrite      Boolean     @default(true)
-  toolOverrides Json?
-  handRaised    Boolean     @default(false)
-  consent       Boolean     @default(false)
-  consentAt     DateTime?
-  joinedAt      DateTime?
-  leftAt        DateTime?
-  updatedAt     DateTime    @updatedAt
-  sessionIdRef  Session     @relation("RoomMember_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
-  studentIdRef  Student     @relation("RoomMember_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+  id                                String               @id @default(uuid()) @db.Uuid
+  sessionId                         String               @db.Uuid
+  studentId                         String               @db.Uuid
+  displayName                       String?
+  state                             MemberState          @default(invited)
+  canWrite                          Boolean              @default(true)
+  toolOverrides                     Json?
+  handRaised                        Boolean              @default(false)
+  consent                           Boolean              @default(false)
+  consentAt                         DateTime?
+  joinedAt                          DateTime?
+  leftAt                            DateTime?
+  updatedAt                         DateTime             @updatedAt
+  sessionIdRef                      Session              @relation("RoomMember_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  studentIdRef                      Student              @relation("RoomMember_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+  StudentRoomSession_memberId_items StudentRoomSession[] @relation("StudentRoomSession_memberId")
 
   @@unique([sessionId, studentId])
 }
 
 model Invite {
-  id           String    @id @default(uuid()) @db.Uuid
-  sessionId    String    @db.Uuid
-  studentId    String    @db.Uuid
-  tokenHash    String    @unique
-  maskedHint   String
-  expiresAt    DateTime
-  revokedAt    DateTime?
-  createdBy    String    @db.Uuid
-  createdAt    DateTime  @default(now())
-  sessionIdRef Session   @relation("Invite_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
-  studentIdRef Student   @relation("Invite_studentId", fields: [studentId], references: [id], onDelete: Restrict)
-  createdByRef Teacher   @relation("Invite_createdBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  id                                String               @id @default(uuid()) @db.Uuid
+  sessionId                         String               @db.Uuid
+  studentId                         String               @db.Uuid
+  tokenHash                         String               @unique
+  maskedHint                        String
+  expiresAt                         DateTime
+  revokedAt                         DateTime?
+  createdBy                         String               @db.Uuid
+  createdAt                         DateTime             @default(now())
+  sessionIdRef                      Session              @relation("Invite_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  studentIdRef                      Student              @relation("Invite_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+  createdByRef                      Teacher              @relation("Invite_createdBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  StudentRoomSession_inviteId_items StudentRoomSession[] @relation("StudentRoomSession_inviteId")
 
   @@index([sessionId, studentId])
+}
+
+model StudentRoomSession {
+  id               String     @id @default(uuid()) @db.Uuid
+  teacherId        String     @db.Uuid
+  sessionId        String     @db.Uuid
+  studentId        String     @db.Uuid
+  memberId         String     @db.Uuid
+  inviteId         String     @db.Uuid
+  displayName      String
+  refreshTokenHash String     @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  teacherIdRef     Teacher    @relation("StudentRoomSession_teacherId", fields: [teacherId], references: [id], onDelete: Restrict)
+  sessionIdRef     Session    @relation("StudentRoomSession_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)
+  studentIdRef     Student    @relation("StudentRoomSession_studentId", fields: [studentId], references: [id], onDelete: Restrict)
+  memberIdRef      RoomMember @relation("StudentRoomSession_memberId", fields: [memberId], references: [id], onDelete: Restrict)
+  inviteIdRef      Invite     @relation("StudentRoomSession_inviteId", fields: [inviteId], references: [id], onDelete: Restrict)
+
+  @@index([sessionId, studentId])
+  @@index([memberId, revokedAt])
 }
 
 model Board {
@@ -430,6 +459,8 @@ model BoardAttempt {
 }
 
 model Annotation {
+  studentId       String?  @db.Uuid
+  sharedWithClass Boolean  @default(false)
   id              String   @id @default(uuid()) @db.Uuid
   sessionId       String   @db.Uuid
   activityId      String   @db.Uuid
@@ -460,6 +491,7 @@ model QuickCheck {
 }
 
 model CheckResponse {
+  version      Int          @default(1)
   id           String       @id @default(uuid()) @db.Uuid
   checkId      String       @db.Uuid
   sessionId    String       @db.Uuid
@@ -537,6 +569,7 @@ model Evidence {
   sourceVersion                     Int?
   submissionId                      String?            @db.Uuid
   isObservation                     Boolean            @default(true)
+  isAuto                            Boolean            @default(false)
   status                            EvidenceStatus     @default(active)
   version                           Int                @default(1)
   createdBy                         String             @db.Uuid
@@ -562,6 +595,7 @@ model EvidenceRevision {
   sourceType    SourceType
   sourceId      String?
   sourceVersion Int?
+  isAuto        Boolean        @default(false)
   status        EvidenceStatus
   changedBy     String         @db.Uuid
   reason        String?
@@ -686,16 +720,21 @@ model IdempotencyRecord {
 }
 
 model UploadIntent {
-  id         String   @id @default(uuid()) @db.Uuid
-  teacherId  String   @db.Uuid
-  storageKey String   @unique
+  id         String    @id @default(uuid()) @db.Uuid
+  teacherId  String    @db.Uuid
+  purpose    String    @default("material")
+  sessionId  String?   @db.Uuid
+  studentId  String?   @db.Uuid
+  storageKey String    @unique
   fileName   String
   mimeType   String
   sizeBytes  Int
   sha256     String
   expiresAt  DateTime
   usedAt     DateTime?
-  createdAt  DateTime @default(now())
-  teacher    Teacher  @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  createdAt  DateTime  @default(now())
+  teacher    Teacher   @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+
   @@index([teacherId, expiresAt])
+  @@index([sessionId, studentId, expiresAt])
 }

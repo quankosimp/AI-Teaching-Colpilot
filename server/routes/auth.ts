@@ -11,6 +11,7 @@ import {
   requireTeacher,
   type AppConfig,
 } from "../context.js";
+import { disconnectTeacherSockets } from "../realtime.js";
 import type { Response } from "express";
 
 const digest = (value: string) =>
@@ -129,6 +130,14 @@ export function authRouter(config: AppConfig) {
         cookieSession?.teacherId === res.locals.actor.id
           ? [{ refreshTokenHash: digest(raw) }]
           : [];
+      const toRevoke = await db.teacherAuthSession.findMany({
+        where: {
+          teacherId: res.locals.actor.id,
+          revokedAt: null,
+          OR: [{ id: res.locals.actor.sessionId }, ...match],
+        },
+        select: { id: true },
+      });
       await db.teacherAuthSession.updateMany({
         where: {
           teacherId: res.locals.actor.id,
@@ -137,6 +146,10 @@ export function authRouter(config: AppConfig) {
         },
         data: { revokedAt: new Date() },
       });
+      disconnectTeacherSockets(
+        res.locals.actor.id,
+        toRevoke.map((item) => item.id),
+      );
       if (!cookieSession || cookieSession.teacherId === res.locals.actor.id)
         res.clearCookie("copilot_refresh", clearCookieOptions(config));
       return res.status(204).end();
