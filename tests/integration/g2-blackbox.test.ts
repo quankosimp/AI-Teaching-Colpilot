@@ -1605,11 +1605,11 @@ test(
 );
 
 test(
-  "T-REV-003-RG2-02: [REV 003 / EVD 003] Re-grading quickcheck response must increment evidence version and invalidate dependent approved claims",
+  "T-REV-003-RG2-02: [REV 003 / EVD 003] Multi-evidence check_response cascade invalidates all dependent claims on change; preserves claims on identical no-op",
   { skip: SKIP_IF_NO_SERVER },
   async () => {
     const { teacher, student1, sessionId, activityId, cleanup } =
-      await createThreeContextRoom("rg2-02");
+      await createThreeContextRoom("rg2-02-chk");
 
     try {
       // 1. Create quick check and student response
@@ -1638,8 +1638,11 @@ test(
       assert.equal(respRes.status, 201);
       const respId = respRes.data.response.id;
 
-      // 2. Grade check response -> creates evidence
-      const gradeRes = await apiRequest<{ evidence: { id: string; version: number } }>(
+      // 2. Grade check response -> creates Evidence 1 (E1)
+      const gradeRes = await apiRequest<{
+        response: { id: string; version: number };
+        evidence: { id: string; version: number };
+      }>(
         `/api/v1/checks/${checkId}/responses/${respId}/review`,
         {
           method: "POST",
@@ -1648,35 +1651,121 @@ test(
         },
       );
       assert.equal(gradeRes.status, 200);
-      const evId = gradeRes.data.evidence.id;
+      const ev1Id = gradeRes.data.evidence.id;
+      const checkRespVersion = gradeRes.data.response.version;
 
-      // 3. Draft and approve claim using this evidence
-      const claimRes = await apiRequest<{ claim: { id: string; revision: number } }>(
+      // 3. Create Evidence 2 (E2) manually linking to the same check_response source
+      const ev2Res = await apiRequest<{ evidence: { id: string } }>(
+        `/api/v1/sessions/${sessionId}/evidence`,
+        {
+          method: "POST",
+          token: teacher.token,
+          body: {
+            studentId: student1.studentId,
+            kind: "KiemTraDocLap",
+            title: "Quan sát thêm từ bài kiểm tra nhanh",
+            detail: "Học sinh giải thích rõ ràng",
+            support: "DocLap",
+            source: {
+              type: "check_response",
+              id: respId,
+              version: checkRespVersion,
+            },
+          },
+        },
+      );
+      assert.equal(ev2Res.status, 201);
+      const ev2Id = ev2Res.data.evidence.id;
+
+      // 4. Draft Claim 1 (using E1) and Claim 2 (using E2)
+      const claim1Res = await apiRequest<{ claim: { id: string; revision: number } }>(
         `/api/v1/sessions/${sessionId}/claims/draft`,
         {
           method: "POST",
           token: teacher.token,
           body: {
             studentId: student1.studentId,
-            text: "Hiểu định lý Viète",
-            evidenceIds: [evId],
+            text: "Hiểu định lý Viète (Claim 1)",
+            evidenceIds: [ev1Id],
           },
         },
       );
-      assert.equal(claimRes.status, 201);
+      assert.equal(claim1Res.status, 201);
 
-      await apiRequest(`/api/v1/claims/${claimRes.data.claim.id}/review`, {
+      const claim2Res = await apiRequest<{ claim: { id: string; revision: number } }>(
+        `/api/v1/sessions/${sessionId}/claims/draft`,
+        {
+          method: "POST",
+          token: teacher.token,
+          body: {
+            studentId: student1.studentId,
+            text: "Vận dụng tốt công thức nghiệm (Claim 2)",
+            evidenceIds: [ev2Id],
+          },
+        },
+      );
+      assert.equal(claim2Res.status, 201);
+
+      // Approve both claims
+      await apiRequest(`/api/v1/claims/${claim1Res.data.claim.id}/review`, {
         method: "PATCH",
         token: teacher.token,
         body: {
           action: "approve",
-          revision: claimRes.data.claim.revision,
-          evidenceIds: [evId],
+          revision: claim1Res.data.claim.revision,
+          evidenceIds: [ev1Id],
         },
       });
 
-      // 4. Re-grade check response with modified feedback
-      const regradeRes = await apiRequest(
+      await apiRequest(`/api/v1/claims/${claim2Res.data.claim.id}/review`, {
+        method: "PATCH",
+        token: teacher.token,
+        body: {
+          action: "approve",
+          revision: claim2Res.data.claim.revision,
+          evidenceIds: [ev2Id],
+        },
+      });
+
+      // End session and complete review
+      await apiRequest(`/api/v1/sessions/${sessionId}/end`, {
+        method: "POST",
+        token: teacher.token,
+        body: {},
+      });
+      const compRes = await apiRequest(`/api/v1/sessions/${sessionId}/complete-review`, {
+        method: "POST",
+        token: teacher.token,
+        body: {},
+      });
+      assert.equal(compRes.status, 200);
+
+      // 5. NO-OP test: Re-grade with identical feedback & support -> session remains reviewed, claims remain approved
+      const noOpRes = await apiRequest(
+        `/api/v1/checks/${checkId}/responses/${respId}/review`,
+        {
+          method: "POST",
+          token: teacher.token,
+          body: { support: "DocLap", feedback: "Làm đúng hoàn toàn" },
+        },
+      );
+      assert.equal(noOpRes.status, 200);
+
+      const stateNoOp = await apiRequest<{
+        session: { status: string };
+        claims: Array<{ id: string; status: string }>;
+      }>(`/api/v1/room/state?sessionId=${sessionId}`, {
+        method: "GET",
+        token: teacher.token,
+      });
+      assert.equal(stateNoOp.data.session.status, "reviewed", "No-op re-grade must preserve reviewed session status");
+      const c1NoOp = stateNoOp.data.claims.find((c) => c.id === claim1Res.data.claim.id);
+      const c2NoOp = stateNoOp.data.claims.find((c) => c.id === claim2Res.data.claim.id);
+      assert.equal(c1NoOp?.status, "approved");
+      assert.equal(c2NoOp?.status, "approved");
+
+      // 6. CASCADE test: Re-grade with changed feedback -> BOTH Claim 1 and Claim 2 invalidated to pending; session reopens to ended
+      const changedRes = await apiRequest(
         `/api/v1/checks/${checkId}/responses/${respId}/review`,
         {
           method: "POST",
@@ -1684,21 +1773,189 @@ test(
           body: { support: "DuocHuongDan", feedback: "Cần chú ý dấu âm ở hệ số b" },
         },
       );
-      assert.equal(regradeRes.status, 200);
+      assert.equal(changedRes.status, 200);
 
-      // 5. Invalidation check: Approved claim must revert to pending
-      const roomState = await apiRequest<{
+      const stateChanged = await apiRequest<{
+        session: { status: string };
         claims: Array<{ id: string; status: string }>;
       }>(`/api/v1/room/state?sessionId=${sessionId}`, {
         method: "GET",
         token: teacher.token,
       });
-      const claimState = roomState.data.claims?.find((c) => c.id === claimRes.data.claim.id);
-      assert.equal(
-        claimState?.status,
-        "pending",
-        "RG2-02: Re-grading evidence source must invalidate dependent approved claim to pending",
+      assert.equal(stateChanged.data.session.status, "ended", "Changed re-grade must reopen session to ended");
+      const c1Changed = stateChanged.data.claims.find((c) => c.id === claim1Res.data.claim.id);
+      const c2Changed = stateChanged.data.claims.find((c) => c.id === claim2Res.data.claim.id);
+      assert.equal(c1Changed?.status, "pending", "Claim 1 (E1) must be invalidated to pending");
+      assert.equal(c2Changed?.status, "pending", "Claim 2 (E2) must be invalidated to pending");
+    } finally {
+      await cleanup();
+    }
+  },
+);
+
+test(
+  "T-REV-003-RG2-02-SUBMISSION: [REV 003 / EVD 003] Multi-evidence submission cascade invalidates all dependent claims on score/feedback change; preserves on no-op",
+  { skip: SKIP_IF_NO_SERVER },
+  async () => {
+    const { teacher, student1, sessionId, cleanup } =
+      await createThreeContextRoom("rg2-02-sub");
+
+    try {
+      // 1. Student creates text submission
+      const subRes = await apiRequest<{ submission: { id: string; version: number } }>(
+        `/api/v1/sessions/${sessionId}/submissions`,
+        {
+          method: "POST",
+          token: student1.accessToken,
+          body: {
+            title: "Bài tập đại số",
+            answer: "Lời giải chi tiết bài toán",
+          },
+        },
       );
+      assert.equal(subRes.status, 201);
+      const subId = subRes.data.submission.id;
+
+      // 2. Teacher grades submission -> creates Evidence 1 (E1)
+      const gradeRes = await apiRequest<{
+        submission: { id: string; version: number };
+        evidence: { id: string; version: number };
+      }>(`/api/v1/submissions/${subId}/grade`, {
+        method: "PATCH",
+        token: teacher.token,
+        body: { feedback: "Bài làm tốt", support: "DocLap" },
+      });
+      assert.equal(gradeRes.status, 200);
+      const ev1Id = gradeRes.data.evidence.id;
+      const subVersion = gradeRes.data.submission.version;
+
+      // 3. Create Evidence 2 (E2) manually linking to the same submission source
+      const ev2Res = await apiRequest<{ evidence: { id: string } }>(
+        `/api/v1/sessions/${sessionId}/evidence`,
+        {
+          method: "POST",
+          token: teacher.token,
+          body: {
+            studentId: student1.studentId,
+            kind: "BaiLam",
+            title: "Quan sát thêm từ bài làm",
+            detail: "Trình bày cẩn thận",
+            support: "DocLap",
+            source: {
+              type: "submission",
+              id: subId,
+              version: subVersion,
+            },
+          },
+        },
+      );
+      assert.equal(ev2Res.status, 201);
+      const ev2Id = ev2Res.data.evidence.id;
+
+      // 4. Draft Claim 1 (using E1) and Claim 2 (using E2)
+      const claim1Res = await apiRequest<{ claim: { id: string; revision: number } }>(
+        `/api/v1/sessions/${sessionId}/claims/draft`,
+        {
+          method: "POST",
+          token: teacher.token,
+          body: {
+            studentId: student1.studentId,
+            text: "Nắm vững phương pháp giải (Claim 1)",
+            evidenceIds: [ev1Id],
+          },
+        },
+      );
+      assert.equal(claim1Res.status, 201);
+
+      const claim2Res = await apiRequest<{ claim: { id: string; revision: number } }>(
+        `/api/v1/sessions/${sessionId}/claims/draft`,
+        {
+          method: "POST",
+          token: teacher.token,
+          body: {
+            studentId: student1.studentId,
+            text: "Kỹ năng tính toán tốt (Claim 2)",
+            evidenceIds: [ev2Id],
+          },
+        },
+      );
+      assert.equal(claim2Res.status, 201);
+
+      // Approve both claims
+      await apiRequest(`/api/v1/claims/${claim1Res.data.claim.id}/review`, {
+        method: "PATCH",
+        token: teacher.token,
+        body: {
+          action: "approve",
+          revision: claim1Res.data.claim.revision,
+          evidenceIds: [ev1Id],
+        },
+      });
+
+      await apiRequest(`/api/v1/claims/${claim2Res.data.claim.id}/review`, {
+        method: "PATCH",
+        token: teacher.token,
+        body: {
+          action: "approve",
+          revision: claim2Res.data.claim.revision,
+          evidenceIds: [ev2Id],
+        },
+      });
+
+      // End session and complete review
+      await apiRequest(`/api/v1/sessions/${sessionId}/end`, {
+        method: "POST",
+        token: teacher.token,
+        body: {},
+      });
+      const compRes = await apiRequest(`/api/v1/sessions/${sessionId}/complete-review`, {
+        method: "POST",
+        token: teacher.token,
+        body: {},
+      });
+      assert.equal(compRes.status, 200);
+
+      // 5. NO-OP test: Re-grade with identical feedback and support -> session remains reviewed
+      const noOpRes = await apiRequest(`/api/v1/submissions/${subId}/grade`, {
+        method: "PATCH",
+        token: teacher.token,
+        body: { feedback: "Bài làm tốt", support: "DocLap" },
+      });
+      assert.equal(noOpRes.status, 200);
+
+      const stateNoOp = await apiRequest<{
+        session: { status: string };
+        claims: Array<{ id: string; status: string }>;
+      }>(`/api/v1/room/state?sessionId=${sessionId}`, {
+        method: "GET",
+        token: teacher.token,
+      });
+      assert.equal(stateNoOp.data.session.status, "reviewed", "No-op grade must preserve reviewed session status");
+      const c1NoOp = stateNoOp.data.claims.find((c) => c.id === claim1Res.data.claim.id);
+      const c2NoOp = stateNoOp.data.claims.find((c) => c.id === claim2Res.data.claim.id);
+      assert.equal(c1NoOp?.status, "approved");
+      assert.equal(c2NoOp?.status, "approved");
+
+      // 6. CASCADE test: Re-grade with changed score/feedback -> BOTH Claim 1 and Claim 2 invalidated; session reopens to ended
+      const changedRes = await apiRequest(`/api/v1/submissions/${subId}/grade`, {
+        method: "PATCH",
+        token: teacher.token,
+        body: { feedback: "Bài làm tốt", support: "DocLap", score: "9" },
+      });
+      assert.equal(changedRes.status, 200);
+
+      const stateChanged = await apiRequest<{
+        session: { status: string };
+        claims: Array<{ id: string; status: string }>;
+      }>(`/api/v1/room/state?sessionId=${sessionId}`, {
+        method: "GET",
+        token: teacher.token,
+      });
+      assert.equal(stateChanged.data.session.status, "ended", "Changed grade must reopen session to ended");
+      const c1Changed = stateChanged.data.claims.find((c) => c.id === claim1Res.data.claim.id);
+      const c2Changed = stateChanged.data.claims.find((c) => c.id === claim2Res.data.claim.id);
+      assert.equal(c1Changed?.status, "pending", "Claim 1 (E1) must be invalidated to pending");
+      assert.equal(c2Changed?.status, "pending", "Claim 2 (E2) must be invalidated to pending");
     } finally {
       await cleanup();
     }
@@ -1915,7 +2172,79 @@ test(
           400,
           "RG2-04: Cannot link Student 1 annotation evidence to Student 2 claim",
         );
+
+        // 5. Legitimate claim for Student 1 with Student 1's annotation evidence succeeds
+        const legitClaim = await apiRequest<{ claim: { id: string; revision: number } }>(
+          `/api/v1/sessions/${sessionId}/claims/draft`,
+          {
+            method: "POST",
+            token: teacher.token,
+            body: {
+              studentId: student1.studentId,
+              text: "Nhận định hợp lệ của Học sinh 1",
+              evidenceIds: [student1Evidence.id],
+            },
+          },
+        );
+        assert.equal(legitClaim.status, 201);
+        const appLegit = await apiRequest(
+          `/api/v1/claims/${legitClaim.data.claim.id}/review`,
+          {
+            method: "PATCH",
+            token: teacher.token,
+            body: {
+              action: "approve",
+              revision: legitClaim.data.claim.revision,
+              evidenceIds: [student1Evidence.id],
+            },
+          },
+        );
+        assert.equal(appLegit.status, 200);
       }
+
+      // 6. Test common / unassigned annotation provenance boundary
+      const commonAnnoRes = await apiRequest<{ annotation: { id: string } }>(
+        `/api/v1/sessions/${sessionId}/annotations`,
+        {
+          method: "POST",
+          token: teacher.token,
+          body: {
+            activityId,
+            materialId: matId,
+            materialVersion: 1,
+            page: 1,
+            x: 10,
+            y: 10,
+            text: "Ghi chú chung toàn lớp",
+          },
+        },
+      );
+      assert.equal(commonAnnoRes.status, 201);
+
+      // Attempting to create observation evidence for student 2 pointing to common annotation
+      const commonEvRes = await apiRequest<{ evidence: { id: string } }>(
+        `/api/v1/sessions/${sessionId}/evidence`,
+        {
+          method: "POST",
+          token: teacher.token,
+          body: {
+            studentId: student2.studentId,
+            kind: "ChuThichDe",
+            title: "Minh chứng từ ghi chú chung",
+            detail: "Chi tiết",
+            support: "DocLap",
+            source: {
+              type: "annotation",
+              id: commonAnnoRes.data.annotation.id,
+              version: 1,
+            },
+          },
+        },
+      );
+      assert.ok(
+        [400, 403, 409].includes(commonEvRes.status),
+        `Common annotation must not be usable as personal student evidence (got ${commonEvRes.status})`,
+      );
     } finally {
       await cleanup();
     }
