@@ -2116,3 +2116,17 @@ body.dark .online-room .button:disabled {
 .online-lobby form label:has([type="checkbox"]) { display: flex; align-items: center; gap: 10px; }
 .online-lobby form button { min-height: 44px; }
 @media (max-width: 650px) { .online-lobby { margin: 12px; } }
+.online-lobby > [role="alert"] {
+  padding: 12px 14px;
+  border: 1px solid #e6a7b3;
+  border-radius: 9px;
+  background: #fff0f2;
+  color: #8f2138;
+  font-size: 14px;
+  line-height: 1.5;
+}
+:is([data-theme="dark"], body.dark) .online-lobby > [role="alert"] {
+  border-color: #a45c6d;
+  background: #4b2531;
+  color: #ffced6;
+}
