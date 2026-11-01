@@ -349,7 +349,11 @@ export function teacherRouter(config: AppConfig) {
           });
         if (evidence.sourceType === "annotation")
           source = await db.annotation.findFirst({
-            where: { id: sourceId, sessionId: evidence.sessionId },
+            where: {
+              id: sourceId,
+              sessionId: evidence.sessionId,
+              studentId: evidence.studentId,
+            },
           });
       }
       const { sessionIdRef: _owner, ...item } = evidence;
@@ -787,6 +791,7 @@ export function teacherRouter(config: AppConfig) {
               y: input.y,
               text: input.text,
               authorId: res.locals.actor.id,
+              studentId: input.studentId ?? null,
             },
           });
           if (input.studentId) {
