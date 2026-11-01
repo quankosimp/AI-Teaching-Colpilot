@@ -1,0 +1,21 @@
+{
+  "sourceCommit": "66baabd6925b36e52e8251a4b62e4cc3d80084e6",
+  "qaCommit": "1501d80d4c10471f65b53bab82037d33762479e5",
+  "contractVersion": "v1",
+  "environment": "Local-Docker services / HTTP+Socket.IO",
+  "runtime": "Node22.23.4",
+  "supervisorRun": {
+    "baseURL": "http://127.0.0.1:3150",
+    "passed": 31,
+    "failed": 0,
+    "skipped": 0,
+    "artifact": "g2-qa66-supervisor.tap"
+  },
+  "setup": "QA3111 had stopped; initial replay connection failures were setup failures. Started supervisor-owned cold API3150 from clean QA1501d80 against existing copilot_test/copilot-private-test; no reset; health database/storage/realtime ready before successful replay.",
+  "limits": [
+    "31 scoped test cases are not 60-P0 execution coverage",
+    "Historical soft-deleted duplicate recovery and independent observation preservation remain known code review findings beyond this suite",
+    "Frontend P0 capability wiring is incomplete"
+  ],
+  "decision": "Scoped QA replay passed; G2 not accepted"
+}

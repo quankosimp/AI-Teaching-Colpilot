@@ -984,18 +984,40 @@
         "docs/planning/evidence/docker-accepted-583784d.json",
         "docs/planning/evidence/docker-review-c681776.md"
       ]
+    },
+    {
+      "id": "PRODUCT-05-B",
+      "owner": "PRODUCT",
+      "parent_task": "PRODUCT-05",
+      "supporting_primary_tasks": [
+        "PRODUCT-03",
+        "PRODUCT-06",
+        "PRODUCT-08",
+        "PRODUCT-09"
+      ],
+      "executor": "3e42fb29-024b-4172-9925-38c290f8f5d5",
+      "title": "Complete mandatory classroom frontend actions and capability wiring",
+      "status": "running",
+      "srs_ids": [],
+      "gate": "G2",
+      "depends_on": [
+        "ARCH-06"
+      ],
+      "acceptance": "Actual teacher/student stage, material/page/annotations, completion, tool toggles, permitted boards, selected-student support dock, check results, chat and invite lifecycle wired to server APIs; three independent browser contexts verify actions, persistence and privacy.",
+      "commit": null,
+      "evidence": []
     }
   ],
   "active_executors": {
     "PRODUCT": {
-      "agentId": "80137a9b-b32c-49d4-b8f4-1e18aa7acc74",
-      "provider": "codex-alt/gpt-6.1-terra",
-      "reason": "Antigravity recovery writer hit a 34-hour quota limit. Fresh configured Codex worker confirmed available, preserved WIP and checked frontend/server types and Prisma on Node 22.23.4. Implementation continuation authorized; no concurrent Product writer."
+      "agentId": "a86e230b-65d4-4b62-920e-f9dda0df117f",
+      "provider": "antigravity-3/gemini-3.8-flash-high",
+      "scope": "Only backend/contracts/schema/migrations/Product unit tests; original801idle and Codex pool quota, discovered Sonnet also quota. Runtime model updated to Flash; execution confirmation pending."
     },
     "QA": {
       "agentId": "f21a5ec6-49fc-4369-9041-75d2f8a23e11",
       "provider": "antigravity-3/gemini-3.8-flash-high",
-      "last_event": "Stream interrupted after G2 scaffold commit 0d9674b; worktree clean, prepared tests preserved; no runtime G2 pass inferred."
+      "last_event": "Committed1501d80 and reported31 scoped G2 tests passed, then stream interrupted. Supervisor independently replayed31/31 on own API3150; no G2 acceptance."
     },
     "REVIEW": {
       "agentId": "865d2663-05ee-4be1-8f8a-f295467c7006",
@@ -1014,6 +1036,13 @@
       "agentId": "60cbc5dd-5411-4b1f-a67c-7bef517cbd18",
       "provider": "codex-alt/gpt-6.1-terra",
       "scope": "Dedicated UI writer in preserved UI worktree; only ui.tsx, CSS and presentation components; auditing exact G2 UI1955fca with own test services/fixtures."
+    },
+    "PRODUCT-FRONTEND": {
+      "agentId": "3e42fb29-024b-4172-9925-38c290f8f5d5",
+      "provider": "antigravity-3/gemini-3.8-flash-high",
+      "task": "PRODUCT-05-B",
+      "workspace": "/home/quanan/.paseo/worktrees/2qimpyn4/teaching-classroom-wiring-20261101",
+      "scope": "Sole writer LiveRoom/OnlineBoard/ReviewPanel/SubmissionForm/onlineApi/statusLabels and new classroom modules outside presentation; original4b7quota; preserve WIP at66baabd. Model updated to Flash after Sonnet quota; execution confirmation pending."
     }
   }
 }
