@@ -19,6 +19,9 @@ type Props = {
   version: number;
   title: string;
   kind: string;
+  directReadUrl?: string;
+  controlledPage?: number;
+  onPageChange?: (zeroIndexedPage: number) => void;
   annotations?: Annotation[];
   sessionId?: string;
   activityId?: string;
@@ -31,6 +34,9 @@ export function MaterialViewer({
   version,
   title,
   kind,
+  directReadUrl,
+  controlledPage,
+  onPageChange,
   annotations = [],
   sessionId,
   activityId,
@@ -56,11 +62,17 @@ export function MaterialViewer({
   const [renderedPage, setRenderedPage] = useState(0);
   const readOnly = !sessionId || !activityId || !onSaved;
   useEffect(() => {
+    if (controlledPage !== undefined) {
+      const target = Math.max(1, Math.min(pages || 1, controlledPage + 1));
+      setPage(target);
+    }
+  }, [controlledPage, pages]);
+  useEffect(() => {
     let active = true;
     let objectUrl: string | null = null;
     let doc: PDFDocumentProxy | null = null;
     let destroyLoading: (() => Promise<void>) | null = null;
-    setPage(1);
+    setPage(controlledPage !== undefined ? Math.max(1, controlledPage + 1) : 1);
     setPages(1);
     setPdf(null);
     setImage(null);
@@ -68,31 +80,47 @@ export function MaterialViewer({
     setLoading(true);
     (async () => {
       const read = async () => {
+        if (directReadUrl) return fetch(directReadUrl);
         const signed = await api<{ readUrl: string }>(
           `/materials/${materialId}/read-url?version=${version}`,
         );
         return fetch(signed.readUrl);
       };
       let response = await read();
-      if (response.status === 403) response = await read();
+      if (response.status === 403 && !directReadUrl) response = await read();
       if (!response.ok) throw new Error("Không đọc được tệp. Hãy thử lại.");
-      if (kind === "PDF") {
+      const contentType = response.headers.get("content-type") || "";
+      const isPdf =
+        kind === "PDF" ||
+        contentType.includes("pdf") ||
+        (kind === "auto" && !contentType.startsWith("image/"));
+      if (isPdf) {
         const bytes = await response.arrayBuffer();
-        const [pdfjs, worker] = await Promise.all([
-          import("pdfjs-dist"),
-          import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
-        ]);
-        pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-        const task = pdfjs.getDocument({ data: bytes });
-        destroyLoading = () => task.destroy();
-        doc = await task.promise;
-        if (!active) {
-          await doc.destroy();
-          return;
+        const header = new TextDecoder().decode(bytes.slice(0, 5));
+        if (header !== "%PDF-" && kind === "auto") {
+          objectUrl = URL.createObjectURL(new Blob([bytes]));
+          if (active) setImage(objectUrl);
+          else URL.revokeObjectURL(objectUrl);
+        } else {
+          const [pdfjs, worker] = await Promise.all([
+            import("pdfjs-dist"),
+            import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
+          ]);
+          pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+          const task = pdfjs.getDocument({ data: bytes });
+          destroyLoading = () => task.destroy();
+          doc = await task.promise;
+          if (!active) {
+            await doc.destroy();
+            return;
+          }
+          setPdf(doc);
+          setPages(doc.numPages);
+          if (controlledPage !== undefined) {
+            setPage(Math.max(1, Math.min(doc.numPages, controlledPage + 1)));
+          }
         }
-        setPdf(doc);
-        setPages(doc.numPages);
-      } else if (kind === "Anh") {
+      } else if (kind === "Anh" || kind === "auto") {
         objectUrl = URL.createObjectURL(await response.blob());
         if (active) setImage(objectUrl);
         else URL.revokeObjectURL(objectUrl);
@@ -110,7 +138,7 @@ export function MaterialViewer({
       if (destroyLoading) void destroyLoading();
       else if (doc) void doc.destroy();
     };
-  }, [materialId, version, kind, revision]);
+  }, [materialId, version, kind, directReadUrl, revision]);
   useEffect(() => {
     if (!frame.current) return;
     const observer = new ResizeObserver((entries) =>
@@ -179,7 +207,11 @@ export function MaterialViewer({
           type="button"
           className="button ghost small"
           disabled={page <= 1}
-          onClick={() => setPage(page - 1)}
+          onClick={() => {
+            const next = page - 1;
+            setPage(next);
+            onPageChange?.(next - 1);
+          }}
         >
           Trang trước
         </button>
@@ -190,7 +222,11 @@ export function MaterialViewer({
           type="button"
           className="button ghost small"
           disabled={page >= pages}
-          onClick={() => setPage(page + 1)}
+          onClick={() => {
+            const next = page + 1;
+            setPage(next);
+            onPageChange?.(next - 1);
+          }}
         >
           Trang sau
         </button>
