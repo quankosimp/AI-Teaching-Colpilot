@@ -1,3 +1,5 @@
+import { resolveCurrentSourceVersion } from "../sourceVersion.js";
+export { resolveCurrentSourceVersion } from "../sourceVersion.js";
 import { publicSubmission } from "../submissionProjection.js";
 import { lockSession, SessionConflict } from "../sessionLock.js";
 import { Router, type Request, type Response } from "express";
@@ -53,52 +55,6 @@ async function ownedSession(id: string, actor: TeacherActor, res: Response) {
     return null;
   }
   return item;
-}
-
-export async function resolveCurrentSourceVersion(
-  sourceType: string,
-  sourceId: string | null,
-  sessionId: string,
-  client: Prisma.TransactionClient = db,
-  studentId?: string,
-): Promise<number> {
-  if (!sourceId || !safeId.safeParse(sourceId).success) return 1;
-  if (sourceType === "submission") {
-    const sub = await client.submission.findFirst({
-      where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
-      select: { version: true },
-    });
-    return sub?.version ?? 0;
-  }
-  if (sourceType === "board_attempt") {
-    const att = await client.boardAttempt.findFirst({
-      where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
-      select: { id: true },
-    });
-    return att ? 1 : 0;
-  }
-  if (sourceType === "check_response") {
-    const resp = await client.checkResponse.findFirst({
-      where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
-      select: { version: true },
-    });
-    return resp?.version ?? 0;
-  }
-  if (sourceType === "annotation") {
-    const ann = await client.annotation.findFirst({
-      where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
-      select: { id: true },
-    });
-    return ann ? 1 : 0;
-  }
-  if (sourceType === "ai_suggestion") {
-    const ai = await client.aIRequest.findFirst({
-      where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
-      select: { id: true },
-    });
-    return ai ? 1 : 0;
-  }
-  return 1;
 }
 
 export function reviewRouter(config: AppConfig) {
@@ -1544,6 +1500,7 @@ export function reviewRouter(config: AppConfig) {
           const eligibleClaims = await filterEligibleApprovedClaims(
             rawClaims,
             res.locals.actor.id,
+            tx,
           );
 
           const nextDate = new Date(Date.now() + 7 * 86400_000)

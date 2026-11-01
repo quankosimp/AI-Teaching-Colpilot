@@ -280,7 +280,7 @@ export function aiRouter(config: AppConfig) {
 
         // Revalidate and persist UNDER SESSION LOCK
         const result = await createOnce(req, res, routeKey, async (tx) => {
-          await lockSession(tx, session.id);
+          for (const id of [...new Set([session.id, ...eligiblePrior.map(claim => claim.sessionId)])].sort()) await lockSession(tx, id);
 
           const currentSession = await tx.session.findUniqueOrThrow({
             where: { id: session.id },
@@ -298,6 +298,18 @@ export function aiRouter(config: AppConfig) {
           });
           if (!currentMember || !currentMember.consent)
             throw new SessionConflict("PERMISSION_DENIED", "Học sinh không còn quyền hoặc thiếu consent");
+
+          if (eligiblePrior.length) {
+            const currentClaims = await tx.claim.findMany({ where: { id: { in: eligiblePrior.map(claim => claim.id) } } });
+            const stillEligible = await filterEligibleApprovedClaims(currentClaims, res.locals.actor.id, tx);
+            if (eligiblePrior.some(claim => !stillEligible.some(current => current.id === claim.id && current.revision === claim.revision))) {
+              throw new SessionConflict("VERSION_CONFLICT", "Lịch sử dùng làm ngữ cảnh đã thay đổi trong khi chờ AI");
+            }
+            const consent = await tx.roomMember.findMany({ where: { sessionId: { in: eligiblePrior.map(claim => claim.sessionId) }, studentId: parsed.data.studentId, consent: true } });
+            if (eligiblePrior.some(claim => !consent.some(member => member.sessionId === claim.sessionId))) {
+              throw new SessionConflict("PERMISSION_DENIED", "Lịch sử học sinh không còn được đồng ý sử dụng");
+            }
+          }
 
           // Persist actual pedagogical kind and full sanitized instruction snapshot for audit
           const created = await tx.aIRequest.create({
@@ -1127,7 +1139,8 @@ export function aiRouter(config: AppConfig) {
               status: "approved",
             },
           });
-          const liveClaimMap = new Map(liveClaims.map((c) => [c.id, c]));
+          const eligibleLive = await filterEligibleApprovedClaims(liveClaims, res.locals.actor.id, tx);
+          const liveClaimMap = new Map(eligibleLive.map(claim => [claim.id, claim]));
 
           for (const snap of preSnapshotClaims) {
             const live = liveClaimMap.get(snap.id);

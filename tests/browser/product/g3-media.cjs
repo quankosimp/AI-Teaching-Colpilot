@@ -64,7 +64,9 @@ const path = require("node:path");
           calls.push("joinSession"); configured = true; features = config.featuresOptions;
           return Promise.resolve(); // Preview opening is not a joined event.
         },
-        closeSession: async () => { calls.push("closeSession"); },
+        closeSession: async () => { throw new Error("Ordinary exit must never end the call for all peers"); },
+        leaveSession: async () => { calls.push("leaveSession"); },
+        destroy: async () => { calls.push("destroy"); configured = false; listeners.clear(); },
         onSessionJoined: cb => register("joined", cb),
         offSessionJoined: () => { calls.push("off:joined"); },
         onSessionClosed: cb => register("closed", cb),
@@ -108,7 +110,9 @@ const path = require("node:path");
     assert.equal(spyResult.speaker, "1002");
     for (const feature of ["preview", "audio", "video", "share", "footer"]) assert.equal(spyResult.features[feature].enable, true);
     assert.deepEqual(spyResult.rejected, [true, true, true, true]);
-    assert.equal(spyResult.calls.filter(call => call === "closeSession").length, 2); // One normal disposal and one cancellation.
+    assert.equal(spyResult.calls.filter(call => call === "destroy").length, 2); // One normal disposal and one cancellation.
+    assert.equal(spyResult.calls.filter(call => call === "leaveSession").length, 2);
+    assert.ok(spyResult.calls.indexOf("leaveSession") < spyResult.calls.indexOf("destroy"));
     assert.ok(spyResult.calls.includes("off:connection-change"));
     assert.equal(spyResult.cancelled, true);
     assert.equal(spyResult.afterDestroy, "disconnected");

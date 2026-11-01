@@ -1,4 +1,6 @@
 import { db } from "./context.js";
+import type { Prisma } from "@prisma/client";
+import { resolveCurrentSourceVersion } from "./sourceVersion.js";
 
 type ClaimForEligibility = {
   id: string;
@@ -11,9 +13,9 @@ type ClaimForEligibility = {
 /** Approved history may use only intact, owner-scoped observations. */
 export async function filterEligibleApprovedClaims<
   T extends ClaimForEligibility,
->(claims: T[], teacherId: string) {
+>(claims: T[], teacherId: string, client: Prisma.TransactionClient = db) {
   const ids = [...new Set(claims.flatMap((claim) => claim.evidenceIds))];
-  const evidence = await db.evidence.findMany({
+  const evidence = await client.evidence.findMany({
     where: {
       id: {
         in: ids.filter((id) =>
@@ -33,15 +35,17 @@ export async function filterEligibleApprovedClaims<
       kind: true,
       sourceType: true,
       sourceId: true,
+      sourceVersion: true,
+      submissionId: true,
     },
   });
-  const annotationIds = evidence
-    .filter((item) => item.sourceType === "annotation" && item.sourceId)
-    .map((item) => item.sourceId!);
-  const annotations = await db.annotation.findMany({
-    where: { id: { in: annotationIds } },
-    select: { id: true, sessionId: true, studentId: true },
-  });
+  const validSources = new Set<string>();
+  for (const item of evidence) {
+    const expectedVersion = item.sourceVersion ?? (item.sourceType === "note" ? 1 : 0);
+    if (expectedVersion > 0 && await resolveCurrentSourceVersion(item.sourceType, item.sourceId ?? item.submissionId, item.sessionId, client, item.studentId) === expectedVersion) {
+      validSources.add(item.id);
+    }
+  }
   return claims.filter((claim) => {
     if (
       claim.status !== "approved" ||
@@ -60,14 +64,7 @@ export async function filterEligibleApprovedClaims<
     return (
       selected.every(
         (item) =>
-          Boolean(item) &&
-          (item!.sourceType !== "annotation" ||
-            annotations.some(
-              (annotation) =>
-                annotation.id === item!.sourceId &&
-                annotation.sessionId === claim.sessionId &&
-                annotation.studentId === claim.studentId,
-            )),
+          Boolean(item) && validSources.has(item!.id),
       ) &&
       selected.some(
         (item) =>

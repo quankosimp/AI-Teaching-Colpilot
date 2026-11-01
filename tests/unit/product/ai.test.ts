@@ -486,6 +486,29 @@ test(
         data: { status: "ended" },
       });
 
+      // Resource-backed observations need real IDs, even for historical rows already in the database.
+      const invalidObservations: string[] = [];
+      for (const sourceType of ["board_attempt", "check_response", "annotation", "submission"] as const) {
+        const invalid = await call(`/sessions/${sessionId}/evidence`, teacherToken, "POST", {
+          studentId: student.id, kind: "GhiChu", title: "Invalid resource", detail: "Missing actual source", support: "DocLap",
+          source: { type: sourceType, id: "not-a-uuid", version: 1 },
+        });
+        assert.equal(invalid.status, 403, `${sourceType}: malformed resource ID must not resolve to version one`);
+        const historical = await db.evidence.create({ data: {
+          sessionId, studentId: student.id, kind: "GhiChu", title: "Legacy invalid resource", detail: "Must never be sent to model",
+          support: "DocLap", sourceType, sourceId: "not-a-uuid", sourceVersion: 1, isObservation: true, status: "active", createdBy: teacherId,
+        } });
+        invalidObservations.push(historical.id);
+        const forgedClaim = await db.claim.create({ data: { sessionId, studentId: student.id, text: "Legacy invalid claim", evidenceIds: [historical.id], status: "pending" } });
+        const approved = await call(`/claims/${forgedClaim.id}/review`, teacherToken, "PATCH", { action: "approve", revision: 1, evidenceIds: [historical.id] });
+        assert.equal(approved.status, 400, "Human approval must also reject an invalid historical resource source");
+        assert.equal((await approved.json()).error.message, "Minh chứng không còn hợp lệ");
+        await db.claim.update({ where: { id: forgedClaim.id }, data: { status: "approved" } }); // Legacy pre-fix data.
+      }
+      const invalidHistory = await call(`/students/${student.id}/history`, teacherToken);
+      assert.equal(invalidHistory.status, 200);
+      assert.ok((await invalidHistory.json()).claims.every((claim: { evidenceIds: string[] }) => claim.evidenceIds.every(id => !invalidObservations.includes(id))));
+
       // 1) Candidate with mixed/hallucinated ref: must discard whole candidate, never keep partial claim!
       class MixedCandidateAdapter extends FakeAIAdapter {
         async generateClaimDrafts() {
@@ -651,6 +674,8 @@ test(
       assert.equal(cleanDraftResp.status, 201);
       const cleanDraftBody = await cleanDraftResp.json();
       assert.ok(cleanDraftBody.claims.length > 0);
+      assert.ok(cleanDraftBody.claims.every((claim: { evidenceIds: string[] }) => claim.evidenceIds.every(id => !invalidObservations.includes(id))));
+      assert.ok(!capturingAdapter.lastDispatchedPrompt?.includes("Must never be sent to model"));
       const createdClaim = cleanDraftBody.claims[0];
       assert.equal(createdClaim.status, "pending");
 
@@ -763,6 +788,33 @@ test(
         { studentId: student.id },
       );
       assert.equal(planClaimRaceResp.status, 409, "Must return 409 when source claim revised during AI call");
+
+      const historyActivity = await db.activity.create({ data: {
+        sessionId: planSession.id, order: 0, title: "Current activity", duration: 10, type: "LuyenTap", description: "",
+        sourceEvidenceIds: [], sourceClaimRefs: [],
+      } });
+      class TeachingHistoryRevisedAdapter extends FakeAIAdapter {
+        async generateTeachingSuggestion(input: any) {
+          await db.claim.update({ where: { id: createdClaim.id }, data: { revision: { increment: 1 } } });
+          return super.generateTeachingSuggestion(input);
+        }
+      }
+      setAIAdapterForTesting(new TeachingHistoryRevisedAdapter());
+      const historyChanged = await call(`/sessions/${planSession.id}/ai/suggestions`, teacherToken, "POST", {
+        studentId: student.id, activityId: historyActivity.id, kind: "explain", prompt: "Use approved history",
+      });
+      assert.equal(historyChanged.status, 409, "Teaching advice must also revalidate historical assessment context");
+      class TeachingHistoryConsentAdapter extends FakeAIAdapter {
+        async generateTeachingSuggestion(input: any) {
+          await db.roomMember.update({ where: { id: targetMember.id }, data: { consent: false } });
+          return super.generateTeachingSuggestion(input);
+        }
+      }
+      setAIAdapterForTesting(new TeachingHistoryConsentAdapter());
+      const historyRevoked = await call(`/sessions/${planSession.id}/ai/suggestions`, teacherToken, "POST", {
+        studentId: student.id, activityId: historyActivity.id, kind: "explain", prompt: "Use approved history",
+      });
+      assert.equal(historyRevoked.status, 403, "Revoked historical consent must prevent saving new advice");
 
       // --- CircuitBreaker Exclusive Half-Open Unit Verification ---
       const testBreaker = new CircuitBreaker({ failureThreshold: 2, cooldownMs: 50 });

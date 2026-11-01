@@ -2,7 +2,7 @@ import "@zoom/videosdk-ui-toolkit/dist/videosdk-ui-toolkit.css";
 import type { UIToolkit } from "@zoom/videosdk-ui-toolkit";
 import type { MediaParticipant, MediaSessionConfig, MediaSessionHandle, MediaSessionStatus } from "./types";
 
-type Toolkit = Pick<UIToolkit, "joinSession" | "closeSession" | "onSessionJoined" | "offSessionJoined" | "onSessionClosed" | "offSessionClosed" | "on" | "off" | "getAllUser" | "getCurrentUserInfo">;
+type Toolkit = Pick<UIToolkit, "joinSession" | "leaveSession" | "destroy" | "onSessionJoined" | "offSessionJoined" | "onSessionClosed" | "offSessionClosed" | "on" | "off" | "getAllUser" | "getCurrentUserInfo">;
 type Participant = ReturnType<Toolkit["getAllUser"]>[number];
 
 export async function createZoomSession(
@@ -66,10 +66,17 @@ export async function createZoomSession(
     disposal = (async () => {
       config.signal?.removeEventListener("abort", aborted);
       if (registered) {
-        toolkit.offSessionJoined(joined); toolkit.offSessionClosed(closed);
-        subscriptions.forEach(([name, callback]) => toolkit.off(name, callback));
+        const unsubscribe = [() => toolkit.offSessionJoined(joined), () => toolkit.offSessionClosed(closed),
+          ...subscriptions.map(([name, callback]) => () => toolkit.off(name, callback))];
+        for (const remove of unsubscribe) { try { remove(); } catch { /* Toolkit may already be destroyed by a native event. */ } }
       }
-      try { if (initialized) await toolkit.closeSession(container); }
+      try {
+        if (initialized) {
+          // closeSession ends the call for every participant; navigation/retry only leaves locally.
+          try { await toolkit.leaveSession(); }
+          finally { await toolkit.destroy(); }
+        }
+      }
       finally {
         container.replaceChildren(); participants = []; self = null; speaker = null;
         status = "disconnected"; emit("status-change", status); listeners.clear();
