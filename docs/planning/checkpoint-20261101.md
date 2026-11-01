@@ -24,7 +24,7 @@ SHA Supervisor trong bảng là snapshot trước commit chứa báo cáo này; 
 ## Quota và model
 
 - Hai writer backend/frontend đã thực thi tác vụ trên Gemini3.8 Flash High; không có API công khai trong bộ tool để đọc số token hoặc phần trăm quota còn lại.
-- Probe Gemini4 Argon Medium có trả lời QUOTA_PROBE_OK, sau đó session báo stream interrupted. Đây là phản hồi thành công có lỗi transport, chưa xác nhận chạy tác vụ dài ổn định.
+- Probe Gemini4 Argon Medium có trả lời QUOTA_PROBE_OK, sau đó session báo stream interrupted. Khi giao tác vụ đọc code thực tế tiếp theo, provider báo quota hết và reset sau32h34m31s. Vì vậy Medium hiện được xếp blocked-quota, không coi probe ngắn là đủ bằng chứng còn quota chạy việc.
 - Lần gọi gần nhất của tài khoản Worker Codex báo usage limit, provider trả mốc2:37 PM. Gemini4High và ClaudeOpus/SonnetHigh từng báo hết quota; các reset tương đối thuộc thời điểm báo lỗi, không phải quota đo mới.
 - Thay đổi model giữ nguyên worktree và quyền sở hữu file; callback có thể lặp lại lastError cũ nên không coi đó là bằng chứng Flash vừa hết quota.
 

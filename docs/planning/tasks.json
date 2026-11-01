@@ -1021,7 +1021,7 @@
     "QA": {
       "agentId": "f21a5ec6-49fc-4369-9041-75d2f8a23e11",
       "provider": "antigravity-3/gemini-4-argon-medium",
-      "last_event": "Read-only quota probe replied QUOTA_PROBE_OK then stream interrupted; no model-budget percentage known. Existing31/31 test evidence remains scoped to66baabd."
+      "last_event": "Medium short probe answered then stream interrupted; actual read-only review retry returned quota32h34m31s. Do not treat provider available or short echo as sufficient budget evidence."
     },
     "REVIEW": {
       "agentId": "865d2663-05ee-4be1-8f8a-f295467c7006",
