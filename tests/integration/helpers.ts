@@ -42,8 +42,13 @@ export async function apiRequest<T = any>(
     ...options.headers,
   };
 
-  if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !headers["Origin"]) {
-    headers["Origin"] = APP_ORIGIN;
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    if (!headers["Origin"]) {
+      headers["Origin"] = APP_ORIGIN;
+    }
+    if (!headers["Idempotency-Key"]) {
+      headers["Idempotency-Key"] = uid("idem");
+    }
   }
 
   if (options.token) {

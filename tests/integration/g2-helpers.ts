@@ -1,5 +1,5 @@
 import { io, type Socket } from "socket.io-client";
-import { uid, loginTeacher, apiRequest, type TeacherAuth } from "./helpers.js";
+import { uid, loginTeacher, apiRequest, type TeacherAuth, QA_BASE_URL } from "./helpers.js";
 import {
   StudentRoomViewModel,
   type StudentRoomViewModel as StudentRoomVMType,
@@ -16,9 +16,11 @@ import {
 export type StudentContext = {
   studentId: string;
   name: string;
-  inviteToken: string;
-  token?: string;
-  socket?: Socket;
+  inviteId: string;
+  rawToken: string;
+  accessToken: string;
+  refreshToken: string;
+  memberId: string;
 };
 
 export type ThreeContextRoom = {
@@ -26,17 +28,26 @@ export type ThreeContextRoom = {
   student1: StudentContext;
   student2: StudentContext;
   sessionId: string;
+  activityId: string;
+  sockets: Socket[];
+  connectSocket: (token: string, sessionId: string) => Promise<Socket>;
   cleanup: () => Promise<void>;
+};
+
+export type CreateRoomOptions = {
+  admitStudents?: boolean;
+  startSession?: boolean;
 };
 
 /**
  * Creates 3 independent actor contexts against dedicated test DB:
  * - Context 1: Teacher (authenticated with access token)
- * - Context 2: Student 1 (active participant with invite token)
+ * - Context 2: Student 1 (active participant with invite token, admitted & live)
  * - Context 3: Student 2 / Guest (second participant for isolation/peer checks)
  */
 export async function createThreeContextRoom(
   prefix = "g2",
+  options: CreateRoomOptions = { admitStudents: true, startSession: true },
 ): Promise<ThreeContextRoom> {
   const teacher = await loginTeacher("teacher-a");
 
@@ -87,7 +98,7 @@ export async function createThreeContextRoom(
   const student2Id = s2Res.data.student.id;
 
   // Create Session with both students
-  const sessionRes = await apiRequest<{ session: { id: string } }>(
+  const sessionRes = await apiRequest<{ session: { id: string; version: number } }>(
     "/api/v1/sessions",
     {
       method: "POST",
@@ -97,7 +108,7 @@ export async function createThreeContextRoom(
         studentIds: [student1Id, student2Id],
         title: `Phòng học đa ngữ cảnh ${prefix}`,
         goal: "G2 Integration",
-        sharedGoal: "G2 Shared",
+        sharedGoal: "G2 Shared Public Goal",
         date: "2026-11-05",
         time: "19:00",
         duration: 60,
@@ -106,8 +117,142 @@ export async function createThreeContextRoom(
     },
   );
   const sessionId = sessionRes.data.session.id;
+  const sessionVersion = sessionRes.data.session.version;
+
+  // Add initial activity so currentActivityId is available
+  const actRes = await apiRequest<{ session: { currentActivityId: string; activities: Array<{ id: string }> } }>(
+    `/api/v1/sessions/${sessionId}/activities`,
+    {
+      method: "PUT",
+      token: teacher.token,
+      headers: { "If-Match-Version": String(sessionVersion) },
+      body: [
+        {
+          title: "Hoạt động thực hành",
+          description: "Khởi động và làm bài",
+          duration: 15,
+          type: "LuyenTap",
+          materialId: null,
+          materialVersion: null,
+          teacherNotes: null,
+          sourceEvidenceIds: [],
+          sourceClaimRefs: [],
+        },
+      ],
+    },
+  );
+  const rawSession = actRes.data?.session as Record<string, any>;
+  const activityId =
+    rawSession?.Activity_sessionId_items?.[0]?.id ||
+    rawSession?.currentActivityId ||
+    rawSession?.activities?.[0]?.id;
+
+  // Create Invite for Student 1
+  const inv1Res = await apiRequest<{ invite: { id: string }; rawToken: string }>(
+    `/api/v1/sessions/${sessionId}/invites`,
+    {
+      method: "POST",
+      token: teacher.token,
+      headers: { "Idempotency-Key": uid("idem-inv1") },
+      body: { studentId: student1Id },
+    },
+  );
+  const invite1Id = inv1Res.data.invite.id;
+  const rawToken1 = inv1Res.data.rawToken;
+
+  // Create Invite for Student 2
+  const inv2Res = await apiRequest<{ invite: { id: string }; rawToken: string }>(
+    `/api/v1/sessions/${sessionId}/invites`,
+    {
+      method: "POST",
+      token: teacher.token,
+      headers: { "Idempotency-Key": uid("idem-inv2") },
+      body: { studentId: student2Id },
+    },
+  );
+  const invite2Id = inv2Res.data.invite.id;
+  const rawToken2 = inv2Res.data.rawToken;
+
+  // Student 1 Join Request
+  const join1Res = await apiRequest<{
+    accessToken: string;
+    refreshToken: string;
+    memberId: string;
+    studentId: string;
+  }>("/api/v1/room/join-request", {
+    method: "POST",
+    headers: { "Idempotency-Key": uid("idem-join1") },
+    body: {
+      token: rawToken1,
+      name: `Học sinh 1 ${prefix}`,
+      consent: true,
+    },
+  });
+
+  // Student 2 Join Request
+  const join2Res = await apiRequest<{
+    accessToken: string;
+    refreshToken: string;
+    memberId: string;
+    studentId: string;
+  }>("/api/v1/room/join-request", {
+    method: "POST",
+    headers: { "Idempotency-Key": uid("idem-join2") },
+    body: {
+      token: rawToken2,
+      name: `Học sinh 2 ${prefix}`,
+      consent: true,
+    },
+  });
+
+  // Admit students if requested
+  if (options.admitStudents !== false) {
+    await apiRequest(
+      `/api/v1/sessions/${sessionId}/members/${join1Res.data.memberId}/admit`,
+      {
+        method: "POST",
+        token: teacher.token,
+        body: { approved: true },
+      },
+    );
+    await apiRequest(
+      `/api/v1/sessions/${sessionId}/members/${join2Res.data.memberId}/admit`,
+      {
+        method: "POST",
+        token: teacher.token,
+        body: { approved: true },
+      },
+    );
+  }
+
+  // Start session if requested
+  if (options.startSession !== false) {
+    await apiRequest(`/api/v1/sessions/${sessionId}/start`, {
+      method: "POST",
+      token: teacher.token,
+      body: {},
+    });
+  }
 
   const sockets: Socket[] = [];
+
+  const connectSocket = async (token: string, sid = sessionId): Promise<Socket> => {
+    const s = connectClassroomSocket(QA_BASE_URL, { token, sessionId: sid });
+    sockets.push(s);
+    s.connect();
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Socket connect timeout")), 5000);
+      s.once("connect", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      s.once("connect_error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+    return s;
+  };
 
   const cleanup = async () => {
     for (const s of sockets) {
@@ -120,31 +265,40 @@ export async function createThreeContextRoom(
     student1: {
       studentId: student1Id,
       name: `Học sinh 1 ${prefix}`,
-      inviteToken: uid("invite-s1"),
+      inviteId: invite1Id,
+      rawToken: rawToken1,
+      accessToken: join1Res.data.accessToken,
+      refreshToken: join1Res.data.refreshToken,
+      memberId: join1Res.data.memberId,
     },
     student2: {
       studentId: student2Id,
       name: `Học sinh 2 ${prefix}`,
-      inviteToken: uid("invite-s2"),
+      inviteId: invite2Id,
+      rawToken: rawToken2,
+      accessToken: join2Res.data.accessToken,
+      refreshToken: join2Res.data.refreshToken,
+      memberId: join2Res.data.memberId,
     },
     sessionId,
+    activityId,
+    sockets,
+    connectSocket,
     cleanup,
   };
 }
 
 /**
- * Connects a Socket.IO client using standard socket.io-client.
+ * Connects a Socket.IO client to /classroom using standard socket.io-client.
  */
 export function connectClassroomSocket(
   baseUrl: string,
   auth: {
-    role: "teacher" | "student";
     token: string;
     sessionId?: string;
-    studentId?: string;
   },
 ): Socket {
-  const socket = io(baseUrl, {
+  const socket = io(`${baseUrl.replace(/\/$/, "")}/classroom`, {
     autoConnect: false,
     reconnection: false,
     transports: ["websocket"],
