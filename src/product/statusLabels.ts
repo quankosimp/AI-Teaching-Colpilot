@@ -22,6 +22,7 @@ const labels: Record<string, string> = {
   CoGoiY: "Có gợi ý",
   DuocHuongDan: "Được hướng dẫn",
   ChuaRo: "Chưa rõ",
+  source_unverified: "Chưa xác minh nguồn",
   source_corrected: "Nguồn đã thay đổi",
   source_deleted: "Nguồn đã xóa",
   claim_edited: "Nhận định đã chỉnh sửa",

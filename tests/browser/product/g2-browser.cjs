@@ -134,6 +134,45 @@ const { chromium } = require("playwright-core");
     await t.getByText("Chưa có bài nộp từ học sinh.").waitFor();
     const tb = t.getByTestId("online-board"),
       sb = p1.getByTestId("online-board");
+    const roomInfo = await (
+      await fetch(origin + `/api/v1/room/state?sessionId=${id}`, {
+        headers: { Authorization: "Bearer " + token },
+      })
+    ).json();
+    const memberId = roomInfo.session.RoomMember_sessionId_items.find(
+      (m) => m.studentId === ids[0],
+    ).id;
+    await post(
+      `/sessions/${id}/members/${memberId}`,
+      token,
+      { canWrite: false },
+      "PATCH",
+    );
+    await sb.getByRole("button", { name: "Thêm nét vẽ" }).waitFor();
+    for (
+      let n = 0;
+      n < 80 &&
+      !(await sb.getByRole("button", { name: "Thêm nét vẽ" }).isDisabled());
+      n++
+    )
+      await new Promise((r) => setTimeout(r, 100));
+    if (!(await sb.getByRole("button", { name: "Thêm nét vẽ" }).isDisabled()))
+      throw Error("student board ignores permission");
+    await post(
+      `/sessions/${id}/members/${memberId}`,
+      token,
+      { canWrite: true },
+      "PATCH",
+    );
+    for (
+      let n = 0;
+      n < 80 &&
+      !(await sb.getByRole("button", { name: "Thêm nét vẽ" }).isEnabled());
+      n++
+    )
+      await new Promise((r) => setTimeout(r, 100));
+    if (!(await sb.getByRole("button", { name: "Thêm nét vẽ" }).isEnabled()))
+      throw Error("student board did not recover permission");
     if (!(await tb.getByRole("button", { name: "Thêm nét vẽ" }).isEnabled()))
       throw Error("teacher board disabled during live session");
     if (
@@ -178,23 +217,27 @@ const { chromium } = require("playwright-core");
       .getByRole("heading", { name: "2 + 2?" })
       .waitFor({ state: "hidden" });
     await a.setOffline(true);
-    for (let n = 0; n < 51; n++) {
+    await sb.getByRole("button", { name: "Thêm nét vẽ" }).click();
+    await p1.getByText("Đã giữ 1 thao tác", { exact: false }).waitFor();
+    for (let n = 0; n < 50; n++) {
       await sb
         .getByPlaceholder("Nhập bước biến đổi hoặc ghi chú bảng...")
         .fill("draft-" + n);
       await sb.getByRole("button", { name: "Lưu ghi chú bảng" }).click();
-      if (n < 50)
+      if (n < 49)
         await p1
-          .getByText("Đã giữ " + (n + 1) + " thao tác", { exact: false })
+          .getByText("Đã giữ " + (n + 2) + " thao tác", { exact: false })
           .waitFor();
       else await p1.getByText("Hàng đợi đã đầy", { exact: false }).waitFor();
     }
     if (
       (await sb
         .getByPlaceholder("Nhập bước biến đổi hoặc ghi chú bảng...")
-        .inputValue()) !== "draft-50"
+        .inputValue()) !== "draft-49"
     )
       throw Error("offline draft lost");
+    await sb.getByRole("button", { name: "Thêm nét vẽ" }).click();
+    await p1.getByText("Nét vẽ chưa gửi vẫn được giữ lại.").waitFor();
     await a.setOffline(false);
     await p1.getByText("đang kết nối", { exact: false }).waitFor();
     let replayed = false;
@@ -205,7 +248,7 @@ const { chromium } = require("playwright-core");
         })
       ).json();
       if (
-        state.boards.some((b) => b.ownerId === ids[0] && b.text === "draft-49")
+        state.boards.some((b) => b.ownerId === ids[0] && b.text === "draft-48")
       ) {
         replayed = true;
         break;
@@ -216,9 +259,12 @@ const { chromium } = require("playwright-core");
     if (
       (await sb
         .getByPlaceholder("Nhập bước biến đổi hoặc ghi chú bảng...")
-        .inputValue()) !== "draft-50"
+        .inputValue()) !== "draft-49"
     )
       throw Error("full queue draft lost after reconnect");
+    await sb.getByText("1 nét vẽ", { exact: false }).waitFor();
+    await p1.getByRole("button", { name: "Gửi lại nét vẽ" }).click();
+    await sb.getByText("2 nét vẽ", { exact: false }).waitFor();
     await sb.getByRole("button", { name: "Lưu ghi chú bảng" }).click();
     await p1.getByLabel("Ảnh hoặc PDF").setInputFiles({
       name: "answer.pdf",
@@ -228,6 +274,12 @@ const { chromium } = require("playwright-core");
     await p1.getByRole("button", { name: "Nộp bài" }).click();
     await p1.getByText("answer.pdf:", { exact: false }).waitFor();
     await t.getByText("Mở tệp: answer.pdf").waitFor();
+    await p2
+      .locator(".online-room__submissions")
+      .getByLabel("Bài làm")
+      .fill("Bài của học sinh hai");
+    await p2.getByRole("button", { name: "Nộp bài" }).click();
+    await t.getByText("Bài của học sinh hai").waitFor();
     const panel = t.locator("section").filter({
       has: t.getByRole("heading", { name: "Minh chứng và nhận định" }),
     });
@@ -260,6 +312,18 @@ const { chromium } = require("playwright-core");
     await submissionForm
       .getByLabel("Mức hỗ trợ cho answer.pdf")
       .selectOption("CoGoiY");
+    const secondForm = t
+      .locator("form")
+      .filter({ hasText: "Bài của học sinh hai" });
+    if (
+      (await secondForm.getByLabel("Nhận xét cho Bài làm").inputValue()) !== ""
+    )
+      throw Error("feedback leaked across submissions");
+    if (
+      (await secondForm.getByLabel("Mức hỗ trợ cho Bài làm").inputValue()) !==
+      "DocLap"
+    )
+      throw Error("support leaked across submissions");
     await submissionForm.getByRole("button", { name: "Chấm bài" }).click();
     await panel.getByLabel("Học sinh").selectOption({ label: "Student One" });
     await panel.getByText("Good work", { exact: false }).waitFor();
@@ -311,6 +375,51 @@ const { chromium } = require("playwright-core");
       .fill("Chưa có dữ liệu quan sát");
     await t.getByRole("button", { name: "Hoàn tất duyệt" }).click();
     await t.getByText("zero · Đã hoàn tất duyệt").waitFor();
+    const badPage = await b.newPage();
+    await badPage.goto(origin + "/?invite=invalid");
+    await badPage.getByRole("alert").waitFor();
+    await badPage.getByRole("link", { name: "Quay về trang chủ" }).waitFor();
+    if ((await badPage.locator("body").innerText()).includes("Student One"))
+      throw Error("invalid invite revealed identity");
+    await badPage.close();
+    const denial = await post("/sessions", token, {
+      studentIds: [ids[0]],
+      title: "Denied private",
+      goal: "",
+      sharedGoal: "",
+      date: "2026-11-01",
+      time: "19:00",
+      duration: 60,
+      tools: { board: true, upload: true, check: true, chat: true },
+    });
+    const denyId = denial.session.id;
+    const denyInvite = await post(`/sessions/${denyId}/invites`, token, {
+      studentId: ids[0],
+    });
+    const denied = await b.newPage();
+    await denied.goto(denyInvite.inviteUrl);
+    await denied.getByLabel("Tên hiển thị").fill("Denied Student");
+    await denied.getByRole("checkbox").check();
+    await denied.getByRole("button", { name: "Gửi yêu cầu" }).click();
+    await denied
+      .getByRole("status")
+      .filter({ hasText: "Đang chờ giáo viên" })
+      .waitFor();
+    const denyState = await (
+      await fetch(origin + `/api/v1/room/state?sessionId=${denyId}`, {
+        headers: { Authorization: "Bearer " + token },
+      })
+    ).json();
+    const denyMember = denyState.session.RoomMember_sessionId_items[0].id;
+    await post(`/sessions/${denyId}/members/${denyMember}/admit`, token, {
+      approved: false,
+    });
+    await denied
+      .getByRole("alert")
+      .filter({ hasText: "liên hệ giáo viên" })
+      .waitFor();
+    await denied.getByRole("button", { name: "Quay lại" }).waitFor();
+    await denied.close();
     console.log(
       "PASS teacher + two isolated student contexts, mobile, admission, refresh, private PDF submission and manual review",
     );

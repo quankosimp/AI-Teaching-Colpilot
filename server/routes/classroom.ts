@@ -1,3 +1,4 @@
+import { reviseSourceEvidence } from "../reviseSourceEvidence.js";
 import { publicSubmission } from "../submissionProjection.js";
 import { lockSession, SessionConflict } from "../sessionLock.js";
 import { Router, type Request, type Response } from "express";
@@ -1935,6 +1936,15 @@ export function classroomRouter(config: AppConfig) {
           materialPage: session.materialPage,
           tools: sessionTools,
         },
+        capabilities: {
+          boardWrite:
+            session.status === "live" &&
+            member.state === "joined" &&
+            member.canWrite &&
+            sessionTools.board &&
+            Tools.partial().safeParse(member.toolOverrides ?? {}).data
+              ?.board !== false,
+        },
         activities: session.Activity_sessionId_items.map((a) => ({
           id: a.id,
           title:
@@ -2833,136 +2843,58 @@ export function classroomRouter(config: AppConfig) {
           const currentResponse = await tx.checkResponse.findUniqueOrThrow({
             where: { id: responseRow.id },
           });
-          const existing = await tx.evidence.findFirst({
+          const linked = await tx.evidence.findMany({
             where: {
               sourceType: "check_response",
               sourceId: responseRow.id,
               sessionId: responseRow.sessionId,
+              studentId: responseRow.studentId,
+              status: { not: "deleted" },
             },
           });
           if (
-            existing &&
+            linked.length &&
             currentResponse.support === parsed.data.support &&
             currentResponse.feedback === parsed.data.feedback
           )
-            return { updatedResponse: currentResponse, evidence: existing };
+            return { updatedResponse: currentResponse, evidence: linked[0] };
           const updated = await tx.checkResponse.update({
             where: { id: responseRow.id },
             data: {
               support: parsed.data.support,
               feedback: parsed.data.feedback,
+              version: { increment: 1 },
             },
           });
-          const existingEv = await tx.evidence.findFirst({
-            where: {
-              sourceType: "check_response",
-              sourceId: responseRow.id,
-              sessionId: responseRow.sessionId,
-            },
+          const revised = await reviseSourceEvidence(tx, {
+            rows: linked,
+            sessionId: responseRow.sessionId,
+            sessionStatus: lockedSession.status,
+            actorId: res.locals.actor.id,
+            workspaceId: res.locals.actor.workspaceId,
+            requestId: res.locals.requestId,
+            detail: parsed.data.feedback,
+            support: parsed.data.support,
+            sourceVersion: updated.version,
           });
-          if (existingEv) {
-            await tx.evidenceRevision.create({
+          const ev =
+            revised ??
+            (await tx.evidence.create({
               data: {
-                evidenceId: existingEv.id,
-                version: existingEv.version,
-                detail: existingEv.detail,
-                support: existingEv.support,
-                studentId: existingEv.studentId,
-                sessionId: existingEv.sessionId,
-                activityId: existingEv.activityId,
-                sourceType: existingEv.sourceType,
-                sourceId: existingEv.sourceId,
-                sourceVersion: existingEv.sourceVersion,
-                status: existingEv.status,
-                changedBy: res.locals.actor.id,
-                reason: "check_review_updated",
-              },
-            });
-            const dependents = await tx.claim.findMany({
-              where: {
                 sessionId: responseRow.sessionId,
-                evidenceIds: { has: existingEv.id },
-                status: "approved",
+                studentId: responseRow.studentId,
+                activityId: responseRow.checkIdRef.activityId,
+                kind: "KiemTraDocLap",
+                title: `Kiểm tra nhanh: ${responseRow.checkIdRef.question.slice(0, 80)}`,
+                detail: `${responseRow.answer} — Nhận xét: ${parsed.data.feedback}`,
+                support: parsed.data.support,
+                sourceType: "check_response",
+                sourceId: responseRow.id,
+                sourceVersion: updated.version,
+                isObservation: true,
+                createdBy: res.locals.actor.id,
               },
-            });
-            for (const cl of dependents) {
-              await tx.claimRevision.create({
-                data: {
-                  claimId: cl.id,
-                  revision: cl.revision,
-                  text: cl.text,
-                  evidenceIds: cl.evidenceIds,
-                  status: cl.status,
-                  actorId: res.locals.actor.id,
-                  reason: "source_corrected",
-                },
-              });
-              await tx.claim.update({
-                where: { id: cl.id },
-                data: {
-                  status: "pending",
-                  staleReason: "source_corrected",
-                  revision: { increment: 1 },
-                },
-              });
-            }
-            if (dependents.length && lockedSession.status === "reviewed") {
-              const reopened = await tx.session.update({
-                where: { id: responseRow.sessionId },
-                data: { status: "ended", version: { increment: 1 } },
-              });
-              await appendOutboxEvent(tx, {
-                sessionId: responseRow.sessionId,
-                type: "review.reopened",
-                label: "Mở lại duyệt sau khi sửa đánh giá",
-                actorId: res.locals.actor.id,
-                visibility: { scope: "teacher" },
-                resourceId: responseRow.sessionId,
-                version: reopened.version,
-              });
-            }
-            await tx.auditLog.create({
-              data: {
-                workspaceId: res.locals.actor.workspaceId,
-                actorId: res.locals.actor.id,
-                actorRole: "teacher",
-                action: "evidence.corrected",
-                targetType: "evidence",
-                targetId: existingEv.id,
-                sessionId: responseRow.sessionId,
-                requestId: res.locals.requestId,
-                metadata: {
-                  reasonCode: "source_corrected",
-                  version: existingEv.version + 1,
-                },
-              },
-            });
-          }
-          const ev = existingEv
-            ? await tx.evidence.update({
-                where: { id: existingEv.id },
-                data: {
-                  detail: parsed.data.feedback,
-                  support: parsed.data.support,
-                  version: { increment: 1 },
-                },
-              })
-            : await tx.evidence.create({
-                data: {
-                  sessionId: responseRow.sessionId,
-                  studentId: responseRow.studentId,
-                  activityId: responseRow.checkIdRef.activityId,
-                  kind: "KiemTraDocLap",
-                  title: `Kiểm tra nhanh: ${responseRow.checkIdRef.question.slice(0, 80)}`,
-                  detail: `${responseRow.answer} — Nhận xét: ${parsed.data.feedback}`,
-                  support: parsed.data.support,
-                  sourceType: "check_response",
-                  sourceId: responseRow.id,
-                  sourceVersion: 1,
-                  isObservation: true,
-                  createdBy: res.locals.actor.id,
-                },
-              });
+            }));
           await appendOutboxEvent(tx, {
             sessionId: responseRow.sessionId,
             type: "evidence.created",
@@ -3438,113 +3370,53 @@ export function classroomRouter(config: AppConfig) {
               "VERSION_CONFLICT",
               "Bài nộp đã thay đổi phiên bản",
             );
+          const linked = await tx.evidence.findMany({
+            where: {
+              sessionId: currentSubmission.sessionId,
+              studentId: currentSubmission.studentId,
+              status: { not: "deleted" },
+              OR: [
+                { sourceType: "submission", sourceId: currentSubmission.id },
+                { submissionId: currentSubmission.id },
+              ],
+            },
+          });
+          const score = parsed.data.score ?? currentSubmission.score;
+          if (
+            linked.length &&
+            currentSubmission.status === "reviewed" &&
+            currentSubmission.finalFeedback === parsed.data.feedback &&
+            currentSubmission.support === parsed.data.support &&
+            currentSubmission.score === score
+          )
+            return {
+              updatedSubmission: currentSubmission,
+              evidence: linked[0],
+            };
           const updated = await tx.submission.update({
             where: { id: submission.id },
             data: {
               finalFeedback: parsed.data.feedback,
               support: parsed.data.support,
-              score: parsed.data.score ?? submission.score,
+              score,
               status: "reviewed",
               version: { increment: 1 },
             },
           });
-          const existingEv = await tx.evidence.findFirst({
-            where: {
-              sourceType: "submission",
-              sourceId: submission.id,
-              sessionId: submission.sessionId,
-            },
+          const revised = await reviseSourceEvidence(tx, {
+            rows: linked,
+            sessionId: submission.sessionId,
+            sessionStatus: lockedSession.status,
+            actorId: res.locals.actor.id,
+            workspaceId: res.locals.actor.workspaceId,
+            requestId: res.locals.requestId,
+            detail: parsed.data.feedback,
+            support: parsed.data.support,
+            sourceVersion: updated.version,
           });
-          let ev;
-          if (existingEv) {
-            await tx.evidenceRevision.create({
-              data: {
-                evidenceId: existingEv.id,
-                version: existingEv.version,
-                detail: existingEv.detail,
-                support: existingEv.support,
-                studentId: existingEv.studentId,
-                sessionId: existingEv.sessionId,
-                activityId: existingEv.activityId,
-                sourceType: existingEv.sourceType,
-                sourceId: existingEv.sourceId,
-                sourceVersion: existingEv.sourceVersion,
-                status: existingEv.status,
-                changedBy: res.locals.actor.id,
-                reason: "Cập nhật chấm bài",
-              },
-            });
-            ev = await tx.evidence.update({
-              where: { id: existingEv.id },
-              data: {
-                detail: parsed.data.feedback,
-                support: parsed.data.support,
-                sourceVersion: updated.version,
-                status: "active",
-                version: { increment: 1 },
-              },
-            });
-            const dependentClaims = await tx.claim.findMany({
-              where: {
-                sessionId: submission.sessionId,
-                evidenceIds: { has: existingEv.id },
-                status: "approved",
-              },
-            });
-            for (const cl of dependentClaims) {
-              await tx.claimRevision.create({
-                data: {
-                  claimId: cl.id,
-                  revision: cl.revision,
-                  text: cl.text,
-                  evidenceIds: cl.evidenceIds,
-                  status: "pending",
-                  actorId: res.locals.actor.id,
-                  reason: "source_corrected",
-                },
-              });
-              await tx.claim.update({
-                where: { id: cl.id },
-                data: {
-                  status: "pending",
-                  staleReason: "source_corrected",
-                  revision: { increment: 1 },
-                },
-              });
-            }
-            if (
-              dependentClaims.length > 0 &&
-              lockedSession.status === "reviewed"
-            ) {
-              const reopened = await tx.session.update({
-                where: { id: submission.sessionId },
-                data: { status: "ended", version: { increment: 1 } },
-              });
-              await appendOutboxEvent(tx, {
-                sessionId: submission.sessionId,
-                type: "review.reopened",
-                label: "Mở lại duyệt sau khi chấm lại",
-                actorId: res.locals.actor.id,
-                visibility: { scope: "teacher" },
-                resourceId: submission.sessionId,
-                version: reopened.version,
-              });
-              await tx.auditLog.create({
-                data: {
-                  workspaceId: res.locals.actor.workspaceId,
-                  actorId: res.locals.actor.id,
-                  actorRole: "teacher",
-                  action: "review.reopened",
-                  targetType: "session",
-                  targetId: submission.sessionId,
-                  sessionId: submission.sessionId,
-                  requestId: res.locals.requestId,
-                  metadata: { reasonCode: "source_corrected" },
-                },
-              });
-            }
-          } else {
-            ev = await tx.evidence.create({
+          const ev =
+            revised ??
+            (await tx.evidence.create({
               data: {
                 sessionId: submission.sessionId,
                 studentId: submission.studentId,
@@ -3560,8 +3432,7 @@ export function classroomRouter(config: AppConfig) {
                 isObservation: true,
                 createdBy: res.locals.actor.id,
               },
-            });
-          }
+            }));
           await appendOutboxEvent(tx, {
             sessionId: submission.sessionId,
             type: "evidence.created",

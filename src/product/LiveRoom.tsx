@@ -24,6 +24,7 @@ type Member = {
 };
 type Room = {
   waiting?: boolean;
+  capabilities?: { boardWrite: boolean };
   sessionStatus?: string;
   session?: {
     id: string;
@@ -185,7 +186,13 @@ export function StudentEntry() {
           Đang tải thông tin tham gia lớp học…
         </p>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <div role="alert">
+          <p>{error}</p>
+          <p>Liên hệ giáo viên để được hỗ trợ hoặc nhận liên kết mời mới.</p>
+          <a href="/">Quay về trang chủ</a>
+        </div>
+      )}
       {preview && (
         <form
           onSubmit={(e) => {
@@ -238,12 +245,14 @@ export function LiveRoom({
 }) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
-  const [feedback, setFeedback] = useState("");
-  const [support, setSupport] = useState("DocLap");
   const [room, setRoom] = useState<Room | null>(null);
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [connected, setConnected] = useState(false);
+  const [unsentStroke, setUnsentStroke] = useState<{
+    operation: "addStroke";
+    stroke: import("./OnlineBoard").BoardStroke;
+  } | null>(null);
   const queue = useRef(new BoundedReconnectQueue());
   const cursor = useRef(0);
   const currentGrant = useRef(grant);
@@ -280,7 +289,11 @@ export function LiveRoom({
             setRoom(null);
             sessionStorage.removeItem(savedKey);
           }
-          setError(e.message);
+          setError(
+            grant && (e.status === 401 || e.status === 403)
+              ? "Yêu cầu tham gia có thể đã bị từ chối hoặc phiên không còn hiệu lực. Vui lòng liên hệ giáo viên để được hỗ trợ."
+              : e.message,
+          );
         }
       });
     };
@@ -350,6 +363,7 @@ export function LiveRoom({
         body: JSON.stringify(payload),
       });
       await load();
+      return true;
     } catch (e) {
       if (allowQueue && !navigator.onLine) {
         const result = queue.current.enqueue({
@@ -364,14 +378,15 @@ export function LiveRoom({
           setError(
             `Đã giữ ${result.queuedCount} thao tác để gửi lại khi kết nối.`,
           );
-          return;
+          return true;
         }
         setError(
           "Hàng đợi đã đầy hoặc thao tác quá lớn; nội dung vẫn còn trong ô nhập.",
         );
-        return;
+        return false;
       }
       setError(e instanceof Error ? e.message : "Không thể hoàn thành");
+      return false;
     }
   };
   const s = room?.session;
@@ -409,19 +424,48 @@ export function LiveRoom({
             {s.sharedGoal} · {statusLabel(s.status)}
           </p>
           <section className="online-room__board" aria-label="Bảng học tập">
+            {unsentStroke && (
+              <div role="status">
+                Nét vẽ chưa gửi vẫn được giữ lại.{" "}
+                <button
+                  disabled={!connected || s.status !== "live"}
+                  onClick={() =>
+                    void command(
+                      `/sessions/${sessionId}/boards/${grant ? "own" : "common"}`,
+                      "PUT",
+                      unsentStroke,
+                      true,
+                    ).then((ok) => {
+                      if (ok) setUnsentStroke(null);
+                    })
+                  }
+                >
+                  Gửi lại nét vẽ
+                </button>
+              </div>
+            )}
             <OnlineBoard
               title={grant ? "Bảng nháp của tôi" : "Bảng chung"}
               board={board || null}
               actorId={grant?.studentId || teacherId || ""}
-              canWrite={s.status === "live"}
+              canWrite={
+                s.status === "live" &&
+                (!grant || room?.capabilities?.boardWrite === true)
+              }
               isOwnPrivateBoard={!!grant}
+              busy={!!unsentStroke}
               onCommand={async (cmd) => {
-                await command(
+                const accepted = await command(
                   `/sessions/${sessionId}/boards/${grant ? "own" : "common"}`,
                   "PUT",
                   cmd,
-                  cmd.operation === "setNote" || cmd.operation === "setShared",
+                  true,
                 );
+                if (!accepted && cmd.operation === "addStroke" && cmd.stroke)
+                  setUnsentStroke({
+                    operation: "addStroke",
+                    stroke: cmd.stroke,
+                  });
               }}
               onCaptureAttempt={
                 grant
@@ -640,11 +684,11 @@ export function LiveRoom({
                 <p>Chưa có bài nộp từ học sinh.</p>
               )}
               {room?.submissions?.map((x) => (
-                <form
+                <SubmissionGrade
                   key={x.id}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void command(`/submissions/${x.id}/grade`, "PATCH", {
+                  title={x.title}
+                  onGrade={async (feedback, support) => {
+                    await command(`/submissions/${x.id}/grade`, "PATCH", {
                       feedback,
                       support,
                     });
@@ -675,25 +719,7 @@ export function LiveRoom({
                       Mở tệp: {x.fileName}
                     </button>
                   )}
-                  <input
-                    value={feedback}
-                    onChange={(e) => setFeedback(e.target.value)}
-                    aria-label={`Nhận xét cho ${x.title}`}
-                    placeholder="Nhận xét"
-                    required
-                  />
-                  <select
-                    aria-label={`Mức hỗ trợ cho ${x.title}`}
-                    value={support}
-                    onChange={(e) => setSupport(e.target.value)}
-                  >
-                    <option value="DocLap">Độc lập</option>
-                    <option value="CoGoiY">Có gợi ý</option>
-                    <option value="DuocHuongDan">Được hướng dẫn</option>
-                    <option value="ChuaRo">Chưa rõ</option>
-                  </select>
-                  <button>Chấm bài</button>
-                </form>
+                </SubmissionGrade>
               ))}
             </section>
           )}
@@ -711,5 +737,52 @@ export function LiveRoom({
         </>
       )}
     </main>
+  );
+}
+
+function SubmissionGrade({
+  title,
+  onGrade,
+  children,
+}: {
+  title: string;
+  onGrade: (feedback: string, support: string) => Promise<void>;
+  children: React.ReactNode;
+}) {
+  const [feedback, setFeedback] = useState("");
+  const [support, setSupport] = useState("DocLap");
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void onGrade(feedback, support);
+      }}
+    >
+      {children}
+      <label>
+        Nhận xét
+        <input
+          aria-label={`Nhận xét cho ${title}`}
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          placeholder="Nhận xét"
+          required
+        />
+      </label>
+      <label>
+        Mức hỗ trợ
+        <select
+          aria-label={`Mức hỗ trợ cho ${title}`}
+          value={support}
+          onChange={(e) => setSupport(e.target.value)}
+        >
+          <option value="DocLap">Độc lập</option>
+          <option value="CoGoiY">Có gợi ý</option>
+          <option value="DuocHuongDan">Được hướng dẫn</option>
+          <option value="ChuaRo">Chưa rõ</option>
+        </select>
+      </label>
+      <button>Chấm bài</button>
+    </form>
   );
 }
