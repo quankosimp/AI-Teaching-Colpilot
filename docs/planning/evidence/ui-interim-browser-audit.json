@@ -1,0 +1,32 @@
+{
+  "scope": "Interim UI browser audit; not UI acceptance",
+  "productSource": "1955fcab3647e319d2309cd4524b34a610a064e3",
+  "uiBrowserCandidate": "da85a0bd17abdace816cbb499631c2d9aef47987",
+  "followupCSS": "917a6644603afcb73dd0bb638c45eb49cc1dfb9a",
+  "environment": "Isolated local API3130/frontend3131, own synthetic database/bucket",
+  "reportedChecks": [
+    "Teacher and two separate student browser contexts: admission/start/refresh",
+    "Private/shared board and undo",
+    "Quick check",
+    "PDF upload/grading",
+    "Evidence/source, pending/approved review",
+    "360/375/768/1440px light/dark: no document overflow in admitted states"
+  ],
+  "supervisorViewed": [
+    "ui-audit-teacher-360-light.png",
+    "ui-audit-student-360-dark.png",
+    "ui-audit-teacher-1440-light.png"
+  ],
+  "limits": [
+    "Screenshots are interim audit evidence; not proof of final917 disabled contrast or future Product fixes",
+    "Expired/revoked/rejected invitations and modal focus/return still need actual checks",
+    "Missing labels/loading/empty states/raw English status text reported to Product",
+    "Classroom layout needs usable stage/dock placement, especially desktop; stable CSS hooks requested from Product"
+  ],
+  "offlineTimeout": {
+    "originalResult": "Timed out waiting for first queued action",
+    "supervisorDiagnosis": "Test used count-prefix from80efe9 against1955 server, whose success message had no count. This explains selector timeout; actual latest-source queue behavior still requires browser verification.",
+    "evidence": "/tmp/copilot-browser-test/ui.cjs expects Đã giữ 1 thao tác; git show1955 LiveRoom command returns Đã giữ thao tác để gửi lại khi kết nối;80 introduces counter."
+  },
+  "decision": "not accepted; repeat against final matching source and current UI, complete negative/keyboard cases"
+}
