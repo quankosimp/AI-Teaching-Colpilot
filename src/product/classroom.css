@@ -2063,3 +2063,41 @@ input[type="checkbox"] {
 [data-theme="dark"] .size-btn, body.dark .size-btn { background: var(--ui-surface); border-color: var(--ui-line); color: var(--ui-subtle); }
 [data-theme="dark"] .size-btn.active, body.dark .size-btn.active { background: var(--ui-brand-soft); border-color: var(--ui-brand); color: var(--ui-brand); }
 
+
+/* Online room: the live container currently exposes semantic HTML rather than
+   the classroom layout classes. Keep these rules local to that container. */
+main.card:has(> [data-testid="online-board"]) {
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: clamp(16px, 3vw, 32px);
+  overflow-wrap: anywhere;
+}
+main.card:has(> [data-testid="online-board"]) > h1 { margin: 20px 0 8px; }
+main.card:has(> [data-testid="online-board"]) > p { color: var(--ui-subtle, #59657a); }
+main.card:has(> [data-testid="online-board"]) > section,
+main.card:has(> [data-testid="online-board"]) > [data-testid="online-board"] {
+  min-width: 0;
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid var(--ui-border, #e1e4ee);
+  border-radius: 12px;
+}
+main.card:has(> [data-testid="online-board"]) form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin: 12px 0; }
+main.card:has(> [data-testid="online-board"]) form input,
+main.card:has(> [data-testid="online-board"]) form select { flex: 1 1 180px; max-width: 100%; }
+main.card:has(> [data-testid="online-board"]) button:not([class]) {
+  min-height: 40px; padding: 8px 14px; margin: 3px;
+  border: 1px solid var(--ui-border, #d9dceb); border-radius: 9px;
+  background: var(--ui-surface, #fff); color: inherit; font-weight: 600;
+}
+main.card:has(> [data-testid="online-board"]) button:not([class]):hover:not(:disabled) { border-color: #7564d6; }
+main.card:has(> [data-testid="online-board"]) :focus-visible { outline: 3px solid #8b7be8; outline-offset: 2px; }
+main.card:has(> [data-testid="online-board"]) [role="alert"] { padding: 12px; border-radius: 8px; color: #a52d46; background: #fff0f2; }
+@media (max-width: 650px) {
+  main.card:has(> [data-testid="online-board"]) { margin: 12px; }
+  main.card:has(> [data-testid="online-board"]) > section,
+  main.card:has(> [data-testid="online-board"]) > [data-testid="online-board"] { padding: 14px; }
+  main.card:has(> [data-testid="online-board"]) button { min-height: 44px; }
+}
+[data-theme="dark"] main.card:has(> [data-testid="online-board"]) [role="alert"],
+body.dark main.card:has(> [data-testid="online-board"]) [role="alert"] { color: #ffb8c5; background: #4b2531; }
