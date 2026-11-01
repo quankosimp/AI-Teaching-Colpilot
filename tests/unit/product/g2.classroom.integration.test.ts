@@ -438,6 +438,66 @@ test(
         (await call(`/sessions/${id}/start`, a, "POST", {})).status,
         409,
       );
+      const evidenceResponse = await call(
+        `/sessions/${id}/evidence`,
+        a,
+        "POST",
+        {
+          studentId: g2.studentId,
+          kind: "GhiChu",
+          title: "Observation",
+          detail: "Completed exercise",
+          support: "DocLap",
+        },
+      );
+      assert.equal(evidenceResponse.status, 201);
+      const evidence = (await evidenceResponse.json()).evidence;
+      const draft = await call(`/sessions/${id}/claims/draft`, a, "POST", {
+        studentId: g2.studentId,
+        text: "Understands exercise",
+        evidenceIds: [evidence.id],
+      });
+      assert.equal(draft.status, 201);
+      const claim = (await draft.json()).claim;
+      assert.equal(
+        (await call(`/sessions/${id}/complete-review`, a, "POST", {})).status,
+        400,
+      );
+      assert.equal(
+        (
+          await call(`/claims/${claim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: claim.revision,
+            evidenceIds: [evidence.id],
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await call(`/sessions/${id}/complete-review`, a, "POST", {})).status,
+        200,
+      );
+      assert.equal(
+        (
+          await call(
+            `/evidence/${evidence.id}`,
+            a,
+            "PATCH",
+            { detail: "Corrected", reason: "Correction" },
+            { "If-Match-Version": String(evidence.version) },
+          )
+        ).status,
+        200,
+      );
+      const afterReview = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      assert.equal(afterReview.session.status, "ended");
+      assert.equal(
+        afterReview.claims.find((c: { id: string }) => c.id === claim.id)
+          .status,
+        "pending",
+      );
       assert.equal(privateEvents, 0);
       assert.ok(teacherSocket.connected);
     } finally {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { api, getAccessToken } from "./onlineApi";
+import { ReviewPanel } from "./ReviewPanel";
 import { SubmissionForm } from "./SubmissionForm";
 import { OnlineBoard, type BoardState } from "./OnlineBoard";
 import { BoundedReconnectQueue } from "./reconnectQueue";
@@ -36,6 +37,28 @@ type Room = {
   boards?: BoardState[];
   commonBoard?: BoardState | null;
   ownBoard?: BoardState | null;
+  evidence?: {
+    id: string;
+    studentId: string;
+    title: string;
+    detail: string;
+    support: string;
+    sourceType: string;
+    sourceId: string | null;
+    sourceVersion: number | null;
+    version: number;
+    status: string;
+    isObservation: boolean;
+  }[];
+  claims?: {
+    id: string;
+    studentId: string;
+    text: string;
+    evidenceIds: string[];
+    status: string;
+    revision: number;
+    staleReason: string | null;
+  }[];
   lastEventSeq?: number;
   activeQuickCheck?: { id: string; question: string } | null;
   ownCheckResponse?: { answer: string } | null;
@@ -605,6 +628,17 @@ export function LiveRoom({
                 </form>
               ))}
             </section>
+          )}
+          {!grant && (
+            <ReviewPanel
+              sessionId={sessionId}
+              status={s.status}
+              members={members}
+              evidence={room?.evidence || []}
+              claims={room?.claims || []}
+              request={request}
+              reload={load}
+            />
           )}
           <OnlineBoard
             title={grant ? "Bảng nháp của tôi" : "Bảng chung"}
