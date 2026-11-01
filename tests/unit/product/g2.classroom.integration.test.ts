@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { once } from "node:events";
+import { createHash } from "node:crypto";
+import { SignJWT, decodeJwt } from "jose";
 import { io } from "socket.io-client";
 import { createApp } from "../../../server/app";
 import { db, loadConfig } from "../../../server/context";
@@ -204,6 +206,181 @@ test(
           )
         ).status,
         403,
+      );
+      assert.equal(
+        (
+          await call(`/sessions/${id}/members/${g1.memberId}`, a, "PATCH", {
+            canWrite: false,
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await call(`/sessions/${id}/boards/own`, g1.accessToken, "PUT", {
+            operation: "clearOwnStrokes",
+          })
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await call(`/sessions/${id}/messages`, g1.accessToken, "POST", {
+            text: "still allowed",
+          })
+        ).status,
+        201,
+      );
+      assert.equal(
+        (
+          await call(`/sessions/${id}/submissions`, g1.accessToken, "POST", {
+            title: "text",
+            answer: "allowed",
+          })
+        ).status,
+        201,
+      );
+      assert.equal(
+        (
+          await call(`/sessions/${id}/members/${g1.memberId}`, a, "PATCH", {
+            canWrite: true,
+          })
+        ).status,
+        200,
+      );
+      const sharedStroke = (authorId: string) => ({
+        ...stroke,
+        id: crypto.randomUUID(),
+        authorId,
+      });
+      const teacherId = (await (await call("/auth/me", a)).json()).teacher.id;
+      const one = sharedStroke(g1.studentId),
+        two = sharedStroke(teacherId),
+        boardKey = crypto.randomUUID();
+      const write = (token: string, item: typeof one, key: string) =>
+        call(
+          `/sessions/${id}/boards/common`,
+          token,
+          "PUT",
+          { operation: "addStroke", stroke: item },
+          { "Idempotency-Key": key },
+        );
+      const [w1, w2] = await Promise.all([
+        write(g1.accessToken, one, boardKey),
+        write(a, two, crypto.randomUUID()),
+      ]);
+      assert.equal(w1.status, 200);
+      assert.equal(w2.status, 200);
+      assert.equal((await write(g1.accessToken, one, boardKey)).status, 200);
+      const state = await (await call(`/room/state?sessionId=${id}`, a)).json();
+      const common = state.boards.find(
+        (row: { ownerId: string }) => row.ownerId === "common",
+      );
+      assert.equal(
+        common.strokes.filter((row: { id: string }) => row.id === one.id)
+          .length,
+        1,
+      );
+      assert.equal(
+        common.strokes.filter((row: { id: string }) => row.id === two.id)
+          .length,
+        1,
+      );
+      const decoded = decodeJwt(g2.accessToken);
+      const shortToken = await new SignJWT({
+        sid: decoded.sid,
+        tid: decoded.tid,
+        ses: decoded.ses,
+        mid: decoded.mid,
+      })
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuer("teaching-copilot")
+        .setAudience("student")
+        .setSubject(g2.studentId)
+        .setIssuedAt()
+        .setExpirationTime("2s")
+        .sign(config.jwtSecret);
+      const shortSocket = await connect(shortToken);
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error("expired socket still connected")),
+          4000,
+        );
+        shortSocket.once("disconnect", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      const bytes = Buffer.from("%PDF-1.4\nprivate submission\n%%EOF\n");
+      const intentResponse = await call(
+        `/sessions/${id}/submissions/upload-intent`,
+        g1.accessToken,
+        "POST",
+        {
+          fileName: "answer.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: bytes.length,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+        },
+      );
+      assert.equal(intentResponse.status, 201);
+      const intent = await intentResponse.json();
+      assert.equal(
+        (await fetch(intent.uploadUrl, { method: "PUT", body: bytes })).status,
+        200,
+      );
+      const payload = {
+        title: "PDF answer",
+        answer: "",
+        uploadId: intent.uploadId,
+      };
+      assert.equal(
+        (
+          await call(
+            `/sessions/${id}/submissions`,
+            g2.accessToken,
+            "POST",
+            payload,
+          )
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await call(`/sessions/${id}/submissions`, g1.accessToken, "POST", {
+            ...payload,
+            storageKey: "other",
+          })
+        ).status,
+        400,
+      );
+      const key = crypto.randomUUID();
+      const send = () =>
+        call(`/sessions/${id}/submissions`, g1.accessToken, "POST", payload, {
+          "Idempotency-Key": key,
+        });
+      const submitted = await send();
+      assert.equal(submitted.status, 201);
+      const submission = (await submitted.json()).submission;
+      const retry = await send();
+      assert.equal(retry.status, 201);
+      assert.equal((await retry.json()).submission.id, submission.id);
+      assert.equal(
+        (await call(`/submissions/${submission.id}/read-url`, g2.accessToken))
+          .status,
+        403,
+      );
+      assert.equal(
+        (await call(`/submissions/${submission.id}/read-url`, b)).status,
+        403,
+      );
+      const signed = await call(`/submissions/${submission.id}/read-url`, a);
+      assert.equal(signed.status, 200);
+      assert.equal(
+        Buffer.from(
+          await (await fetch((await signed.json()).readUrl)).arrayBuffer(),
+        ).toString(),
+        bytes.toString(),
       );
       const invites = (await (await call(`/sessions/${id}/invites`, a)).json())
         .invites;

@@ -198,7 +198,7 @@ async function checkStudentToolAccess(
     memberBelongsToSession:
       member.sessionId === session.id && member.studentId === actor.studentId,
     roomSessionValid: !grant.revokedAt && grant.expiresAt > new Date(),
-    canWrite: member.canWrite,
+    canWrite: toolKey === "board" ? member.canWrite : true,
     toolEnabled,
     memberToolEnabled,
   });
@@ -220,6 +220,16 @@ async function checkStudentToolAccess(
     return null;
   }
   return { session, member, grant, sessionTools };
+}
+
+class BoardCommandError extends Error {
+  constructor(
+    public status: number,
+    public code: "PERMISSION_DENIED" | "SESSION_NOT_LIVE" | "NOT_FOUND",
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
 async function resolveBoardTarget(
@@ -417,8 +427,7 @@ export function classroomRouter(config: AppConfig) {
         },
         orderBy: { createdAt: "desc" },
       });
-      if (!invite)
-        return fail(res, 404, "NOT_FOUND", "Không tìm thấy mã mời");
+      if (!invite) return fail(res, 404, "NOT_FOUND", "Không tìm thấy mã mời");
       const now = new Date();
       const updated = await db.$transaction(async (tx) => {
         await tx.invite.updateMany({
@@ -715,7 +724,12 @@ export function classroomRouter(config: AppConfig) {
         },
       });
       if (updated.count !== 1)
-        return fail(res, 401, "INVITE_INVALID", "Refresh token đã được sử dụng");
+        return fail(
+          res,
+          401,
+          "INVITE_INVALID",
+          "Refresh token đã được sử dụng",
+        );
       const accessToken = await signStudentAccess(config, {
         studentId: grant.studentId,
         grantId: grant.id,
@@ -753,12 +767,7 @@ export function classroomRouter(config: AppConfig) {
       const session = await ownedSession(req.params.id, res.locals.actor, res);
       if (!session) return;
       if (session.status === "ended" || session.status === "reviewed")
-        return fail(
-          res,
-          409,
-          "SESSION_STATE_INVALID",
-          "Buổi học đã kết thúc",
-        );
+        return fail(res, 409, "SESSION_STATE_INVALID", "Buổi học đã kết thúc");
       const parsed = AdmitCommand.safeParse(req.body ?? {});
       if (!parsed.success)
         return fail(res, 400, "VALIDATION_ERROR", "Lệnh duyệt không hợp lệ");
@@ -770,7 +779,12 @@ export function classroomRouter(config: AppConfig) {
         },
       });
       if (!member)
-        return fail(res, 404, "NOT_FOUND", "Không tìm thấy học sinh trong phòng");
+        return fail(
+          res,
+          404,
+          "NOT_FOUND",
+          "Không tìm thấy học sinh trong phòng",
+        );
       if (!approved) {
         const now = new Date();
         const rejected = await db.$transaction(async (tx) => {
@@ -884,7 +898,12 @@ export function classroomRouter(config: AppConfig) {
         return fail(res, 400, "VALIDATION_ERROR", "ID không hợp lệ");
       const parsed = MemberUpdate.safeParse(req.body);
       if (!parsed.success)
-        return fail(res, 400, "VALIDATION_ERROR", "Dữ liệu thành viên không hợp lệ");
+        return fail(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "Dữ liệu thành viên không hợp lệ",
+        );
       const member = await db.roomMember.findFirst({
         where: {
           sessionId: req.params.id,
@@ -1113,9 +1132,19 @@ export function classroomRouter(config: AppConfig) {
         );
       const expected = versionHeader(req);
       if (expected === -1)
-        return fail(res, 400, "VALIDATION_ERROR", "If-Match-Version không hợp lệ");
+        return fail(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "If-Match-Version không hợp lệ",
+        );
       if (expected !== null && session.version !== expected)
-        return fail(res, 409, "VERSION_CONFLICT", "Phiên bản buổi học đã thay đổi");
+        return fail(
+          res,
+          409,
+          "VERSION_CONFLICT",
+          "Phiên bản buổi học đã thay đổi",
+        );
 
       const result = await createOnce(
         req,
@@ -1234,9 +1263,19 @@ export function classroomRouter(config: AppConfig) {
         );
       const expected = versionHeader(req);
       if (expected === -1)
-        return fail(res, 400, "VALIDATION_ERROR", "If-Match-Version không hợp lệ");
+        return fail(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "If-Match-Version không hợp lệ",
+        );
       if (expected !== null && session.version !== expected)
-        return fail(res, 409, "VERSION_CONFLICT", "Phiên bản buổi học đã thay đổi");
+        return fail(
+          res,
+          409,
+          "VERSION_CONFLICT",
+          "Phiên bản buổi học đã thay đổi",
+        );
 
       const result = await createOnce(
         req,
@@ -1323,12 +1362,7 @@ export function classroomRouter(config: AppConfig) {
       const session = await ownedSession(req.params.id, res.locals.actor, res);
       if (!session) return;
       if (!["draft", "scheduled", "live"].includes(session.status))
-        return fail(
-          res,
-          409,
-          "SESSION_STATE_INVALID",
-          "Buổi học đã kết thúc",
-        );
+        return fail(res, 409, "SESSION_STATE_INVALID", "Buổi học đã kết thúc");
       const parsed = ClassroomStatePatch.safeParse(req.body);
       const expected = versionHeader(req);
       if (!parsed.success || !expected || expected < 1)
@@ -1868,7 +1902,12 @@ export function classroomRouter(config: AppConfig) {
           return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập");
       } else {
         if (actor.sessionId !== session.id)
-          return fail(res, 403, "PERMISSION_DENIED", "Không thuộc buổi học này");
+          return fail(
+            res,
+            403,
+            "PERMISSION_DENIED",
+            "Không thuộc buổi học này",
+          );
         const member = await db.roomMember.findUnique({
           where: { id: actor.memberId },
         });
@@ -1963,8 +2002,7 @@ export function classroomRouter(config: AppConfig) {
           "Không xác định được bảng nháp hoặc hoạt động",
         );
 
-      const authorKey =
-        actor.role === "student" ? actor.studentId : actor.id;
+      const authorKey = actor.role === "student" ? actor.studentId : actor.id;
       if (
         actor.role === "student" &&
         target.ownerId !== "common" &&
@@ -1986,189 +2024,231 @@ export function classroomRouter(config: AppConfig) {
         );
       }
 
-      const existing = await db.board.findUnique({
-        where: { id: target.boardId },
-      });
-      const currentStrokes = z
-        .array(Stroke)
-        .safeParse(existing?.strokes ?? []).data ?? [];
-      const currentNotes =
-        z
-          .array(z.object({ authorId: z.string(), text: z.string() }))
-          .safeParse(existing?.notes ?? []).data ?? [];
-      let nextStrokes = [...currentStrokes];
-      let nextNotes = [...currentNotes];
-      let nextText = existing?.text ?? "";
-      let nextShared =
-        existing?.shared ?? (target.ownerId === "common" ? true : false);
-
-      const cmd = parsed.data;
-      if (cmd.operation === "addStroke") {
-        if (
-          actor.role === "student" &&
-          cmd.stroke.authorId !== actor.studentId &&
-          cmd.stroke.authorId !== actor.id
-        ) {
-          await audit(
-            actor,
-            "security.denied",
-            "board",
-            target.boardId,
-            res.locals.requestId,
-            session.id,
-          );
-          return fail(
-            res,
-            403,
-            "PERMISSION_DENIED",
-            "Không thể giả mạo tác giả nét vẽ",
-          );
-        }
-        const normalizedStroke = Stroke.parse({
-          ...cmd.stroke,
-          authorId: authorKey,
-        });
-        nextStrokes = [...currentStrokes.slice(-499), normalizedStroke];
-      } else if (cmd.operation === "undoOwnStroke") {
-        if (cmd.strokeId) {
-          const idx = currentStrokes.findIndex((s) => s.id === cmd.strokeId);
-          if (idx === -1)
-            return fail(res, 404, "NOT_FOUND", "Không tìm thấy nét vẽ");
-          if (
-            actor.role === "student" &&
-            currentStrokes[idx].authorId !== authorKey
-          ) {
-            await audit(
-              actor,
-              "security.denied",
-              "board",
-              target.boardId,
-              res.locals.requestId,
-              session.id,
-            );
-            return fail(
-              res,
-              403,
-              "PERMISSION_DENIED",
-              "Không thể xóa nét vẽ của người khác trên bảng chung",
-            );
-          }
-          nextStrokes = currentStrokes.filter((_, i) => i !== idx);
-        } else {
-          let lastOwnIdx = -1;
-          for (let i = currentStrokes.length - 1; i >= 0; i -= 1) {
-            if (currentStrokes[i].authorId === authorKey) {
-              lastOwnIdx = i;
-              break;
-            }
-          }
-          if (lastOwnIdx !== -1) {
-            nextStrokes = currentStrokes.filter((_, i) => i !== lastOwnIdx);
-          }
-        }
-      } else if (cmd.operation === "clearOwnStrokes") {
-        if (actor.role === "teacher" && target.ownerId === "common") {
-          nextStrokes = [];
-        } else {
-          nextStrokes = currentStrokes.filter((s) => s.authorId !== authorKey);
-        }
-      } else if (cmd.operation === "setNote") {
-        const filtered = currentNotes.filter((n) => n.authorId !== authorKey);
-        nextNotes = cmd.text.trim()
-          ? [...filtered, { authorId: authorKey, text: cmd.text }]
-          : filtered;
-        if (target.ownerId !== "common" || actor.role === "teacher") {
-          nextText = cmd.text;
-        } else {
-          nextText = nextNotes.map((n) => n.text).join("\n");
-        }
-      } else if (cmd.operation === "setShared") {
-        if (target.ownerId === "common")
-          return fail(
-            res,
-            403,
-            "PERMISSION_DENIED",
-            "Bảng chung luôn ở chế độ chia sẻ",
-          );
-        nextShared = cmd.shared;
-      }
-
-      const board = await db.$transaction(async (tx) => {
-        const saved = await tx.board.upsert({
-          where: { id: target.boardId },
-          update: {
-            shared: nextShared,
-            strokes: nextStrokes as Prisma.InputJsonValue,
-            notes: nextNotes as Prisma.InputJsonValue,
-            text: nextText,
-            revision: { increment: 1 },
-          },
-          create: {
-            id: target.boardId,
-            sessionId: session.id,
-            activityId: target.activityId,
-            ownerId: target.ownerId,
-            shared: nextShared,
-            strokes: nextStrokes as Prisma.InputJsonValue,
-            notes: nextNotes as Prisma.InputJsonValue,
-            text: nextText,
-            revision: 1,
-          },
-        });
-        if (
-          target.ownerId !== "common" &&
-          !nextShared &&
-          session.sharedBoardOwnerId === target.ownerId
-        ) {
-          await tx.session.update({
+      const route = `/sessions/${session.id}/boards/${target.boardId}`;
+      try {
+        const result = await createOnce(req, res, route, async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "Session" WHERE id = ${session.id}::uuid FOR UPDATE`;
+          const currentSession = await tx.session.findUniqueOrThrow({
             where: { id: session.id },
-            data: {
-              sharedBoardOwnerId: "common",
-              version: { increment: 1 },
+          });
+          if (currentSession.status !== "live")
+            throw new BoardCommandError(
+              409,
+              "SESSION_NOT_LIVE",
+              "Buổi học không trực tuyến",
+            );
+          if (actor.role === "student") {
+            const member = await tx.roomMember.findUnique({
+              where: { id: actor.memberId },
+            });
+            const grant = await tx.studentRoomSession.findUnique({
+              where: { id: actor.grantId },
+            });
+            const tools = Tools.safeParse(currentSession.tools).data;
+            const overrides = Tools.partial().safeParse(
+              member?.toolOverrides ?? {},
+            ).data;
+            if (
+              !grant ||
+              grant.revokedAt ||
+              grant.expiresAt <= new Date() ||
+              !member ||
+              member.state !== "joined" ||
+              !member.canWrite ||
+              tools?.board === false ||
+              overrides?.board === false
+            )
+              throw new BoardCommandError(
+                403,
+                "PERMISSION_DENIED",
+                "Quyền ghi bảng không còn hiệu lực",
+              );
+          }
+          const existing = await tx.board.findUnique({
+            where: { id: target.boardId },
+          });
+          const currentStrokes =
+            z.array(Stroke).safeParse(existing?.strokes ?? []).data ?? [];
+          const currentNotes =
+            z
+              .array(z.object({ authorId: z.string(), text: z.string() }))
+              .safeParse(existing?.notes ?? []).data ?? [];
+          let nextStrokes = [...currentStrokes];
+          let nextNotes = [...currentNotes];
+          let nextText = existing?.text ?? "";
+          let nextShared =
+            existing?.shared ?? (target.ownerId === "common" ? true : false);
+
+          const cmd = parsed.data;
+          if (cmd.operation === "addStroke") {
+            if (
+              actor.role === "student" &&
+              cmd.stroke.authorId !== actor.studentId &&
+              cmd.stroke.authorId !== actor.id
+            ) {
+              throw new BoardCommandError(
+                403,
+                "PERMISSION_DENIED",
+                "Không thể giả mạo tác giả nét vẽ",
+              );
+            }
+            const normalizedStroke = Stroke.parse({
+              ...cmd.stroke,
+              authorId: authorKey,
+            });
+            nextStrokes = currentStrokes.some(
+              (stroke) => stroke.id === normalizedStroke.id,
+            )
+              ? currentStrokes
+              : [...currentStrokes.slice(-499), normalizedStroke];
+          } else if (cmd.operation === "undoOwnStroke") {
+            if (cmd.strokeId) {
+              const idx = currentStrokes.findIndex(
+                (s) => s.id === cmd.strokeId,
+              );
+              if (idx === -1)
+                throw new BoardCommandError(
+                  404,
+                  "NOT_FOUND",
+                  "Không tìm thấy nét vẽ",
+                );
+              if (
+                actor.role === "student" &&
+                currentStrokes[idx].authorId !== authorKey
+              ) {
+                throw new BoardCommandError(
+                  403,
+                  "PERMISSION_DENIED",
+                  "Không thể xóa nét vẽ của người khác trên bảng chung",
+                );
+              }
+              nextStrokes = currentStrokes.filter((_, i) => i !== idx);
+            } else {
+              let lastOwnIdx = -1;
+              for (let i = currentStrokes.length - 1; i >= 0; i -= 1) {
+                if (currentStrokes[i].authorId === authorKey) {
+                  lastOwnIdx = i;
+                  break;
+                }
+              }
+              if (lastOwnIdx !== -1) {
+                nextStrokes = currentStrokes.filter((_, i) => i !== lastOwnIdx);
+              }
+            }
+          } else if (cmd.operation === "clearOwnStrokes") {
+            if (actor.role === "teacher" && target.ownerId === "common") {
+              nextStrokes = [];
+            } else {
+              nextStrokes = currentStrokes.filter(
+                (s) => s.authorId !== authorKey,
+              );
+            }
+          } else if (cmd.operation === "setNote") {
+            const filtered = currentNotes.filter(
+              (n) => n.authorId !== authorKey,
+            );
+            nextNotes = cmd.text.trim()
+              ? [...filtered, { authorId: authorKey, text: cmd.text }]
+              : filtered;
+            if (target.ownerId !== "common" || actor.role === "teacher") {
+              nextText = cmd.text;
+            } else {
+              nextText = nextNotes.map((n) => n.text).join("\n");
+            }
+          } else if (cmd.operation === "setShared") {
+            if (target.ownerId === "common")
+              throw new BoardCommandError(
+                403,
+                "PERMISSION_DENIED",
+                "Bảng chung luôn ở chế độ chia sẻ",
+              );
+            nextShared = cmd.shared;
+          }
+
+          const saved = await tx.board.upsert({
+            where: { id: target.boardId },
+            update: {
+              shared: nextShared,
+              strokes: nextStrokes as Prisma.InputJsonValue,
+              notes: nextNotes as Prisma.InputJsonValue,
+              text: nextText,
+              revision: { increment: 1 },
+            },
+            create: {
+              id: target.boardId,
+              sessionId: session.id,
+              activityId: target.activityId,
+              ownerId: target.ownerId,
+              shared: nextShared,
+              strokes: nextStrokes as Prisma.InputJsonValue,
+              notes: nextNotes as Prisma.InputJsonValue,
+              text: nextText,
+              revision: 1,
             },
           });
-        }
-        const isPublicBoard =
-          target.ownerId === "common" ||
-          nextShared ||
-          Boolean(existing?.shared);
-        if (isPublicBoard) {
-          await appendOutboxEvent(tx, {
-            sessionId: session.id,
-            type: "board.updated",
-            label: "Cập nhật bảng nháp",
-            actorId: actor.id,
-            visibility: { scope: "public" },
-            activityId: target.activityId,
-            resourceId: saved.id,
-            version: saved.revision,
-          });
-        } else {
-          await appendOutboxEvent(tx, {
-            sessionId: session.id,
-            type: "board.updated",
-            label: "Cập nhật bảng nháp cá nhân",
-            actorId: actor.id,
-            visibility: { scope: "student", studentId: target.ownerId },
-            activityId: target.activityId,
-            resourceId: saved.id,
-            version: saved.revision,
-          });
-          await appendOutboxEvent(tx, {
-            sessionId: session.id,
-            type: "board.updated",
-            label: "Học sinh cập nhật bảng nháp cá nhân",
-            actorId: actor.id,
-            visibility: { scope: "teacher" },
-            activityId: target.activityId,
-            resourceId: saved.id,
-            version: saved.revision,
-          });
-        }
-        return saved;
-      });
-      triggerOutboxPublish(session.id);
-      return res.json({ board });
+          if (
+            target.ownerId !== "common" &&
+            !nextShared &&
+            session.sharedBoardOwnerId === target.ownerId
+          ) {
+            await tx.session.update({
+              where: { id: session.id },
+              data: {
+                sharedBoardOwnerId: "common",
+                version: { increment: 1 },
+              },
+            });
+          }
+          const isPublicBoard =
+            target.ownerId === "common" ||
+            nextShared ||
+            Boolean(existing?.shared);
+          if (isPublicBoard) {
+            await appendOutboxEvent(tx, {
+              sessionId: session.id,
+              type: "board.updated",
+              label: "Cập nhật bảng nháp",
+              actorId: actor.id,
+              visibility: { scope: "public" },
+              activityId: target.activityId,
+              resourceId: saved.id,
+              version: saved.revision,
+            });
+          } else {
+            await appendOutboxEvent(tx, {
+              sessionId: session.id,
+              type: "board.updated",
+              label: "Cập nhật bảng nháp cá nhân",
+              actorId: actor.id,
+              visibility: { scope: "student", studentId: target.ownerId },
+              activityId: target.activityId,
+              resourceId: saved.id,
+              version: saved.revision,
+            });
+            await appendOutboxEvent(tx, {
+              sessionId: session.id,
+              type: "board.updated",
+              label: "Học sinh cập nhật bảng nháp cá nhân",
+              actorId: actor.id,
+              visibility: { scope: "teacher" },
+              activityId: target.activityId,
+              resourceId: saved.id,
+              version: saved.revision,
+            });
+          }
+          return saved.id;
+        });
+        if (!result) return;
+        const board = await db.board.findUniqueOrThrow({
+          where: { id: result.resourceId },
+        });
+        if (!result.replay) triggerOutboxPublish(session.id);
+        return res.json({ board });
+      } catch (error) {
+        if (error instanceof BoardCommandError)
+          return fail(res, error.status, error.code, error.message);
+        throw error;
+      }
     }),
   );
 
@@ -2351,7 +2431,12 @@ export function classroomRouter(config: AppConfig) {
         where: { id: parsed.data.activityId, sessionId: session.id },
       });
       if (!act)
-        return fail(res, 400, "VALIDATION_ERROR", "Hoạt động không thuộc buổi học");
+        return fail(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "Hoạt động không thuộc buổi học",
+        );
       const result = await createOnce(
         req,
         res,
@@ -2422,14 +2507,10 @@ export function classroomRouter(config: AppConfig) {
         where: { id: req.params.checkId },
         include: { sessionIdRef: true },
       });
-      if (!check)
-        return fail(res, 404, "NOT_FOUND", "Không tìm thấy câu hỏi");
+      if (!check) return fail(res, 404, "NOT_FOUND", "Không tìm thấy câu hỏi");
       if (check.sessionIdRef.teacherId !== res.locals.actor.id)
         return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập");
-      if (
-        parsed.data.status === "open" &&
-        check.sessionIdRef.status !== "live"
-      )
+      if (parsed.data.status === "open" && check.sessionIdRef.status !== "live")
         return fail(res, 409, "SESSION_NOT_LIVE", "Buổi học đã kết thúc");
       const updated = await db.$transaction(async (tx) => {
         const row = await tx.quickCheck.update({
@@ -2470,12 +2551,16 @@ export function classroomRouter(config: AppConfig) {
         return fail(res, 400, "VALIDATION_ERROR", "ID câu hỏi không hợp lệ");
       const parsed = CheckResponseInput.safeParse(req.body);
       if (!parsed.success)
-        return fail(res, 400, "VALIDATION_ERROR", "Câu trả lời không được để trống");
+        return fail(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "Câu trả lời không được để trống",
+        );
       const check = await db.quickCheck.findUnique({
         where: { id: req.params.checkId },
       });
-      if (!check)
-        return fail(res, 404, "NOT_FOUND", "Không tìm thấy câu hỏi");
+      if (!check) return fail(res, 404, "NOT_FOUND", "Không tìm thấy câu hỏi");
       const actor = res.locals.actor as StudentActor;
       const access = await checkStudentToolAccess(
         actor,
@@ -2716,7 +2801,12 @@ export function classroomRouter(config: AppConfig) {
         (parsed.data.uploadId &&
           !safeId.safeParse(parsed.data.uploadId).success)
       )
-        return fail(res, 400, "VALIDATION_ERROR", "Dữ liệu bài nộp không hợp lệ");
+        return fail(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "Dữ liệu bài nộp không hợp lệ",
+        );
       if (!parsed.data.answer.trim() && !parsed.data.uploadId)
         return fail(
           res,
@@ -2747,7 +2837,12 @@ export function classroomRouter(config: AppConfig) {
         const s = await ownedSession(req.params.id, actor, res);
         if (!s) return;
         if (s.status !== "live")
-          return fail(res, 409, "SESSION_NOT_LIVE", "Buổi học không trực tuyến");
+          return fail(
+            res,
+            409,
+            "SESSION_NOT_LIVE",
+            "Buổi học không trực tuyến",
+          );
         session = s;
         studentId = s.primaryStudentId;
       }
@@ -2823,7 +2918,9 @@ export function classroomRouter(config: AppConfig) {
             staged.size !== intent.sizeBytes ||
             staged.size > MAX_UPLOAD_BYTES
           ) {
-            await client.removeObject(bucket, intent.storageKey).catch(() => {});
+            await client
+              .removeObject(bucket, intent.storageKey)
+              .catch(() => {});
             return fail(
               res,
               400,
@@ -2846,7 +2943,6 @@ export function classroomRouter(config: AppConfig) {
               "Không thể xác nhận tệp bài nộp",
             );
           }
-          await client.removeObject(bucket, intent.storageKey).catch(() => {});
           const stream = await client.getObject(bucket, finalKey);
           const hash = createHash("sha256");
           let bytes = 0;
@@ -2943,6 +3039,8 @@ export function classroomRouter(config: AppConfig) {
         });
         if (!result) return;
         committed = !result.replay;
+        if (committed && upload)
+          await client.removeObject(bucket, upload.storageKey).catch(() => {});
         triggerOutboxPublish(session.id);
         return res.status(201).json({
           submission: await db.submission.findUniqueOrThrow({
@@ -3054,9 +3152,19 @@ export function classroomRouter(config: AppConfig) {
       }
       const expected = versionHeader(req);
       if (expected === -1)
-        return fail(res, 400, "VALIDATION_ERROR", "If-Match-Version không hợp lệ");
+        return fail(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "If-Match-Version không hợp lệ",
+        );
       if (expected !== null && submission.version !== expected)
-        return fail(res, 409, "VERSION_CONFLICT", "Bài nộp đã thay đổi phiên bản");
+        return fail(
+          res,
+          409,
+          "VERSION_CONFLICT",
+          "Bài nộp đã thay đổi phiên bản",
+        );
 
       const { updatedSubmission, evidence } = await db.$transaction(
         async (tx) => {

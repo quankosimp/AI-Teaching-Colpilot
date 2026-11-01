@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { api, getAccessToken } from "./onlineApi";
+import { SubmissionForm } from "./SubmissionForm";
 import { OnlineBoard, type BoardState } from "./OnlineBoard";
 import { BoundedReconnectQueue } from "./reconnectQueue";
 
@@ -51,6 +52,7 @@ type Room = {
     title: string;
     answer: string;
     finalFeedback: string | null;
+    fileName?: string | null;
   }[];
 };
 const savedKey = "classroom-grant";
@@ -207,7 +209,6 @@ export function LiveRoom({
 }) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
-  const [submission, setSubmission] = useState("");
   const [feedback, setFeedback] = useState("");
   const [support, setSupport] = useState("DocLap");
   const [room, setRoom] = useState<Room | null>(null);
@@ -531,25 +532,13 @@ export function LiveRoom({
           {grant && (
             <section>
               <h2>Bài làm</h2>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void command(`/sessions/${sessionId}/submissions`, "POST", {
-                    title: "Bài làm",
-                    answer: submission,
-                    ...(s.currentActivityId
-                      ? { activityId: s.currentActivityId }
-                      : {}),
-                  }).then(() => setSubmission(""));
-                }}
-              >
-                <textarea
-                  value={submission}
-                  onChange={(e) => setSubmission(e.target.value)}
-                  required
-                />
-                <button disabled={s.status !== "live"}>Nộp bài</button>
-              </form>
+              <SubmissionForm
+                sessionId={sessionId}
+                activityId={s.currentActivityId}
+                enabled={s.status === "live"}
+                request={request}
+                onSubmitted={load}
+              />
               {room?.ownSubmissions?.map((x) => (
                 <p key={x.id}>
                   {x.title}: {x.answer}{" "}
@@ -577,6 +566,26 @@ export function LiveRoom({
                       ?.displayName || x.studentId}
                     : {x.title} — {x.answer}
                   </p>
+                  {x.fileName && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void request<{ readUrl: string }>(
+                          `/submissions/${x.id}/read-url`,
+                        )
+                          .then((r) =>
+                            window.open(
+                              r.readUrl,
+                              "_blank",
+                              "noopener,noreferrer",
+                            ),
+                          )
+                          .catch((e) => setError(e.message))
+                      }
+                    >
+                      Mở tệp: {x.fileName}
+                    </button>
+                  )}
                   <input
                     value={feedback}
                     onChange={(e) => setFeedback(e.target.value)}

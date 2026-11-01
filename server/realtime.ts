@@ -2,6 +2,7 @@ import type { Server as HttpServer } from "node:http";
 import { Server as SocketIOServer, type Socket } from "socket.io";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { decodeJwt } from "jose";
 import {
   ClassroomReconnect,
   EventPayload,
@@ -73,6 +74,7 @@ type SocketPrincipal = {
   actor: ClassroomActor;
   sessionId: string;
   teacherId: string;
+  expiresAt: number;
 };
 
 const activeIntegrations = new Set<{
@@ -137,13 +139,12 @@ function rowToEnvelope(row: {
   });
 }
 
-async function revalidateSocketPrincipal(
-  principal: SocketPrincipal,
-): Promise<{
+async function revalidateSocketPrincipal(principal: SocketPrincipal): Promise<{
   valid: boolean;
   memberState?: string;
   sessionStatus?: string;
 }> {
+  if (principal.expiresAt <= Date.now()) return { valid: false };
   if (principal.actor.role === "teacher") {
     const authSession = await db.teacherAuthSession.findUnique({
       where: { id: principal.actor.sessionId },
@@ -251,7 +252,11 @@ export function attachClassroomRealtime(
   const namespace = io.of("/classroom");
   const principals = new Map<string, SocketPrincipal>();
 
-  const syncSocketRooms = (socket: Socket, principal: SocketPrincipal, memberState?: string) => {
+  const syncSocketRooms = (
+    socket: Socket,
+    principal: SocketPrincipal,
+    memberState?: string,
+  ) => {
     const publicRoom = `session:${principal.sessionId}:public`;
     if (principal.actor.role === "teacher") {
       void socket.join(publicRoom);
@@ -288,7 +293,11 @@ export function attachClassroomRealtime(
       return;
     }
     const maxSeq = Math.max(0, session.nextEventSeq - 1);
-    if (lastEventSeq < 0 || lastEventSeq > maxSeq || maxSeq - lastEventSeq > 200) {
+    if (
+      lastEventSeq < 0 ||
+      lastEventSeq > maxSeq ||
+      maxSeq - lastEventSeq > 200
+    ) {
       const resync = ResyncRequired.parse({
         type: "room.resync_required",
         sessionId: principal.sessionId,
@@ -330,6 +339,10 @@ export function attachClassroomRealtime(
       if (!rawAuthToken || !z.uuid().safeParse(requestedSessionId).success)
         return next(new Error("UNAUTHORIZED"));
 
+      const expires = decodeJwt(rawAuthToken).exp;
+      if (typeof expires !== "number" || expires * 1000 <= Date.now())
+        return next(new Error("UNAUTHORIZED"));
+      const expiresAt = expires * 1000;
       const teacher = await verifyTeacherToken(rawAuthToken, config);
       if (teacher) {
         const session = await db.session.findUnique({
@@ -342,6 +355,7 @@ export function attachClassroomRealtime(
           actor: teacher,
           sessionId: session.id,
           teacherId: session.teacherId,
+          expiresAt,
         });
         return next();
       }
@@ -358,6 +372,7 @@ export function attachClassroomRealtime(
           actor: student,
           sessionId: student.sessionId,
           teacherId: student.teacherId,
+          expiresAt,
         });
         return next();
       }
@@ -373,7 +388,13 @@ export function attachClassroomRealtime(
       socket.disconnect(true);
       return;
     }
+    const expiryTimer = setTimeout(
+      () => socket.disconnect(true),
+      Math.max(0, principal.expiresAt - Date.now()),
+    );
+    expiryTimer.unref();
     socket.on("disconnect", () => {
+      clearTimeout(expiryTimer);
       principals.delete(socket.id);
     });
     const status = await revalidateSocketPrincipal(principal);
