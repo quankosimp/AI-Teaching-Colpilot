@@ -216,7 +216,7 @@ export function OnlineBoard({
           <button
             type="button"
             className="button secondary small"
-            disabled={busy}
+            disabled={!canWrite || busy}
             onClick={() => void onCaptureAttempt()}
           >
             Lưu bản nháp

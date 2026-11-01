@@ -1,3 +1,4 @@
+import { statusLabel } from "./statusLabels";
 import { useState, type FormEvent } from "react";
 
 type Request = <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -101,7 +102,7 @@ export function ReviewPanel({
     });
   };
   return (
-    <section>
+    <section className="online-room__review">
       <h2>Minh chứng và nhận định</h2>
       {error && <p role="alert">{error}</p>}
       <label>
@@ -156,8 +157,8 @@ export function ReviewPanel({
                 )
               }
             />
-            {e.title}: {e.detail} · {e.support} · phiên bản {e.version} ·{" "}
-            {e.status}
+            {e.title}: {e.detail} · {statusLabel(e.support)} · phiên bản{" "}
+            {e.version} · {statusLabel(e.status)}
           </label>
           <button
             type="button"
@@ -192,9 +193,9 @@ export function ReviewPanel({
         <div>
           <h4>Nguồn: {source.evidence.title}</h4>
           <p>
-            Loại {source.evidence.sourceType} · phiên bản nguồn{" "}
+            Loại {statusLabel(source.evidence.sourceType)} · phiên bản nguồn{" "}
             {source.evidence.sourceVersion ?? "không có"} · mức hỗ trợ{" "}
-            {source.evidence.support}
+            {statusLabel(source.evidence.support)}
           </p>
           <pre>
             {source.source
@@ -255,8 +256,8 @@ export function ReviewPanel({
         .map((c) => (
           <div key={c.id}>
             <p>
-              {c.text} · {c.status} · phiên bản {c.revision}{" "}
-              {c.staleReason && `· ${c.staleReason}`}
+              {c.text} · {statusLabel(c.status)} · phiên bản {c.revision}{" "}
+              {c.staleReason && `· ${statusLabel(c.staleReason)}`}
             </p>
             <button
               disabled={busy || c.status !== "pending"}

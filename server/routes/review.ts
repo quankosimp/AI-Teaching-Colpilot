@@ -80,9 +80,9 @@ async function resolveCurrentSourceVersion(
   if (sourceType === "check_response") {
     const resp = await client.checkResponse.findFirst({
       where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
-      select: { id: true },
+      select: { version: true },
     });
-    return resp ? 1 : 0;
+    return resp?.version ?? 0;
   }
   if (sourceType === "annotation") {
     const ann = await client.annotation.findFirst({

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { api, getAccessToken } from "./onlineApi";
+import { statusLabel } from "./statusLabels";
 import { ReviewPanel } from "./ReviewPanel";
 import { SubmissionForm } from "./SubmissionForm";
 import { OnlineBoard, type BoardState } from "./OnlineBoard";
@@ -23,6 +24,7 @@ type Member = {
 };
 type Room = {
   waiting?: boolean;
+  capabilities?: { boardWrite: boolean };
   sessionStatus?: string;
   session?: {
     id: string;
@@ -177,9 +179,20 @@ export function StudentEntry() {
       />
     );
   return (
-    <main className="card">
+    <main className="card online-lobby">
       <h1>Tham gia lớp học</h1>
-      {error && <p role="alert">{error}</p>}
+      {!preview && !error && (
+        <p role="status" aria-live="polite">
+          Đang tải thông tin tham gia lớp học…
+        </p>
+      )}
+      {error && (
+        <div role="alert">
+          <p>{error}</p>
+          <p>Liên hệ giáo viên để được hỗ trợ hoặc nhận liên kết mời mới.</p>
+          <a href="/">Quay về trang chủ</a>
+        </div>
+      )}
       {preview && (
         <form
           onSubmit={(e) => {
@@ -232,12 +245,14 @@ export function LiveRoom({
 }) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
-  const [feedback, setFeedback] = useState("");
-  const [support, setSupport] = useState("DocLap");
   const [room, setRoom] = useState<Room | null>(null);
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [connected, setConnected] = useState(false);
+  const [unsentStroke, setUnsentStroke] = useState<{
+    operation: "addStroke";
+    stroke: import("./OnlineBoard").BoardStroke;
+  } | null>(null);
   const queue = useRef(new BoundedReconnectQueue());
   const cursor = useRef(0);
   const currentGrant = useRef(grant);
@@ -274,7 +289,11 @@ export function LiveRoom({
             setRoom(null);
             sessionStorage.removeItem(savedKey);
           }
-          setError(e.message);
+          setError(
+            grant && (e.status === 401 || e.status === 403)
+              ? "Yêu cầu tham gia có thể đã bị từ chối hoặc phiên không còn hiệu lực. Vui lòng liên hệ giáo viên để được hỗ trợ."
+              : e.message,
+          );
         }
       });
     };
@@ -344,6 +363,7 @@ export function LiveRoom({
         body: JSON.stringify(payload),
       });
       await load();
+      return true;
     } catch (e) {
       if (allowQueue && !navigator.onLine) {
         const result = queue.current.enqueue({
@@ -358,14 +378,15 @@ export function LiveRoom({
           setError(
             `Đã giữ ${result.queuedCount} thao tác để gửi lại khi kết nối.`,
           );
-          return;
+          return true;
         }
         setError(
           "Hàng đợi đã đầy hoặc thao tác quá lớn; nội dung vẫn còn trong ô nhập.",
         );
-        return;
+        return false;
       }
       setError(e instanceof Error ? e.message : "Không thể hoàn thành");
+      return false;
     }
   };
   const s = room?.session;
@@ -377,20 +398,88 @@ export function LiveRoom({
           b.ownerId === "common" && b.id.includes(`:${s?.currentActivityId}:`),
       );
   return (
-    <main className="card">
-      <button onClick={onExit}>Quay lại</button>
-      <h1>{s?.title || "Phòng chờ"}</h1>
-      <p>
-        Kết nối dữ liệu: {connected ? "đang kết nối" : "mất kết nối"} · Video:
-        chưa cấu hình
-      </p>
+    <main className={`card online-room${room?.waiting ? " online-lobby" : ""}`}>
+      <header className="online-room__header">
+        <button onClick={onExit}>Quay lại</button>
+        <h1>{s?.title || "Phòng chờ"}</h1>
+        <p>
+          Kết nối dữ liệu: {connected ? "đang kết nối" : "mất kết nối"} · Video:
+          chưa cấu hình
+        </p>
+      </header>
       {error && <p role="alert">{error}</p>}
-      {room?.waiting && <p>Đang chờ giáo viên cho vào lớp.</p>}
+      {!room && !error && (
+        <p role="status" aria-live="polite">
+          Đang tải phòng học…
+        </p>
+      )}
+      {room?.waiting && (
+        <p role="status" aria-live="polite">
+          Đang chờ giáo viên cho vào lớp.
+        </p>
+      )}
       {s && (
         <>
           <p>
-            {s.sharedGoal} · {s.status}
+            {s.sharedGoal} · {statusLabel(s.status)}
           </p>
+          <section className="online-room__board" aria-label="Bảng học tập">
+            {unsentStroke && (
+              <div role="status">
+                Nét vẽ chưa gửi vẫn được giữ lại.{" "}
+                <button
+                  disabled={!connected || s.status !== "live"}
+                  onClick={() =>
+                    void command(
+                      `/sessions/${sessionId}/boards/${grant ? "own" : "common"}`,
+                      "PUT",
+                      unsentStroke,
+                      true,
+                    ).then((ok) => {
+                      if (ok) setUnsentStroke(null);
+                    })
+                  }
+                >
+                  Gửi lại nét vẽ
+                </button>
+              </div>
+            )}
+            <OnlineBoard
+              title={grant ? "Bảng nháp của tôi" : "Bảng chung"}
+              board={board || null}
+              actorId={grant?.studentId || teacherId || ""}
+              canWrite={
+                s.status === "live" &&
+                (!grant || room?.capabilities?.boardWrite === true)
+              }
+              isOwnPrivateBoard={!!grant}
+              busy={!!unsentStroke}
+              onCommand={async (cmd) => {
+                const accepted = await command(
+                  `/sessions/${sessionId}/boards/${grant ? "own" : "common"}`,
+                  "PUT",
+                  cmd,
+                  true,
+                );
+                if (!accepted && cmd.operation === "addStroke" && cmd.stroke)
+                  setUnsentStroke({
+                    operation: "addStroke",
+                    stroke: cmd.stroke,
+                  });
+              }}
+              onCaptureAttempt={
+                grant
+                  ? async () => {
+                      await command(
+                        `/sessions/${sessionId}/boards/own/attempts`,
+                        "POST",
+                        {},
+                      );
+                    }
+                  : undefined
+              }
+            />
+          </section>
           {!grant && (
             <>
               <button
@@ -409,69 +498,76 @@ export function LiveRoom({
               >
                 Kết thúc
               </button>
-              <h2>Học sinh</h2>
-              {members.map((m) => (
-                <div key={m.id}>
-                  {m.displayName || m.studentIdRef?.name} · {m.state}{" "}
-                  <button
-                    onClick={() =>
-                      void request<{ inviteUrl: string }>(
-                        `/sessions/${sessionId}/invites`,
-                        {
-                          method: "POST",
-                          body: JSON.stringify({ studentId: m.studentId }),
-                        },
-                      )
-                        .then((r) => setLink(r.inviteUrl))
-                        .catch((e) => setError(e.message))
-                    }
-                  >
-                    Tạo liên kết mời
-                  </button>
-                  {m.state === "waiting" && (
-                    <>
-                      <button
-                        onClick={() =>
-                          void command(
-                            `/sessions/${sessionId}/members/${m.id}/admit`,
-                            "POST",
-                            { approved: true },
-                          )
-                        }
-                      >
-                        Cho vào
-                      </button>
-                      <button
-                        onClick={() =>
-                          void command(
-                            `/sessions/${sessionId}/members/${m.id}/admit`,
-                            "POST",
-                            { approved: false },
-                          )
-                        }
-                      >
-                        Từ chối
-                      </button>
-                    </>
-                  )}
-                </div>
-              ))}
-              {link && (
-                <p>
-                  Liên kết mời một lần:{" "}
-                  <input
-                    readOnly
-                    value={link}
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                </p>
-              )}
+              <section
+                className="online-room__members"
+                aria-label="Học sinh trong phòng"
+              >
+                <h2>Học sinh</h2>
+                {members.map((m) => (
+                  <div key={m.id}>
+                    {m.displayName || m.studentIdRef?.name} ·{" "}
+                    {statusLabel(m.state)}{" "}
+                    <button
+                      onClick={() =>
+                        void request<{ inviteUrl: string }>(
+                          `/sessions/${sessionId}/invites`,
+                          {
+                            method: "POST",
+                            body: JSON.stringify({ studentId: m.studentId }),
+                          },
+                        )
+                          .then((r) => setLink(r.inviteUrl))
+                          .catch((e) => setError(e.message))
+                      }
+                    >
+                      Tạo liên kết mời
+                    </button>
+                    {m.state === "waiting" && (
+                      <>
+                        <button
+                          onClick={() =>
+                            void command(
+                              `/sessions/${sessionId}/members/${m.id}/admit`,
+                              "POST",
+                              { approved: true },
+                            )
+                          }
+                        >
+                          Cho vào
+                        </button>
+                        <button
+                          onClick={() =>
+                            void command(
+                              `/sessions/${sessionId}/members/${m.id}/admit`,
+                              "POST",
+                              { approved: false },
+                            )
+                          }
+                        >
+                          Từ chối
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+                {link && (
+                  <p>
+                    Liên kết mời một lần:{" "}
+                    <input
+                      readOnly
+                      value={link}
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                  </p>
+                )}
+              </section>
             </>
           )}
           {!grant && s.Activity_sessionId_items && (
-            <section>
+            <section className="online-room__activity">
               <h2>Hoạt động</h2>
               <select
+                aria-label="Hoạt động hiện tại"
                 value={s.currentActivityId || ""}
                 onChange={(e) =>
                   void request(`/sessions/${sessionId}/classroom`, {
@@ -505,6 +601,7 @@ export function LiveRoom({
                 <input
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
+                  aria-label="Câu hỏi kiểm tra nhanh"
                   placeholder="Câu hỏi kiểm tra nhanh"
                   required
                 />
@@ -514,7 +611,7 @@ export function LiveRoom({
               </form>
               {room?.checks?.map((c) => (
                 <p key={c.id}>
-                  {c.question} · {c.status}{" "}
+                  {c.question} · {statusLabel(c.status)}{" "}
                   {c.status === "open" && (
                     <button
                       onClick={() =>
@@ -531,7 +628,7 @@ export function LiveRoom({
             </section>
           )}
           {grant && room?.activeQuickCheck && (
-            <section>
+            <section className="online-room__activity">
               <h2>{room.activeQuickCheck.question}</h2>
               {room.ownCheckResponse ? (
                 <p>Đã trả lời: {room.ownCheckResponse.answer}</p>
@@ -547,6 +644,7 @@ export function LiveRoom({
                   }}
                 >
                   <input
+                    aria-label="Câu trả lời kiểm tra nhanh"
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     required
@@ -559,7 +657,7 @@ export function LiveRoom({
             </section>
           )}
           {grant && (
-            <section>
+            <section className="online-room__submissions">
               <h2>Bài làm</h2>
               <SubmissionForm
                 sessionId={sessionId}
@@ -568,6 +666,9 @@ export function LiveRoom({
                 request={request}
                 onSubmitted={load}
               />
+              {!room?.ownSubmissions?.length && (
+                <p>Chưa có bài làm nào được nộp.</p>
+              )}
               {room?.ownSubmissions?.map((x) => (
                 <p key={x.id}>
                   {x.title}: {x.answer}{" "}
@@ -577,14 +678,17 @@ export function LiveRoom({
             </section>
           )}
           {!grant && (
-            <section>
+            <section className="online-room__submissions">
               <h2>Bài học sinh nộp</h2>
+              {!room?.submissions?.length && (
+                <p>Chưa có bài nộp từ học sinh.</p>
+              )}
               {room?.submissions?.map((x) => (
-                <form
+                <SubmissionGrade
                   key={x.id}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void command(`/submissions/${x.id}/grade`, "PATCH", {
+                  title={x.title}
+                  onGrade={async (feedback, support) => {
+                    await command(`/submissions/${x.id}/grade`, "PATCH", {
                       feedback,
                       support,
                     });
@@ -615,23 +719,7 @@ export function LiveRoom({
                       Mở tệp: {x.fileName}
                     </button>
                   )}
-                  <input
-                    value={feedback}
-                    onChange={(e) => setFeedback(e.target.value)}
-                    placeholder="Nhận xét"
-                    required
-                  />
-                  <select
-                    value={support}
-                    onChange={(e) => setSupport(e.target.value)}
-                  >
-                    <option value="DocLap">Độc lập</option>
-                    <option value="CoGoiY">Có gợi ý</option>
-                    <option value="DuocHuongDan">Được hướng dẫn</option>
-                    <option value="ChuaRo">Chưa rõ</option>
-                  </select>
-                  <button>Chấm bài</button>
-                </form>
+                </SubmissionGrade>
               ))}
             </section>
           )}
@@ -646,34 +734,55 @@ export function LiveRoom({
               reload={load}
             />
           )}
-          <OnlineBoard
-            title={grant ? "Bảng nháp của tôi" : "Bảng chung"}
-            board={board || null}
-            actorId={grant?.studentId || teacherId || ""}
-            canWrite={s.status === "live"}
-            isOwnPrivateBoard={!!grant}
-            onCommand={async (cmd) => {
-              await command(
-                `/sessions/${sessionId}/boards/${grant ? "own" : "common"}`,
-                "PUT",
-                cmd,
-                cmd.operation === "setNote" || cmd.operation === "setShared",
-              );
-            }}
-            onCaptureAttempt={
-              grant
-                ? async () => {
-                    await command(
-                      `/sessions/${sessionId}/boards/own/attempts`,
-                      "POST",
-                      {},
-                    );
-                  }
-                : undefined
-            }
-          />
         </>
       )}
     </main>
+  );
+}
+
+function SubmissionGrade({
+  title,
+  onGrade,
+  children,
+}: {
+  title: string;
+  onGrade: (feedback: string, support: string) => Promise<void>;
+  children: React.ReactNode;
+}) {
+  const [feedback, setFeedback] = useState("");
+  const [support, setSupport] = useState("DocLap");
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void onGrade(feedback, support);
+      }}
+    >
+      {children}
+      <label>
+        Nhận xét
+        <input
+          aria-label={`Nhận xét cho ${title}`}
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          placeholder="Nhận xét"
+          required
+        />
+      </label>
+      <label>
+        Mức hỗ trợ
+        <select
+          aria-label={`Mức hỗ trợ cho ${title}`}
+          value={support}
+          onChange={(e) => setSupport(e.target.value)}
+        >
+          <option value="DocLap">Độc lập</option>
+          <option value="CoGoiY">Có gợi ý</option>
+          <option value="DuocHuongDan">Được hướng dẫn</option>
+          <option value="ChuaRo">Chưa rõ</option>
+        </select>
+      </label>
+      <button>Chấm bài</button>
+    </form>
   );
 }
