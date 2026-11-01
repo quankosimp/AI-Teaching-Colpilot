@@ -2087,53 +2087,233 @@ export function classroomRouter(config: AppConfig) {
     asyncRoute(async (req, res) => {
       if (!safeId.safeParse(req.params.id).success)
         return fail(res, 400, "VALIDATION_ERROR", "ID không hợp lệ");
-      const session = await db.session.findUnique({
-        where: { id: req.params.id },
-      });
-      if (!session)
-        return fail(res, 404, "NOT_FOUND", "Không tìm thấy buổi học");
+
       const actor = res.locals.actor as TeacherActor | StudentActor;
-      if (actor.role === "teacher") {
-        if (session.teacherId !== actor.id)
-          return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập");
-      } else {
-        if (actor.sessionId !== session.id)
-          return fail(
-            res,
-            403,
-            "PERMISSION_DENIED",
-            "Không thuộc buổi học này",
-          );
-        const member = await db.roomMember.findUnique({
-          where: { id: actor.memberId },
-        });
-        if (!member || member.state !== "joined" || session.status !== "live")
-          return fail(
-            res,
-            403,
-            "PERMISSION_DENIED",
-            "Chỉ học sinh đã được duyệt trong buổi học trực tuyến mới nhận được video token",
-          );
+
+      // Validate provider choice (SG3-04)
+      const reqBodyProvider =
+        typeof req.body === "object" && req.body !== null
+          ? req.body.provider
+          : undefined;
+      const requestedProvider = reqBodyProvider || req.query.provider;
+      if (
+        requestedProvider !== undefined &&
+        requestedProvider !== "zoom" &&
+        requestedProvider !== "mock"
+      ) {
+        return fail(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "Nhà cung cấp video không hợp lệ",
+        );
       }
-      if (!process.env.ZOOM_SDK_KEY || !process.env.ZOOM_SDK_SECRET)
+
+      // Revalidate session, member, grant under session lock atomically (SG3-04)
+      const existingSession = await db.session.findUnique({
+        where: { id: req.params.id },
+        select: { id: true },
+      });
+      if (!existingSession)
+        return fail(res, 404, "NOT_FOUND", "Không tìm thấy buổi học");
+
+      let session: any;
+      let displayName = "";
+      let identity = "";
+      try {
+        const validated = await db.$transaction(async (tx) => {
+          const lockedSession = await lockSession(tx, req.params.id);
+          if (
+            lockedSession.status === "ended" ||
+            lockedSession.status === "reviewed"
+          ) {
+            throw new SessionConflict(
+              "SESSION_STATE_INVALID",
+              "Buổi học đã kết thúc",
+            );
+          }
+          if (lockedSession.status !== "live") {
+            throw new SessionConflict(
+              "SESSION_STATE_INVALID",
+              "Buổi học chưa bắt đầu",
+            );
+          }
+
+          if (actor.role === "teacher") {
+            if (lockedSession.teacherId !== actor.id) {
+              throw new SessionConflict(
+                "PERMISSION_DENIED",
+                "Không có quyền truy cập",
+              );
+            }
+            const teacher = await tx.teacher.findUnique({
+              where: { id: actor.id },
+              select: { name: true },
+            });
+            return {
+              session: lockedSession,
+              displayName: teacher?.name || "Giáo viên",
+              identity: actor.id.slice(0, 36),
+            };
+          } else {
+            if (actor.sessionId !== lockedSession.id) {
+              throw new SessionConflict(
+                "PERMISSION_DENIED",
+                "Không thuộc buổi học này",
+              );
+            }
+            const [member, grant] = await Promise.all([
+              tx.roomMember.findUnique({ where: { id: actor.memberId } }),
+              tx.studentRoomSession.findUnique({ where: { id: actor.grantId } }),
+            ]);
+            if (
+              !member ||
+              member.state !== "joined" ||
+              member.sessionId !== lockedSession.id ||
+              !grant ||
+              grant.revokedAt !== null ||
+              grant.expiresAt <= new Date()
+            ) {
+              throw new SessionConflict(
+                "PERMISSION_DENIED",
+                "Chỉ học sinh đã được duyệt trong buổi học trực tuyến mới nhận được video token",
+              );
+            }
+            return {
+              session: lockedSession,
+              displayName:
+                (actor as StudentActor).displayName ||
+                member.displayName ||
+                "Học sinh",
+              identity: actor.memberId.slice(0, 36),
+            };
+          }
+        });
+        session = validated.session;
+        displayName = validated.displayName;
+        identity = validated.identity;
+      } catch (err: any) {
+        if (err instanceof SessionConflict) {
+          const status =
+            err.code === "PERMISSION_DENIED"
+              ? 403
+              : 409;
+          return fail(res, status, err.code, err.message);
+        }
+        throw err;
+      }
+
+      // Check environment & mock availability (SG3-04 fail-closed on prod/staging)
+      const isProductionOrStaging =
+        config.mode === "production" ||
+        config.mode === "staging" ||
+        process.env.NODE_ENV === "production" ||
+        process.env.NODE_ENV === "staging";
+      const isLocalMockOrTest =
+        (config.mode === "local_mock" || config.mode === "test") &&
+        !isProductionOrStaging;
+      const allowMock =
+        isLocalMockOrTest &&
+        (process.env.MEDIA_PROVIDER === "mock" ||
+          process.env.ENABLE_MOCK_MEDIA === "true" ||
+          requestedProvider === "mock" ||
+          !requestedProvider);
+
+      if (requestedProvider === "mock") {
+        if (!allowMock || isProductionOrStaging) {
+          return fail(
+            res,
+            403,
+            "PERMISSION_DENIED",
+            "Môi trường giả lập không được phép trên môi trường này",
+          );
+        }
+        await audit(
+          actor,
+          "media.token_minted",
+          "session",
+          session.id,
+          res.locals.requestId || randomUUID(),
+          session.id,
+          { provider: "mock", isHost: actor.role === "teacher" },
+        );
+        return res.json({
+          provider: "mock",
+          token: `mock-video-token-${actor.id}`,
+          topic: session.id,
+          sessionName: session.id,
+          userName: displayName,
+          isHost: actor.role === "teacher",
+          roleType: actor.role === "teacher" ? 1 : 0,
+        });
+      }
+
+      const hasZoomCreds = Boolean(
+        process.env.ZOOM_SDK_KEY && process.env.ZOOM_SDK_SECRET,
+      );
+
+      if (!requestedProvider && !hasZoomCreds && allowMock) {
+        await audit(
+          actor,
+          "media.token_minted",
+          "session",
+          session.id,
+          res.locals.requestId || randomUUID(),
+          session.id,
+          { provider: "mock", isHost: actor.role === "teacher" },
+        );
+        return res.json({
+          provider: "mock",
+          token: `mock-video-token-${actor.id}`,
+          topic: session.id,
+          sessionName: session.id,
+          userName: displayName,
+          isHost: actor.role === "teacher",
+          roleType: actor.role === "teacher" ? 1 : 0,
+        });
+      }
+
+      if (!hasZoomCreds) {
         return fail(
           res,
           503,
           "MEDIA_UNAVAILABLE",
           "Zoom Video SDK chưa được cấu hình trên môi trường này",
         );
+      }
+
+      const nowSec = Math.floor(Date.now() / 1000);
       const token = await new SignJWT({
         app_key: process.env.ZOOM_SDK_KEY,
         tpc: session.id,
         role_type: actor.role === "teacher" ? 1 : 0,
-        user_identity: actor.id,
+        user_identity: identity,
         version: 1,
       })
         .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-        .setIssuedAt()
-        .setExpirationTime("2h")
+        .setIssuedAt(nowSec)
+        .setExpirationTime(nowSec + 1800)
         .sign(new TextEncoder().encode(process.env.ZOOM_SDK_SECRET));
-      return res.json({ token, topic: session.id });
+
+      await audit(
+        actor,
+        "media.token_minted",
+        "session",
+        session.id,
+        res.locals.requestId || randomUUID(),
+        session.id,
+        { provider: "zoom", isHost: actor.role === "teacher" },
+      );
+
+      return res.json({
+        provider: "zoom",
+        token,
+        topic: session.id,
+        sessionName: session.id,
+        userName: displayName,
+        isHost: actor.role === "teacher",
+        roleType: actor.role === "teacher" ? 1 : 0,
+      });
     }),
   );
 

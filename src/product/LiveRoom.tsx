@@ -7,6 +7,7 @@ import { SubmissionForm } from "./SubmissionForm";
 import { OnlineBoard, type BoardState } from "./OnlineBoard";
 import { MaterialViewer } from "./MaterialViewer";
 import { BoundedReconnectQueue } from "./reconnectQueue";
+import { MediaHost } from "./media/MediaHost";
 
 type Grant = {
   accessToken: string;
@@ -275,6 +276,10 @@ export function LiveRoom({
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [connected, setConnected] = useState(false);
+  const [mediaVideoStatus, setMediaVideoStatus] = useState("chưa cấu hình");
+  const handleMediaError = useCallback((err: string) => {
+    console.warn("[LiveRoom Media]", err);
+  }, []);
   const [unsentStroke, setUnsentStroke] = useState<{
     operation: "addStroke";
     stroke: import("./OnlineBoard").BoardStroke;
@@ -470,8 +475,8 @@ export function LiveRoom({
         </button>
         <h1>{s?.title || "Phòng chờ"}</h1>
         <p>
-          Kết nối dữ liệu: {connected ? "đang kết nối" : "mất kết nối"} · Video:
-          chưa cấu hình
+          Kết nối dữ liệu: {connected ? "đang kết nối" : "mất kết nối"} · Video:{" "}
+          {mediaVideoStatus}
         </p>
         {!grant && s && <div className="online-room__lifecycle">
               <button
@@ -510,7 +515,22 @@ export function LiveRoom({
           </p>
           <div className={`online-room__workspace${grant ? "" : " online-room__workspace--teacher"}`}>
           <div className="online-room__stage" aria-label="Sân khấu lớp học">
-            <p>Video chưa cấu hình; khu vực video sẽ sẵn sàng khi dịch vụ được kết nối.</p>
+            <MediaHost
+              sessionId={sessionId}
+              isLive={s.status === "live"}
+              role={grant ? "student" : "teacher"}
+              displayName={
+                grant
+                  ? members.find((m) => m.studentId === grant.studentId)?.displayName ||
+                    grant.displayName ||
+                    "Học sinh"
+                  : "Giáo viên"
+              }
+              userId={grant?.studentId || teacherId || "teacher"}
+              request={request}
+              onError={handleMediaError}
+              onStatusChange={setMediaVideoStatus}
+            />
             {!grant && (
               <div aria-label="Chọn nội dung chung">
                 {([ ["document", "Học liệu"], ["board", "Bảng"], ["check", "Kiểm tra"] ] as const).map(([value, label]) => (
