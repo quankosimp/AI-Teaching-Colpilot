@@ -970,7 +970,7 @@
       "id": "PRODUCT-12-A",
       "owner": "PRODUCT",
       "parent_task": "PRODUCT-12",
-      "executor": "ef9df4c2-9056-4f2a-afc2-3e54889e80df",
+      "executor": "317620c0-a51f-430f-a95a-54eec19c5287",
       "title": "Isolated local Docker application packaging",
       "status": "running",
       "srs_ids": [],
@@ -979,8 +979,11 @@
         "ARCH-06"
       ],
       "acceptance": "Reproducible full local application stack, localhost-only published ports/private persistence and real gateway/upload checks after primary PRODUCT bind/public-signer hooks. No external-provider acceptance.",
-      "commit": null,
-      "evidence": []
+      "commit": "1f6ba6f34dc116f6e2de1a60d9bf6e6272a586b4",
+      "evidence": [
+        "docs/planning/evidence/docker-integrated-1f6ba6f.json",
+        "docs/planning/evidence/docker-review-c681776.md"
+      ]
     }
   ],
   "active_executors": {
@@ -995,16 +998,16 @@
       "last_event": "Stream interrupted after G2 scaffold commit 0d9674b; worktree clean, prepared tests preserved; no runtime G2 pass inferred."
     },
     "REVIEW": {
-      "agentId": "400fec47-e03f-47d7-b817-7b24ffaf7ca3",
-      "provider": "antigravity-2/claude-opus-5-5-high",
-      "reason": "Previous reviewer hit a 34-hour quota limit; configured independent Review profile launched for Docker remediation audit.",
-      "independentFromWriter": true
+      "agentId": "865d2663-05ee-4be1-8f8a-f295467c7006",
+      "provider": "codex-alt/gpt-6.1-terra",
+      "independentFromWriter": true,
+      "reason": "Configured Review and Architecture providers reached quota; separate configured Codex worker completed read-only Docker audit."
     },
     "PRODUCT-OPS": {
-      "agentId": "ef9df4c2-9056-4f2a-afc2-3e54889e80df",
-      "provider": "antigravity-3/gemini-3.8-flash-high",
+      "agentId": "317620c0-a51f-430f-a95a-54eec19c5287",
+      "provider": "codex-alt/gpt-6.1-terra",
       "task": "PRODUCT-12-A",
-      "scope": "Only new Docker/deploy files in isolated operations worktree; no primary runtime file overlap."
+      "scope": "Same preserved operations worktree and exclusive Docker/deploy files; previous worker output ended in provider filter error after clean commit c681776."
     }
   }
 }

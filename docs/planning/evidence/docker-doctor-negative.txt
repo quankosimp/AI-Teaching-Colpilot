@@ -1,0 +1,73 @@
+
+================================================================
+Teaching Copilot — Docker Doctor Diagnostic & Verification Suite
+Gateway Target : http://127.0.0.1:1
+MinIO Target   : http://127.0.0.1:59002
+Compose File   : compose.docker.yml
+Env File       : deploy/local.env.example
+================================================================
+
+1. Packaging Files Integrity
+       • Dockerfile: present
+       • .dockerignore: present
+       • compose.docker.yml: present
+       • deploy/local.env.example: present
+       • deploy/caddy/Caddyfile: present
+       • deploy/caddy/Caddyfile.production.example: present
+       • deploy/entrypoint.sh: present
+       • deploy/scripts/init-minio.sh: present
+       • deploy/README.md: present
+[PASS] All required packaging files exist
+
+2. Docker Build Context Security (.dockerignore)
+[PASS] .dockerignore patterns - Worktree .git file, secrets, recursive nested envs, build artifacts and docs excluded
+
+3. Rendered Docker Compose JSON Inspection (Safe argv, --env-file)
+[PASS] Rendered compose JSON parsed successfully via execFileSync
+[PASS] Project name isolation - Exact match: 'teaching-copilot-local'
+       • Service 'gateway': 127.0.0.1:4170 -> 4170 (safe loopback)
+       • Service 'minio': 127.0.0.1:59002 -> 9000 (safe loopback)
+       • Service 'minio': 127.0.0.1:59003 -> 9001 (safe loopback)
+       • Service 'postgres': 127.0.0.1:55433 -> 5432 (safe loopback)
+[PASS] All published ports (4) strictly bound to 127.0.0.1 (zero 0.0.0.0 exposure)
+[PASS] Persistent volumes naming isolation - teaching-copilot-local-pg-data, teaching-copilot-local-minio-data
+
+4. Running Container Instances
+[PASS] Container 'teaching-copilot-api' (api) - Up 8 minutes (healthy) [healthy]
+[PASS] Container 'teaching-copilot-gateway' (gateway) - Up 11 minutes (healthy) [healthy]
+[PASS] Container 'teaching-copilot-minio' (minio) - Up 4 minutes (healthy) [healthy]
+[PASS] Container 'teaching-copilot-postgres' (postgres) - Up About an hour (healthy) [healthy]
+
+5. Actual MinIO OPTIONS CORS Policy Verification
+[FAIL] Valid local origin CORS preflight - Expected HTTP 200/204 with exact origin http://127.0.0.1:1 and method PUT. Got: status=204, origin=undefined, methods=undefined
+[PASS] External non-local origin CORS restriction - Non-local origin 'https://external-client.example' was not granted CORS access (allow-origin header: none)
+
+6. Functional HTTP Assertions via Gateway (http://127.0.0.1:1)
+[FAIL] Gateway Static SPA Delivery - Expected HTTP 200 with SPA HTML, got HTTP 0 (connect ECONNREFUSED 127.0.0.1:1)
+[FAIL] Gateway -> API /health/live proxy - Expected HTTP 200, got HTTP 0 (connect ECONNREFUSED 127.0.0.1:1)
+[FAIL] API Dependency Health (/api/v1/health) - HTTP 0 (connect ECONNREFUSED 127.0.0.1:1)
+
+7. Teacher-A Flow: Auth -> Presign -> S3 PUT -> Finalize -> Read URL -> Content Match
+[FAIL] Mock Teacher Auth (teacher-a) - Expected HTTP 200, got HTTP 0 ()
+[FAIL] Teacher-A flow - Cannot proceed without teacher-a auth token
+
+================================================================
+Doctor Diagnostic Summary:
+================================================================
+
+>>> DIAGNOSTIC ASSERTIONS FAILED OR BLOCKED: <<<
+  [FAIL] Valid local origin CORS preflight
+         Expected HTTP 200/204 with exact origin http://127.0.0.1:1 and method PUT. Got: status=204, origin=undefined, methods=undefined
+  [FAIL] Gateway Static SPA Delivery
+         Expected HTTP 200 with SPA HTML, got HTTP 0 (connect ECONNREFUSED 127.0.0.1:1)
+  [FAIL] Gateway -> API /health/live proxy
+         Expected HTTP 200, got HTTP 0 (connect ECONNREFUSED 127.0.0.1:1)
+  [FAIL] API Dependency Health (/api/v1/health)
+         HTTP 0 (connect ECONNREFUSED 127.0.0.1:1)
+  [FAIL] Mock Teacher Auth (teacher-a)
+         Expected HTTP 200, got HTTP 0 ()
+  [FAIL] Teacher-A flow
+         Cannot proceed without teacher-a auth token
+
+Exiting with NON-ZERO code (1) as required.
+

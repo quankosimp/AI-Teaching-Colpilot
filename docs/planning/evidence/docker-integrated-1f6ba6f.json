@@ -1,0 +1,50 @@
+{
+  "integratedCommit": "1f6ba6f34dc116f6e2de1a60d9bf6e6272a586b4",
+  "packagingCandidate": "c6817760e4cab4b0412ffb6f51b845bde9f33c00",
+  "runtime": "Node 22.23.4",
+  "environment": "Local-Docker",
+  "imageIDs": {
+    "api": "sha256:175c8d726d8595cca9cc97783410485348c6619fadaef78a1d385acf9d5bc93c",
+    "gateway": "sha256:026df52cc84e2222c4ef65f099615e339646a4b38522f8696a1b1d35698402a4"
+  },
+  "checks": [
+    {
+      "name": "Compiled API image matches integrated build",
+      "status": "passed",
+      "modules": [
+        "server/index.js",
+        "server/context.js",
+        "server/routes/auth.js",
+        "server/routes/materials.js"
+      ]
+    },
+    {
+      "name": "Doctor actual local Docker flow",
+      "status": "passed",
+      "exitCode": 0,
+      "artifact": "docker-doctor-positive.txt"
+    },
+    {
+      "name": "Doctor rejects unreachable gateway",
+      "status": "passed",
+      "observedDoctorExitCode": 1,
+      "artifact": "docker-doctor-negative.txt"
+    },
+    {
+      "name": "Existing G1 HTTP/contracts/storage suites, RUN_G1_INTEGRATION=1",
+      "status": "passed",
+      "passed": 41,
+      "failed": 0,
+      "skipped": 6,
+      "artifact": "docker-integrated-tests.tap"
+    }
+  ],
+  "review": "NEEDS_FIXES",
+  "openFindings": [
+    "MF-OPS-07 init policy dependency must gate API startup",
+    "MF-OPS-08 exact healthy comparison and required-service presence",
+    "MF-OPS-09 denied-origin probe must reject network error/status0"
+  ],
+  "decision": "in_review: functional local probes pass, packaging acceptance remains open",
+  "realProviders": "blocked; no credential/HTTPS evidence inferred"
+}

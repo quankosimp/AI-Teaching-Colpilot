@@ -2,6 +2,13 @@
 
 ## Current
 
+- Accepted local gates: G0 contract v1 and G1-local. Provider-real and public HTTPS gates remain blocked on credentials/target.
+- Root source now includes Docker packaging through 1f6ba6f. Supervisor verified 41 tests passed / 0 failed / 6 prerequisite-skipped against isolated Docker, doctor positive exit0/unreachable exit1, real signed PNG upload/download and same-object permissions. Independent audit of final packaging c681776 still found three items: private policy init must gate API startup, exact container health/presence checks, and network-safe denied-origin probe. Ops recovery317620c0 is fixing them. Evidence: evidence/docker-integrated-1f6ba6f.json and evidence/docker-review-c681776.md. Packaging gate remains open.
+- G2 Product source advanced to1955fca after initial94380a7, with upload/review UI and reported controlled transaction-race tests. Independent QA is validating it in its own worktree; Product80137a9b is completing remaining source-grade/relabel/annotation race and browser coverage. No G2 gate acceptance or root G2 merge yet.
+- Preferred Review providers are quota-blocked (Gemini34h, Opus155h); independent Codex reviewer865d2663 completed the Docker audit. Product/Ops code writers remain separate from reviewer. At most three workers execute concurrently.
+
+### Earlier execution records
+
 - Root baseline c0c7841 now includes reviewed G0 via merge 8b7063e; QA contract tests and UI presentations integrated through 426e971, test CI/harness through 653f3a0.
 - PRODUCT baseline G0: 8ed8998 (includes earlier Product/UI candidates). Node22/pnpm strict frozen install, tests6/6, frontend/server typechecks/builds reported passed; independent verification pending.
 - UI fixes 72f914a and presentation exports f4a55a9 integrated; worker fixture checks cover 360/375/1440px light/dark and modal keyboard. Product G1 wiring still pending; UI task completion not accepted.
