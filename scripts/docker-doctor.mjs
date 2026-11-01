@@ -368,26 +368,26 @@ async function main() {
     );
   }
 
-  // 5.2 Untrusted outside origin preflight
-  const untrustedOrigin = 'https://untrusted-external-attacker.invalid';
+  // 5.2 External non-local origin preflight
+  const externalOrigin = 'https://external-client.example';
   const corsDeniedRes = await requestHttp(`${MINIO_URL}/copilot-private/test-cors-probe`, {
     method: 'OPTIONS',
     headers: {
-      Origin: untrustedOrigin,
+      Origin: externalOrigin,
       'Access-Control-Request-Method': 'PUT',
     },
   });
 
   const deniedOriginHeader = corsDeniedRes.headers['access-control-allow-origin'];
-  if (!deniedOriginHeader || (deniedOriginHeader !== untrustedOrigin && deniedOriginHeader !== '*')) {
+  if (!deniedOriginHeader || (deniedOriginHeader !== externalOrigin && deniedOriginHeader !== '*')) {
     logPass(
-      'Untrusted outside origin CORS rejection',
-      `Untrusted origin '${untrustedOrigin}' was NOT allowed (allow-origin header: ${deniedOriginHeader || 'none'})`
+      'External non-local origin CORS restriction',
+      `Non-local origin '${externalOrigin}' was not granted CORS access (allow-origin header: ${deniedOriginHeader || 'none'})`
     );
   } else {
     logFail(
-      'Untrusted outside origin CORS rejection',
-      `SECURITY LEAK: Untrusted origin was allowed with header: '${deniedOriginHeader}'`
+      'External non-local origin CORS restriction',
+      `Unexpected origin grant: allow-origin header returned '${deniedOriginHeader}'`
     );
   }
 
@@ -777,7 +777,7 @@ async function main() {
       } else {
         logFail(
           'Cross-Tenant Material List Privacy',
-          `SECURITY VIOLATION: Teacher-A material ${createdMaterialId} leaked into Teacher-B list!`
+          `Assertion failed: Teacher-A material ${createdMaterialId} appeared in Teacher-B list`
         );
       }
     } catch {
@@ -800,7 +800,7 @@ async function main() {
   } else {
     logFail(
       'Cross-Tenant /materials/:id/read-url Access Denial',
-      `SECURITY VIOLATION: Expected HTTP 403 Forbidden, got HTTP ${bReadUrlRes.statusCode} (${bReadUrlRes.body})`
+      `Access denial check failed: Expected HTTP 403 Forbidden, got HTTP ${bReadUrlRes.statusCode} (${bReadUrlRes.body})`
     );
   }
 
@@ -824,7 +824,7 @@ async function main() {
     } else if (anonProbe.statusCode === 200) {
       logFail(
         'Actual Verified File Anonymous Access Rejection',
-        `CRITICAL SECURITY LEAK: Anonymous GET to verified file succeeded with HTTP 200 OK! Bucket is public!`
+        `Private bucket check failed: Anonymous GET to verified file succeeded with HTTP 200 OK`
       );
     } else {
       logFail(
@@ -851,7 +851,7 @@ function printSummaryAndExit() {
   console.log(`${COLORS.cyan}================================================================${COLORS.reset}`);
 
   if (allChecksPassed) {
-    console.log(`\n${COLORS.green}${COLORS.bold}>>> ALL PACKAGING, SECURITY, HEALTH & FUNCTIONAL ASSERTIONS PASSED! <<<${COLORS.reset}`);
+    console.log(`\n${COLORS.green}${COLORS.bold}>>> ALL PACKAGING, HEALTH & FUNCTIONAL ASSERTIONS PASSED! <<<${COLORS.reset}`);
     console.log(`${COLORS.green}Exit Code: 0${COLORS.reset}\n`);
     process.exitCode = 0;
   } else {
