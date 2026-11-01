@@ -29,8 +29,8 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml* ./
 COPY prisma ./prisma
 
-# Strict frozen install
-RUN pnpm install --frozen-lockfile
+# Strict frozen install with explicit peer dependencies enforcement
+RUN pnpm install --frozen-lockfile --strict-peer-dependencies
 
 # Generate Prisma client for Debian OpenSSL 3.0.x
 RUN pnpm exec prisma generate
