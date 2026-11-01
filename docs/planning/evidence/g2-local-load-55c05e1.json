@@ -1,0 +1,37 @@
+{
+  "sourceCommit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
+  "timestamp": "2026-11-01T05:20:57.969Z",
+  "target": "http://127.0.0.1:4170",
+  "environment": "Local-Docker loopback / Node HTTP+Socket.IO; no media or AI provider traffic",
+  "actors": {
+    "teacher": 1,
+    "students": 5
+  },
+  "warmupRounds": 5,
+  "sampledRounds": 30,
+  "api": {
+    "samples": 210,
+    "p50Ms": 10.6,
+    "p95Ms": 12.81,
+    "maxMs": 14.44
+  },
+  "studentRealtime": {
+    "samples": 150,
+    "p50Ms": 12.74,
+    "p95Ms": 15.41,
+    "maxMs": 19.02
+  },
+  "teacherRealtime": {
+    "samples": 30,
+    "p50Ms": 13.26,
+    "p95Ms": 14.79,
+    "maxMs": 17.82
+  },
+  "thresholds": {
+    "apiP95Ms": 500,
+    "studentRealtimeP95Ms": 1500
+  },
+  "limits": "Synthetic small shared-board session and projected state reads; not WAN/mobile-device/provider, all-endpoint or final release performance acceptance",
+  "passed": true,
+  "fixtureCleanupPassed": true
+}

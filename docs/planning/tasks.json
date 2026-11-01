@@ -739,8 +739,11 @@
         "ARCH-05"
       ],
       "acceptance": "Real Gemini configured on server; minimized consent-filtered context, suggestion lifecycle and model/prompt version, sourced pending claims, timeout/retry without blocking teaching.",
-      "commit": null,
-      "evidence": [],
+      "commit": "23e5fd720ad5fa4cf2ad64574f62c7d2c40a3533",
+      "evidence": [
+        "docs/planning/evidence/g4-supervisor-review-23e5fd7.md",
+        "docs/planning/evidence/g4-independent-review-23e5fd7.md"
+      ],
       "executor": "a86e230b-65d4-4b62-920e-f9dda0df117f"
     },
     {
@@ -764,8 +767,10 @@
         "ARCH-05"
       ],
       "acceptance": "Authorized JWT signer, persistent Toolkit container, join/leave/mic/camera/share/participants/speaker, local/CI mock and real-device HTTPS evidence.",
-      "commit": null,
-      "evidence": [],
+      "commit": "6c478ae7194758353ffca0f27eae1fc60b70bb61",
+      "evidence": [
+        "docs/planning/evidence/g3-supervisor-review-6c478ae.md"
+      ],
       "executor": "3e42fb29-024b-4172-9925-38c290f8f5d5"
     },
     {

@@ -39,6 +39,18 @@
       "commit": "583784d851f849aa433e0fdb43208eca58afa9be",
       "evidence": "evidence/docker-accepted-583784d.json",
       "scope": "Isolated local Docker packaging/runtime; excludes G2 and real-provider/final-release acceptance"
+    },
+    "G3-local": {
+      "state": "in_review",
+      "candidate": "6c478ae7194758353ffca0f27eae1fc60b70bb61",
+      "verdict": "NEEDS_FIXES",
+      "evidence": "evidence/g3-supervisor-review-6c478ae.md"
+    },
+    "G4-local": {
+      "state": "in_review",
+      "candidate": "23e5fd720ad5fa4cf2ad64574f62c7d2c40a3533",
+      "verdict": "NEEDS_FIXES",
+      "evidence": "evidence/g4-supervisor-review-23e5fd7.md"
     }
   }
 }
