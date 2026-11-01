@@ -64,6 +64,7 @@ export const StudentRoomViewModel = z.strictObject({
     materialPage: z.number().int().nonnegative(),
     tools: Tools,
   }),
+  capabilities: z.strictObject({ boardWrite: z.boolean() }).optional(),
   activities: z.array(StudentActivity),
   currentMaterial: z
     .strictObject({

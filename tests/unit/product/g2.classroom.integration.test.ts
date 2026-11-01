@@ -641,6 +641,65 @@ test(
       );
       assert.equal(draftSource.status, 201);
       const sourceClaim = (await draftSource.json()).claim;
+      const extraEvidenceResponse = await call(
+        `/sessions/${id}/evidence`,
+        a,
+        "POST",
+        {
+          studentId: g1.studentId,
+          kind: "BaiLam",
+          title: "Additional source",
+          detail: "Observed work",
+          support: "DocLap",
+          source: {
+            type: "submission",
+            id: submission.id,
+            version: graded.submission.version,
+          },
+        },
+      );
+      assert.equal(extraEvidenceResponse.status, 201);
+      const extraEvidence = (await extraEvidenceResponse.json()).evidence;
+      const extraClaimResponse = await call(
+        `/sessions/${id}/claims/draft`,
+        a,
+        "POST",
+        {
+          studentId: g1.studentId,
+          text: "Additional source claim",
+          evidenceIds: [extraEvidence.id],
+        },
+      );
+      assert.equal(extraClaimResponse.status, 201);
+      const extraClaim = (await extraClaimResponse.json()).claim;
+      assert.equal(
+        (
+          await call(`/claims/${extraClaim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: extraClaim.revision,
+            evidenceIds: [extraEvidence.id],
+          })
+        ).status,
+        200,
+      );
+      const sameGrade = await call(
+        `/submissions/${submission.id}/grade`,
+        a,
+        "PATCH",
+        { feedback: "First grade", support: "DocLap" },
+      );
+      assert.equal(sameGrade.status, 200);
+      assert.equal(
+        (await sameGrade.json()).submission.version,
+        graded.submission.version,
+      );
+      assert.equal(
+        await db.evidenceRevision.count({
+          where: { evidenceId: extraEvidence.id },
+        }),
+        0,
+      );
+
       const [sourceApproval, regrade] = await orderedRace(
         () =>
           call(`/claims/${sourceClaim.id}/review`, a, "PATCH", {
@@ -663,6 +722,18 @@ test(
         (c: { id: string }) => c.id === sourceClaim.id,
       );
       assert.equal(sourceCurrent.status, "pending");
+      assert.equal(
+        sourceRoom.claims.find((c: { id: string }) => c.id === extraClaim.id)
+          .status,
+        "pending",
+      );
+      assert.equal(
+        await db.evidenceRevision.count({
+          where: { evidenceId: extraEvidence.id },
+        }),
+        1,
+      );
+
       assert.equal(
         sourceRoom.submissions.find(
           (x: { id: string }) => x.id === submission.id,
@@ -914,6 +985,18 @@ test(
         (await call(`/sessions/${id}/start`, a, "POST", {})).status,
         409,
       );
+      const extraPending = (
+        await (await call(`/room/state?sessionId=${id}`, a)).json()
+      ).claims.find((c: { id: string }) => c.id === extraClaim.id);
+      assert.equal(
+        (
+          await call(`/claims/${extraClaim.id}/review`, a, "PATCH", {
+            action: "reject",
+            revision: extraPending.revision,
+          })
+        ).status,
+        200,
+      );
       const invalidatedSource = (
         await (await call(`/room/state?sessionId=${id}`, a)).json()
       ).claims.find((c: { id: string }) => c.id === sourceClaim.id);
@@ -948,6 +1031,85 @@ test(
         ).status,
         200,
       );
+      const relabeledDraft2 = await call(
+        `/sessions/${id}/claims/draft`,
+        a,
+        "POST",
+        {
+          studentId: g2.studentId,
+          text: "Second relabeled claim",
+          evidenceIds: [extraEvidence.id],
+        },
+      );
+      assert.equal(relabeledDraft2.status, 201);
+      const relabeledClaim2 = (await relabeledDraft2.json()).claim;
+      assert.equal(
+        (
+          await call(`/claims/${relabeledClaim2.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: relabeledClaim2.revision,
+            evidenceIds: [extraEvidence.id],
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await call(`/sessions/${id}/complete-review`, a, "POST", {})).status,
+        200,
+      );
+      const noChange = await call(
+        `/submissions/${submission.id}/grade`,
+        a,
+        "PATCH",
+        { feedback: "Regraded", support: "CoGoiY" },
+      );
+      assert.equal(noChange.status, 200);
+      const afterNoChange = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      assert.equal(afterNoChange.session.status, "reviewed");
+      assert.equal(
+        afterNoChange.claims.find(
+          (c: { id: string }) => c.id === relabeledClaim.id,
+        ).status,
+        "approved",
+      );
+      assert.equal(
+        afterNoChange.claims.find(
+          (c: { id: string }) => c.id === relabeledClaim2.id,
+        ).status,
+        "approved",
+      );
+      assert.equal(
+        (
+          await call(`/submissions/${submission.id}/grade`, a, "PATCH", {
+            feedback: "Regraded",
+            support: "CoGoiY",
+            score: "9",
+          })
+        ).status,
+        200,
+      );
+      const afterFirstCorrection = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      assert.equal(afterFirstCorrection.session.status, "ended");
+      for (const claimId of [relabeledClaim.id, relabeledClaim2.id]) {
+        const row = afterFirstCorrection.claims.find(
+          (c: { id: string }) => c.id === claimId,
+        );
+        assert.equal(row.status, "pending");
+        assert.equal(
+          (
+            await call(`/claims/${claimId}/review`, a, "PATCH", {
+              action: "approve",
+              revision: row.revision,
+              evidenceIds: row.evidenceIds,
+            })
+          ).status,
+          200,
+        );
+      }
       const beforeRaceEnd = (
         await db.session.findUniqueOrThrow({ where: { id } })
       ).endedAt;
@@ -969,6 +1131,19 @@ test(
       );
       assert.equal(afterGradeRace.session.status, "ended");
       assert.equal(reopenedClaim.status, "pending");
+      const reopenedClaim2 = afterGradeRace.claims.find(
+        (c: { id: string }) => c.id === relabeledClaim2.id,
+      );
+      assert.equal(reopenedClaim2.status, "pending");
+      assert.equal(
+        (
+          await call(`/claims/${relabeledClaim2.id}/review`, a, "PATCH", {
+            action: "reject",
+            revision: reopenedClaim2.revision,
+          })
+        ).status,
+        200,
+      );
       assert.equal(
         new Date(afterGradeRace.session.endedAt).getTime(),
         beforeRaceEnd!.getTime(),
@@ -995,6 +1170,53 @@ test(
       );
       assert.equal(reviewedCheck.status, 200);
       const checkEvidence = (await reviewedCheck.json()).evidence;
+      const checkSourceVersion = (
+        await db.checkResponse.findUniqueOrThrow({
+          where: { id: checkResponse.id },
+        })
+      ).version;
+      const extraCheckResponse = await call(
+        `/sessions/${id}/evidence`,
+        a,
+        "POST",
+        {
+          studentId: g2.studentId,
+          kind: "KiemTraDocLap",
+          title: "Extra check observation",
+          detail: "Observed",
+          support: "DocLap",
+          source: {
+            type: "check_response",
+            id: checkResponse.id,
+            version: checkSourceVersion,
+          },
+        },
+      );
+      assert.equal(extraCheckResponse.status, 201);
+      const extraCheck = (await extraCheckResponse.json()).evidence;
+      const extraCheckClaimResponse = await call(
+        `/sessions/${id}/claims/draft`,
+        a,
+        "POST",
+        {
+          studentId: g2.studentId,
+          text: "Extra check claim",
+          evidenceIds: [extraCheck.id],
+        },
+      );
+      assert.equal(extraCheckClaimResponse.status, 201);
+      const extraCheckClaim = (await extraCheckClaimResponse.json()).claim;
+      assert.equal(
+        (
+          await call(`/claims/${extraCheckClaim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: extraCheckClaim.revision,
+            evidenceIds: [extraCheck.id],
+          })
+        ).status,
+        200,
+      );
+
       const repeatedCheck = await call(
         `/checks/${check.id}/responses/${checkResponse.id}/review`,
         a,
@@ -1056,6 +1278,26 @@ test(
       );
       assert.equal(checkAfter.session.status, "ended");
       assert.equal(changedClaim.status, "pending");
+      const otherCheckClaim = checkAfter.claims.find(
+        (c: { id: string }) => c.id === extraCheckClaim.id,
+      );
+      assert.equal(otherCheckClaim.status, "pending");
+      assert.equal(
+        await db.evidenceRevision.count({
+          where: { evidenceId: extraCheck.id },
+        }),
+        1,
+      );
+      assert.equal(
+        (
+          await call(`/claims/${extraCheckClaim.id}/review`, a, "PATCH", {
+            action: "reject",
+            revision: otherCheckClaim.revision,
+          })
+        ).status,
+        200,
+      );
+
       assert.equal(
         new Date(checkAfter.session.endedAt).getTime(),
         oldEnd!.getTime(),
