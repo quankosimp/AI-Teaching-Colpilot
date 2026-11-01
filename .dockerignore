@@ -2,8 +2,11 @@
 # Docker build ignore rules for Teaching Copilot
 # ==============================================================================
 
-# Git and version control
+# Git and version control (matches worktree .git file and .git directories)
+.git
 .git/
+**/.git
+**/.git/**
 .gitignore
 
 # Environment files with secrets (keep examples only)

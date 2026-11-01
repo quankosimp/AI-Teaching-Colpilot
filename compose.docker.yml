@@ -83,6 +83,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-local-only-change-before-any-shared-use-0123456789}
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_USE_SSL: "false"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-copilotlocal}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-copilot_local_only}

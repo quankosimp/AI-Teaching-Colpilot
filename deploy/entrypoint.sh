@@ -29,21 +29,29 @@ if [ "${AUTO_MIGRATE:-true}" = "true" ]; then
   echo "==> Database migrations applied successfully."
 fi
 
-# Auto-seeding for local demo fixtures (safe: upsert-based seed)
+# Auto-seeding for local demo fixtures (allowed ONLY in local_mock or test)
 if [ "${AUTO_SEED:-false}" = "true" ]; then
-  echo "==> Running local demo fixtures seed..."
-  RETRIES=20
-  until /app/node_modules/.bin/tsx server/seed.ts > /dev/null 2>&1 || [ $RETRIES -eq 0 ]; do
-    echo "    Waiting for MinIO and DB to be ready for seeding ($RETRIES retries remaining)..."
+  if [ "$APP_MODE" != "local_mock" ] && [ "$APP_MODE" != "test" ]; then
+    echo "==> ERROR: AUTO_SEED is forbidden when APP_MODE is '${APP_MODE:-production}'. Seeding is strictly local_mock/test only."
+    exit 1
+  fi
+
+  echo "==> Running local demo fixtures seed (server/seed.ts)..."
+  RETRIES=10
+  SEED_OUTPUT=""
+  until SEED_OUTPUT=$(/app/node_modules/.bin/tsx server/seed.ts 2>&1) || [ $RETRIES -eq 0 ]; do
+    echo "    Waiting for services to be ready for seeding ($RETRIES retries remaining)..."
     RETRIES=$((RETRIES - 1))
-    sleep 2
+    sleep 1
   done
 
   if [ $RETRIES -eq 0 ]; then
-    echo "==> WARNING: Seeding timed out. You can run './node_modules/.bin/tsx server/seed.ts' manually."
-  else
-    echo "==> Local demo fixtures and bucket initialized."
+    echo "==> FATAL ERROR: Requested demo seeding failed. Terminal output:"
+    echo "$SEED_OUTPUT" | sed 's/password=[^ &]*/password=[REDACTED]/gI'
+    echo "==> Exiting container to prevent running broken demo fixtures."
+    exit 1
   fi
+  echo "==> Local demo fixtures and bucket initialized successfully."
 fi
 
 echo "==> Executing application process: $@"

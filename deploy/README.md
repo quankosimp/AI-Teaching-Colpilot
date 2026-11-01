@@ -151,25 +151,17 @@ When a domain name and server are provisioned:
 
 ---
 
-## 5. Primary Product Writer Coordination Points
+## 5. Primary Product Writer Coordination Points & Hooks (Resolved)
 
-The following items are packaged and configured in the Docker stack, but require corresponding runtime support from the **Primary Product Writer** in `server/**`:
+The required runtime coordination points have been integrated from Primary Product hook `e1c1c9d`:
 
 1. **`BIND_HOST` inside container**:
-   - **Current State**: `server/index.ts` hardcodes `host = config.mode === "local_mock" ? "127.0.0.1" : "0.0.0.0"`.
-   - **Container Requirement**: Inside the API container, Express must bind to `0.0.0.0` (or `process.env.BIND_HOST ?? ...`) so Caddy gateway can route requests from `gateway` to `api:3100`.
-   - **Requested Change**: In `server/index.ts`:
-     ```typescript
-     const host = process.env.BIND_HOST ?? (
-       config.mode === "local_mock" || config.mode === "test"
-         ? "127.0.0.1"
-         : "0.0.0.0"
-     );
-     ```
-
+   - `server/index.ts` now honors `process.env.BIND_HOST?.trim()`, binding `0.0.0.0` inside container so Caddy Gateway can proxy requests to `api:3100`.
 2. **MinIO Public Signer Split**:
-   - **Current State**: `server/routes/materials.ts` uses internal `MINIO_ENDPOINT` (`minio:9000`) for generating presigned PUT URLs via `client.presignedPutObject(...)`.
-   - **Container Requirement**: The browser runs on the host machine and cannot resolve `minio:9000`. The browser must upload to `http://127.0.0.1:59002/...`.
-   - **Requested Change**: Split MinIO storage client into:
-     - Internal client (`minio:9000`) for server-side S3 operations (`bucketExists`, `makeBucket`, etc.).
-     - Public signer client (`MINIO_PUBLIC_ENDPOINT`, `MINIO_PUBLIC_PORT`, `MINIO_PUBLIC_USE_SSL`) configured for offline URL signing so the returned `uploadUrl` points to `http://127.0.0.1:59002/...`.
+   - `server/routes/materials.ts` splits internal `client` (targeting internal `minio:9000`) and `publicClient` (targeting `MINIO_PUBLIC_ENDPOINT:MINIO_PUBLIC_PORT` e.g. `127.0.0.1:59002` with `MINIO_REGION=us-east-1`).
+   - Browser direct PUT uploads and read URLs now resolve to the browser-accessible host port (`59002`).
+3. **Explicit Local CORS & Private Bucket**:
+   - MinIO CORS is strictly locked to local origins (`http://127.0.0.1:4170,http://localhost:4170`) without wildcards.
+   - Bucket access policy is explicitly set to private (`mc anonymous set none`).
+4. **Automated Seeding Safety Guard**:
+   - `deploy/entrypoint.sh` strictly forbids `AUTO_SEED` in `production`/`staging` and fails with non-zero exit code if local seeding encounters errors.
