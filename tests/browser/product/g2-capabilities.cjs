@@ -277,6 +277,12 @@ const crypto = require("node:crypto");
       .click();
     await sb.getByRole("button", { name: "Dừng chia sẻ nháp" }).waitFor();
 
+    // Teacher selects Student One in members list
+    await t
+      .locator(".online-room__members")
+      .getByRole("button", { name: "Student One" })
+      .click();
+
     // Teacher dock: present student shared board on stage
     const dock = t.locator(".online-room__dock");
     await dock.getByRole("button", { name: "Trình bày bảng đã chia sẻ" }).click();
@@ -382,13 +388,6 @@ const crypto = require("node:crypto");
     await checkGradeForm.getByLabel("Mức hỗ trợ", { exact: false }).selectOption("DocLap");
     await checkGradeForm.getByRole("button", { name: "Chấm bài" }).click();
     await activitySection.getByText("Chính xác (Độc lập)", { exact: false }).waitFor();
-
-    // TTL configure & invite revoke (ROOM 001)
-    await membersSection.getByLabel("Thời hạn liên kết (giờ)").fill("12");
-    await membersSection.getByRole("button", { name: "Tạo liên kết mời" }).first().click();
-    await t.getByText("Liên kết mời một lần:").waitFor();
-    const revokeBtn = membersSection.getByRole("button", { name: "Thu hồi liên kết" }).first();
-    await revokeBtn.click();
 
     // Offline draft queue replay (LIVE 006, Decision D10)
     await a.setOffline(true);
@@ -520,6 +519,13 @@ const crypto = require("node:crypto");
     await gradedEvidence.getByRole("button", { name: "Xem nguồn" }).click();
     await panel.getByRole("button", { name: "Đóng nguồn" }).waitFor();
     await panel.getByRole("button", { name: "Đóng nguồn" }).click();
+
+    // TTL configure & invite revoke (ROOM 001)
+    await membersSection.getByLabel("Thời hạn liên kết (giờ)").fill("12");
+    const studentTwoMember = membersSection.locator("div").filter({ hasText: "Student Two" });
+    await studentTwoMember.getByRole("button", { name: "Tạo liên kết mời" }).click();
+    await t.getByText("Liên kết mời một lần:").waitFor();
+    await studentTwoMember.getByRole("button", { name: "Thu hồi liên kết" }).click();
 
     // End session (LIVE 005)
     await t.getByRole("button", { name: "Kết thúc", exact: true }).click();

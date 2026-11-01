@@ -309,6 +309,7 @@ export function LiveRoom({
   useEffect(() => {
     let active = true;
     const refresh = () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
       void load().catch((e) => {
         if (active) {
           if (grant && (e.status === 401 || e.status === 403)) {
@@ -417,7 +418,23 @@ export function LiveRoom({
   };
   const s = room?.session;
   const members = s?.RoomMember_sessionId_items || [];
-  const patchClassroom = (value: object) => { if (!s) return; void request(`/sessions/${sessionId}/classroom`, { method: "PATCH", headers: { "If-Match-Version": String(s.version) }, body: JSON.stringify(value) }).then(load).catch(e => setError(e.message)); };
+  const patchQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const patchClassroom = (value: object) => {
+    if (!s) return;
+    patchQueue.current = patchQueue.current
+      .catch(() => {})
+      .then(async () => {
+        const fresh = await load();
+        const ver = fresh.session?.version ?? s.version;
+        await request(`/sessions/${sessionId}/classroom`, {
+          method: "PATCH",
+          headers: { "If-Match-Version": String(ver) },
+          body: JSON.stringify(value),
+        });
+        await load();
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  };
   const selected = selectedStudent || members[0]?.studentId || "";
   const activity = s?.Activity_sessionId_items?.find(a => a.id === s.currentActivityId);
   const material = grant
@@ -433,29 +450,17 @@ export function LiveRoom({
           (!s?.currentActivityId || b.id.includes(`:${s.currentActivityId}:`)),
       );
 
-  const chatAllowed =
-    s?.status === "live" &&
-    (grant
-      ? room?.capabilities?.chat !== undefined
-        ? room.capabilities.chat === true
-        : s.tools?.chat !== false
-      : s?.tools?.chat !== false);
+  const chatAllowed = grant
+    ? s?.status === "live" && room?.capabilities?.chat === true
+    : s?.status === "live" && s?.tools?.chat !== false;
 
-  const checkAllowed =
-    s?.status === "live" &&
-    (grant
-      ? room?.capabilities?.check !== undefined
-        ? room.capabilities.check === true
-        : s.tools?.check !== false
-      : s?.tools?.check !== false);
+  const checkAllowed = grant
+    ? s?.status === "live" && room?.capabilities?.check === true
+    : s?.status === "live" && s?.tools?.check !== false;
 
-  const uploadAllowed =
-    s?.status === "live" &&
-    (grant
-      ? room?.capabilities?.upload !== undefined
-        ? room.capabilities.upload === true
-        : s.tools?.upload !== false
-      : s?.tools?.upload !== false);
+  const uploadAllowed = grant
+    ? s?.status === "live" && room?.capabilities?.upload === true
+    : false;
   return (
     <main className={`card online-room${room?.waiting ? " online-lobby" : ""}`}>
       <header className="online-room__header">
