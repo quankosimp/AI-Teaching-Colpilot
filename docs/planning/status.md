@@ -2,6 +2,8 @@
 
 ## Current
 
+- Remediation candidatesG3 fdb17d6 and G4 backend26318dc remain NEEDS_FIXES. Supervisor reproduced incorrect SDK participant/error handling in fdb despite the bounded review PASS. Candidate263 rewrites the already-applied008 migration, confirmed by recovery DB checksum; additive009 and staged upgrade proof were requested. Evidence: evidence/g3-supervisor-review-fdb17d6.md and evidence/g4-supervisor-review-26318dc.md. These candidates are not integrated or deployed.
+
 - G3 candidate6c478ae and G4 backend candidate23e5fd7 are review checkpoints, not accepted completion. Supervisor and independent review found concrete implementation blockers; both writers are remediating on their separate branches. Accepted Docker4170 remains55c05e1. Evidence: evidence/g3-supervisor-review-6c478ae.md and evidence/g4-supervisor-review-23e5fd7.md.
 - Supervisor measured the accepted local Docker baseline with one teacher plus five admitted student sockets:210 ordinary API samples p95=12.81ms,150 student event receipts p95=15.41ms,0 missing receipts after warmup. This is a small board/state fixture, not WAN/provider/large-data or final release performance acceptance. Reproducible runner: tests/perf/local-room.mjs; evidence: evidence/g2-local-load-55c05e1.json.
 

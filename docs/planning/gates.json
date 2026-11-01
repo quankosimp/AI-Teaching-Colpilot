@@ -42,15 +42,15 @@
     },
     "G3-local": {
       "state": "in_review",
-      "candidate": "6c478ae7194758353ffca0f27eae1fc60b70bb61",
+      "candidate": "fdb17d605034b6867645dca541d929942a95d0a8",
       "verdict": "NEEDS_FIXES",
-      "evidence": "evidence/g3-supervisor-review-6c478ae.md"
+      "evidence": "evidence/g3-supervisor-review-fdb17d6.md"
     },
     "G4-local": {
       "state": "in_review",
-      "candidate": "23e5fd720ad5fa4cf2ad64574f62c7d2c40a3533",
+      "candidate": "26318dcce1f9121a4534ed4778a7923c2092bf81",
       "verdict": "NEEDS_FIXES",
-      "evidence": "evidence/g4-supervisor-review-23e5fd7.md"
+      "evidence": "evidence/g4-supervisor-review-26318dc.md"
     }
   }
 }
