@@ -1,6 +1,6 @@
 const { chromium } = require("playwright-core");
 (async () => {
-  const origin = "http://127.0.0.1:3002";
+  const origin = new URL(process.env.BROWSER_BASE_URL || "http://127.0.0.1:3002").origin;
   const post = async (path, token, body, method = "POST", extra = {}) => {
     const r = await fetch(origin + "/api/v1" + path, {
       method,

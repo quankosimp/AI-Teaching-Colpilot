@@ -1,8 +1,12 @@
 const { chromium } = require("playwright-core");
 const crypto = require("node:crypto");
+const fs = require("node:fs/promises");
+const path = require("node:path");
 
 (async () => {
-  const origin = "http://127.0.0.1:3141";
+  const origin = new URL(process.env.BROWSER_BASE_URL || "http://127.0.0.1:3141").origin;
+  const artifacts = process.env.BROWSER_ARTIFACT_DIR || "/tmp/copilot-browser-test";
+  await fs.mkdir(artifacts, { recursive: true });
   const post = async (path, token, body, method = "POST", extra = {}) => {
     const r = await fetch(origin + "/api/v1" + path, {
       method,
@@ -257,7 +261,7 @@ const crypto = require("node:crypto");
 
     await t.setViewportSize({ width: 1440, height: 900 });
     await t.screenshot({
-      path: "/tmp/copilot-browser-test/teacher-wiring-1440.png",
+      path: path.join(artifacts, "teacher-wiring-1440.png"),
       fullPage: true,
     });
     await t.setViewportSize({ width: 1200, height: 800 });

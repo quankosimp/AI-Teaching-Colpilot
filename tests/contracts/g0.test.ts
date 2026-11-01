@@ -54,6 +54,7 @@ const validActivity = {
 const validRoom: StudentRoomViewModel = {
   session: validSession,
   activities: [validActivity],
+  annotations: [],
   currentMaterial: {
     id: "mat-1",
     title: "Phiếu học tập",
