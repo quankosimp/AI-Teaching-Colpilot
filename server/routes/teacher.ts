@@ -1,9 +1,11 @@
+import { lockSession } from "../sessionLock.js";
 import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import {
   ActivityInput,
   AnnotationInput,
+  ClassroomStatePatch,
   SessionCreate,
   StudentInput,
 } from "../../contracts/api.js";
@@ -17,7 +19,9 @@ import {
   type TeacherActor,
 } from "../context.js";
 import { createOnce } from "../idempotency.js";
-import { ClaimRef } from "../../contracts/domain.js";
+import { filterEligibleApprovedClaims } from "../eligibleClaims.js";
+import { appendOutboxEvent, triggerOutboxPublish } from "../realtime.js";
+import { ClaimRef, Tools } from "../../contracts/domain.js";
 import type { Request, Response } from "express";
 
 async function ownedStudent(id: string, actor: TeacherActor, res: Response) {
@@ -109,8 +113,8 @@ async function markStale(sessions: SessionDetails[], teacherId: string) {
   }));
 }
 const studentCreate = StudentInput.extend({
-  initials: z.string().min(1).max(6),
-  color: z.string().max(40),
+  initials: z.string().min(1).max(6).optional(),
+  color: z.string().max(40).optional(),
 });
 export function teacherRouter(config: AppConfig) {
   const r = Router();
@@ -141,6 +145,16 @@ export function teacherRouter(config: AppConfig) {
         const student = await tx.student.create({
           data: {
             ...parsed.data,
+            initials:
+              parsed.data.initials ||
+              parsed.data.name
+                .trim()
+                .split(/\s+/)
+                .slice(-2)
+                .map((part) => part[0])
+                .join("")
+                .toUpperCase(),
+            color: parsed.data.color || "violet",
             teacherId: res.locals.actor.id,
             archivedAt: parsed.data.status === "archived" ? new Date() : null,
           },
@@ -230,24 +244,51 @@ export function teacherRouter(config: AppConfig) {
         return fail(res, 400, "VALIDATION_ERROR", "ID không hợp lệ");
       const student = await ownedStudent(req.params.id, res.locals.actor, res);
       if (!student) return;
+      const claims = await db.claim.findMany({
+        where: {
+          studentId: student.id,
+          sessionIdRef: { teacherId: res.locals.actor.id },
+          status: "approved",
+        },
+        select: {
+          id: true,
+          sessionId: true,
+          studentId: true,
+          text: true,
+          evidenceIds: true,
+          revision: true,
+          reviewedAt: true,
+          status: true,
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+      const eligible = await filterEligibleApprovedClaims(
+        claims,
+        res.locals.actor.id,
+      );
+      const observations = await db.evidence.findMany({
+        where: {
+          id: { in: eligible.flatMap((claim) => claim.evidenceIds) },
+          status: "active",
+          isObservation: true,
+          kind: { not: "GoiYGiangDay" },
+          sourceType: { not: "ai_suggestion" },
+          sessionIdRef: { teacherId: res.locals.actor.id },
+        },
+        select: { id: true, sessionId: true, studentId: true },
+      });
       return res.json({
-        claims: await db.claim.findMany({
-          where: {
-            studentId: student.id,
-            sessionIdRef: { teacherId: res.locals.actor.id },
-            status: "approved",
-          },
-          select: {
-            id: true,
-            sessionId: true,
-            studentId: true,
-            text: true,
-            evidenceIds: true,
-            revision: true,
-            reviewedAt: true,
-          },
-          orderBy: { updatedAt: "desc" },
-        }),
+        claims: eligible.map((claim) => ({
+          ...claim,
+          observationEvidenceIds: claim.evidenceIds.filter((id) =>
+            observations.some(
+              (item) =>
+                item.id === id &&
+                item.sessionId === claim.sessionId &&
+                item.studentId === claim.studentId,
+            ),
+          ),
+        })),
       });
     }),
   );
@@ -415,18 +456,26 @@ export function teacherRouter(config: AppConfig) {
         return fail(res, 400, "VALIDATION_ERROR", "ID không hợp lệ");
       const session = await ownedSession(req.params.id, res.locals.actor, res);
       if (!session) return;
-      if (!["draft", "scheduled"].includes(session.status))
+      if (!["draft", "scheduled", "live"].includes(session.status))
         return fail(
           res,
           409,
           "SESSION_STATE_INVALID",
           "Không thể sửa buổi này",
         );
-      const patch = SessionCreate.omit({ studentIds: true })
+      const patchSchema = SessionCreate.omit({ studentIds: true })
         .partial()
-        .extend({ status: z.enum(["draft", "scheduled"]).optional() })
-        .strict()
-        .safeParse(req.body);
+        .extend({
+          status: z.enum(["draft", "scheduled"]).optional(),
+          currentActivityId: z.string().uuid().nullable().optional(),
+          completedActivityIds: z.array(z.string().uuid()).optional(),
+          sharedView: z.enum(["document", "board", "check"]).optional(),
+          sharedBoardOwnerId: z.string().min(1).max(256).optional(),
+          materialPage: z.number().int().nonnegative().optional(),
+          tools: Tools.partial().optional(),
+        })
+        .strict();
+      const patch = patchSchema.safeParse(req.body);
       const expected = version(req);
       if (!patch.success || !expected)
         return fail(
@@ -435,17 +484,101 @@ export function teacherRouter(config: AppConfig) {
           "VALIDATION_ERROR",
           "Dữ liệu hoặc phiên bản không hợp lệ",
         );
+      const planOnlyKeys = [
+        "title",
+        "goal",
+        "sharedGoal",
+        "date",
+        "time",
+        "duration",
+        "status",
+      ] as const;
+      if (
+        session.status === "live" &&
+        planOnlyKeys.some((k) => patch.data[k] !== undefined)
+      )
+        return fail(
+          res,
+          409,
+          "SESSION_STATE_INVALID",
+          "Không thể sửa thông tin kế hoạch khi buổi học đang diễn ra",
+        );
+      if (
+        patch.data.currentActivityId !== undefined ||
+        patch.data.completedActivityIds !== undefined
+      ) {
+        const acts = await db.activity.findMany({
+          where: { sessionId: session.id },
+          select: { id: true },
+        });
+        const validIds = new Set(acts.map((a) => a.id));
+        if (
+          (patch.data.currentActivityId &&
+            !validIds.has(patch.data.currentActivityId)) ||
+          (patch.data.completedActivityIds &&
+            patch.data.completedActivityIds.some((id) => !validIds.has(id)))
+        )
+          return fail(
+            res,
+            400,
+            "VALIDATION_ERROR",
+            "Hoạt động không thuộc buổi học",
+          );
+      }
+      let nextSharedOwner = patch.data.sharedBoardOwnerId;
+      if (nextSharedOwner && nextSharedOwner !== "common") {
+        const activeActId =
+          patch.data.currentActivityId !== undefined
+            ? patch.data.currentActivityId
+            : session.currentActivityId;
+        const member = await db.roomMember.findUnique({
+          where: {
+            sessionId_studentId: {
+              sessionId: session.id,
+              studentId: nextSharedOwner,
+            },
+          },
+        });
+        const board = activeActId
+          ? await db.board.findUnique({
+              where: {
+                id: `${session.id}:${activeActId}:${nextSharedOwner}`,
+              },
+            })
+          : null;
+        if (!member || member.state !== "joined" || !board?.shared) {
+          nextSharedOwner = "common";
+        }
+      }
+      const existingTools = Tools.safeParse(session.tools).success
+        ? Tools.parse(session.tools)
+        : { board: true, upload: true, check: true, chat: true };
+      const mergedTools = patch.data.tools
+        ? { ...existingTools, ...patch.data.tools }
+        : undefined;
+      const {
+        tools: _tools,
+        sharedBoardOwnerId: _sbo,
+        ...restPatch
+      } = patch.data;
       const changed = await db.$transaction(async (tx) => {
         const result = await tx.session.updateMany({
           where: {
             id: session.id,
             teacherId: res.locals.actor.id,
             version: expected,
-            status: { in: ["draft", "scheduled"] },
+            status: { in: ["draft", "scheduled", "live"] },
           },
-          data: { ...patch.data, version: { increment: 1 } },
+          data: {
+            ...restPatch,
+            ...(nextSharedOwner !== undefined
+              ? { sharedBoardOwnerId: nextSharedOwner }
+              : {}),
+            ...(mergedTools ? { tools: mergedTools } : {}),
+            version: { increment: 1 },
+          },
         });
-        if (result.count)
+        if (result.count) {
           await tx.auditLog.create({
             data: {
               workspaceId: res.locals.actor.workspaceId,
@@ -459,10 +592,37 @@ export function teacherRouter(config: AppConfig) {
               metadata: {},
             },
           });
+          if (
+            ClassroomStatePatch.safeParse({
+              currentActivityId: patch.data.currentActivityId,
+              completedActivityIds: patch.data.completedActivityIds,
+              sharedView: patch.data.sharedView,
+              sharedBoardOwnerId: nextSharedOwner,
+              materialPage: patch.data.materialPage,
+              tools: patch.data.tools,
+            }).success
+          ) {
+            await appendOutboxEvent(tx, {
+              sessionId: session.id,
+              type: "activity.changed",
+              label: "Cập nhật trạng thái lớp học",
+              actorId: res.locals.actor.id,
+              visibility: { scope: "public" },
+              activityId:
+                patch.data.currentActivityId !== undefined
+                  ? patch.data.currentActivityId
+                  : session.currentActivityId,
+              page: patch.data.materialPage ?? session.materialPage,
+              resourceId: session.id,
+              version: expected + 1,
+            });
+          }
+        }
         return result;
       });
       if (!changed.count)
         return fail(res, 409, "VERSION_CONFLICT", "Buổi học đã thay đổi");
+      triggerOutboxPublish(session.id);
       return res.json({
         session: await db.session.findUniqueOrThrow({
           where: { id: session.id },
@@ -615,6 +775,7 @@ export function teacherRouter(config: AppConfig) {
         res,
         `/sessions/${session.id}/annotations`,
         async (tx) => {
+          await lockSession(tx, session.id);
           const annotation = await tx.annotation.create({
             data: {
               sessionId: session.id,
@@ -628,8 +789,8 @@ export function teacherRouter(config: AppConfig) {
               authorId: res.locals.actor.id,
             },
           });
-          if (input.studentId)
-            await tx.evidence.create({
+          if (input.studentId) {
+            const ev = await tx.evidence.create({
               data: {
                 sessionId: session.id,
                 activityId: input.activityId,
@@ -645,6 +806,31 @@ export function teacherRouter(config: AppConfig) {
                 createdBy: res.locals.actor.id,
               },
             });
+            await appendOutboxEvent(tx, {
+              sessionId: session.id,
+              type: "evidence.created",
+              label: "Thêm minh chứng chú thích đề",
+              actorId: res.locals.actor.id,
+              visibility: { scope: "teacher" },
+              activityId: input.activityId,
+              sourceId: ev.id,
+              resourceId: ev.id,
+              version: 1,
+            });
+          }
+          await appendOutboxEvent(tx, {
+            sessionId: session.id,
+            type: "annotation.created",
+            label: "Thêm chú thích tài liệu",
+            actorId: res.locals.actor.id,
+            visibility: { scope: "public" },
+            activityId: input.activityId,
+            materialId: input.materialId,
+            page: input.page,
+            sourceId: annotation.id,
+            resourceId: annotation.id,
+            version: 1,
+          });
           await tx.auditLog.create({
             data: {
               workspaceId: res.locals.actor.workspaceId,
@@ -661,6 +847,7 @@ export function teacherRouter(config: AppConfig) {
         },
       );
       if (!result) return;
+      triggerOutboxPublish(session.id);
       return res.status(201).json({
         annotation: await db.annotation.findUniqueOrThrow({
           where: { id: result.resourceId },
@@ -725,8 +912,16 @@ export function teacherRouter(config: AppConfig) {
           select: { studentId: true },
         }),
       ]);
-      if (
-        parsed.data.some((item) =>
+      const eligible = await filterEligibleApprovedClaims(
+        claims,
+        res.locals.actor.id,
+      );
+      const isObservation = (source: (typeof sources)[number]) =>
+        source.isObservation &&
+        source.kind !== "GoiYGiangDay" &&
+        source.sourceType !== "ai_suggestion";
+      const invalid = parsed.data.some((item) => {
+        if (
           item.materialId
             ? !materials.some(
                 (m) =>
@@ -735,38 +930,54 @@ export function teacherRouter(config: AppConfig) {
                     (v) => v.version === item.materialVersion,
                   ),
               )
-            : item.materialVersion != null,
-        ) ||
-        sourceIds.some(
-          (id) =>
-            !sources.some(
-              (source) =>
-                source.id === id &&
-                members.some(
-                  (member) => member.studentId === source.studentId,
-                ) &&
-                claims.some(
-                  (claim) =>
-                    claim.studentId === source.studentId &&
-                    claim.evidenceIds.includes(id) &&
-                    claimRefs.some(
-                      (ref) =>
-                        ref.claimId === claim.id &&
-                        ref.revision === claim.revision,
-                    ),
-                ),
-            ),
-        ) ||
-        claimRefs.some(
-          (ref) =>
-            !claims.some(
-              (c) =>
-                c.id === ref.claimId &&
-                c.revision === ref.revision &&
-                members.some((m) => m.studentId === c.studentId),
-            ),
+            : item.materialVersion != null
         )
-      )
+          return true;
+        if (
+          (item.sourceEvidenceIds.length === 0) !==
+          (item.sourceClaimRefs.length === 0)
+        )
+          return true;
+        return (
+          item.sourceEvidenceIds.some(
+            (id) =>
+              !sources.some(
+                (source) =>
+                  source.id === id &&
+                  isObservation(source) &&
+                  members.some(
+                    (member) => member.studentId === source.studentId,
+                  ) &&
+                  eligible.some(
+                    (claim) =>
+                      claim.studentId === source.studentId &&
+                      claim.sessionId === source.sessionId &&
+                      claim.evidenceIds.includes(id) &&
+                      item.sourceClaimRefs.some(
+                        (ref) =>
+                          ref.claimId === claim.id &&
+                          ref.revision === claim.revision,
+                      ),
+                  ),
+              ),
+          ) ||
+          item.sourceClaimRefs.some(
+            (ref) =>
+              !eligible.some(
+                (claim) =>
+                  claim.id === ref.claimId &&
+                  claim.revision === ref.revision &&
+                  members.some(
+                    (member) => member.studentId === claim.studentId,
+                  ) &&
+                  item.sourceEvidenceIds.some((id) =>
+                    claim.evidenceIds.includes(id),
+                  ),
+              ),
+          )
+        );
+      });
+      if (invalid)
         return fail(res, 403, "PERMISSION_DENIED", "Nguồn không khả dụng");
       try {
         const result = await db.$transaction(async (tx) => {
