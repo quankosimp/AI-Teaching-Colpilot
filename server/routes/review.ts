@@ -1,3 +1,4 @@
+import { lockSession, SessionConflict } from "../sessionLock.js";
 import { Router, type Request, type Response } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -57,38 +58,39 @@ async function resolveCurrentSourceVersion(
   sourceType: string,
   sourceId: string | null,
   sessionId: string,
+  client: Prisma.TransactionClient = db,
 ): Promise<number> {
   if (!sourceId || !safeId.safeParse(sourceId).success) return 1;
   if (sourceType === "submission") {
-    const sub = await db.submission.findFirst({
+    const sub = await client.submission.findFirst({
       where: { id: sourceId, sessionId },
       select: { version: true },
     });
     return sub?.version ?? 0;
   }
   if (sourceType === "board_attempt") {
-    const att = await db.boardAttempt.findFirst({
+    const att = await client.boardAttempt.findFirst({
       where: { id: sourceId, sessionId },
       select: { id: true },
     });
     return att ? 1 : 0;
   }
   if (sourceType === "check_response") {
-    const resp = await db.checkResponse.findFirst({
+    const resp = await client.checkResponse.findFirst({
       where: { id: sourceId, sessionId },
       select: { id: true },
     });
     return resp ? 1 : 0;
   }
   if (sourceType === "annotation") {
-    const ann = await db.annotation.findFirst({
+    const ann = await client.annotation.findFirst({
       where: { id: sourceId, sessionId },
       select: { id: true },
     });
     return ann ? 1 : 0;
   }
   if (sourceType === "ai_suggestion") {
-    const ai = await db.aIRequest.findFirst({
+    const ai = await client.aIRequest.findFirst({
       where: { id: sourceId, sessionId },
       select: { id: true },
     });
@@ -396,6 +398,7 @@ export function reviewRouter(config: AppConfig) {
         nextStatus === "deleted" ? "source_deleted" : "source_corrected";
 
       const result = await db.$transaction(async (tx) => {
+        await lockSession(tx, evidence.sessionId);
         const changed = await tx.evidence.updateMany({
           where: { id: evidence.id, version: expected },
           data: {
@@ -647,6 +650,21 @@ export function reviewRouter(config: AppConfig) {
 
       const { updatedSubmission, invalidatedClaimIds } = await db.$transaction(
         async (tx) => {
+          for (const sessionId of [
+            ...new Set([submission.sessionId, parsed.data.sessionId]),
+          ].sort())
+            await lockSession(tx, sessionId);
+          const freshSubmission = await tx.submission.findUniqueOrThrow({
+            where: { id: submission.id },
+          });
+          if (
+            freshSubmission.version !== submission.version ||
+            freshSubmission.sessionId !== submission.sessionId
+          )
+            throw new SessionConflict(
+              "VERSION_CONFLICT",
+              "Bài nộp đã thay đổi",
+            );
           const updated = await tx.submission.update({
             where: { id: submission.id },
             data: {
@@ -872,6 +890,60 @@ export function reviewRouter(config: AppConfig) {
           res,
           `/sessions/${session.id}/claims/draft`,
           async (tx) => {
+            const current = await lockSession(tx, session.id);
+            const currentEvidence = await tx.evidence.findMany({
+              where: {
+                id: { in: uniqueIds },
+                sessionId: session.id,
+                studentId: targetStudentId,
+                status: "active",
+              },
+            });
+            if (
+              currentEvidence.length !== uniqueIds.length ||
+              !currentEvidence.some(
+                (e) =>
+                  e.isObservation &&
+                  e.kind !== "GoiYGiangDay" &&
+                  e.sourceType !== "ai_suggestion",
+              )
+            )
+              throw new SessionConflict(
+                "VALIDATION_ERROR",
+                "Minh chứng không còn hợp lệ",
+              );
+            if (current.status === "reviewed") {
+              const reopened = await tx.session.update({
+                where: { id: session.id },
+                data: { status: "ended", version: { increment: 1 } },
+              });
+              await appendOutboxEvent(tx, {
+                sessionId: session.id,
+                type: "review.reopened",
+                label: "Mở lại duyệt do thêm nhận định",
+                actorId: res.locals.actor.id,
+                visibility: { scope: "teacher" },
+                resourceId: session.id,
+                version: reopened.version,
+              });
+              await tx.auditLog.create({
+                data: {
+                  workspaceId: res.locals.actor.workspaceId,
+                  actorId: res.locals.actor.id,
+                  actorRole: "teacher",
+                  action: "review.reopened",
+                  targetType: "session",
+                  targetId: session.id,
+                  sessionId: session.id,
+                  requestId: res.locals.requestId,
+                  metadata: {
+                    previousStatus: "reviewed",
+                    nextStatus: "ended",
+                    reasonCode: "claim_created",
+                  },
+                },
+              });
+            }
             const created = await tx.claim.create({
               data: {
                 sessionId: session.id,
@@ -933,6 +1005,54 @@ export function reviewRouter(config: AppConfig) {
         res,
         `/sessions/${session.id}/claims/draft`,
         async (tx) => {
+          const current = await lockSession(tx, session.id);
+          const liveObservations = await tx.evidence.findMany({
+            where: {
+              id: { in: observations.map((e) => e.id) },
+              sessionId: session.id,
+              status: "active",
+              isObservation: true,
+              kind: { not: "GoiYGiangDay" },
+              sourceType: { not: "ai_suggestion" },
+            },
+          });
+          if (liveObservations.length !== observations.length)
+            throw new SessionConflict(
+              "VERSION_CONFLICT",
+              "Minh chứng đã thay đổi",
+            );
+          if (current.status === "reviewed") {
+            const reopened = await tx.session.update({
+              where: { id: session.id },
+              data: { status: "ended", version: { increment: 1 } },
+            });
+            await appendOutboxEvent(tx, {
+              sessionId: session.id,
+              type: "review.reopened",
+              label: "Mở lại duyệt do thêm nhận định",
+              actorId: res.locals.actor.id,
+              visibility: { scope: "teacher" },
+              resourceId: session.id,
+              version: reopened.version,
+            });
+            await tx.auditLog.create({
+              data: {
+                workspaceId: res.locals.actor.workspaceId,
+                actorId: res.locals.actor.id,
+                actorRole: "teacher",
+                action: "review.reopened",
+                targetType: "session",
+                targetId: session.id,
+                sessionId: session.id,
+                requestId: res.locals.requestId,
+                metadata: {
+                  previousStatus: "reviewed",
+                  nextStatus: "ended",
+                  reasonCode: "claim_created",
+                },
+              },
+            });
+          }
           const byStudent = new Map<string, typeof observations>();
           for (const ob of observations) {
             const list = byStudent.get(ob.studentId) ?? [];
@@ -1039,78 +1159,80 @@ export function reviewRouter(config: AppConfig) {
         );
 
       const cmd = parsed.data;
-      if (cmd.action === "approve" || cmd.action === "edit") {
-        if (cmd.evidenceIds.some((id) => !safeId.safeParse(id).success))
-          return fail(
-            res,
-            400,
-            "VALIDATION_ERROR",
-            "ID minh chứng không hợp lệ",
-          );
-        const evidenceRows = await db.evidence.findMany({
-          where: { id: { in: cmd.evidenceIds } },
-          include: { sessionIdRef: { select: { teacherId: true } } },
-        });
-        const evidenceForApproval: EvidenceForApproval[] = [];
-        for (const row of evidenceRows) {
-          const sourceTypeParsed = z
-            .enum([
-              "note",
-              "submission",
-              "board_attempt",
-              "check_response",
-              "annotation",
-              "ai_suggestion",
-            ])
-            .safeParse(row.sourceType);
-          if (!sourceTypeParsed.success) continue;
-          const sourceId = row.sourceId ?? row.submissionId ?? row.id;
-          const currentSourceVersion =
-            sourceTypeParsed.data === "note"
-              ? row.sourceVersion
-              : await resolveCurrentSourceVersion(
-                  sourceTypeParsed.data,
-                  sourceId,
-                  row.sessionId,
-                );
-          const itemParsed = EvidenceForApproval.safeParse({
-            id: row.id,
-            teacherId: row.sessionIdRef.teacherId,
-            studentId: row.studentId,
-            sessionId: row.sessionId,
-            kind: row.kind,
-            status: row.status,
-            isObservation: row.isObservation,
-            version: row.version,
-            currentEvidenceVersion: row.version,
-            source: {
-              type: sourceTypeParsed.data,
-              id: sourceId,
-              version: row.sourceVersion,
-            },
-            currentSourceVersion,
-          });
-          if (itemParsed.success) {
-            evidenceForApproval.push(itemParsed.data);
-          }
-        }
-        const approvalCheck = ApprovalContext.safeParse({
-          teacherId: res.locals.actor.id,
-          studentId: claim.studentId,
-          sessionId: claim.sessionId,
-          evidenceIds: cmd.evidenceIds,
-          evidence: evidenceForApproval,
-        });
-        if (!approvalCheck.success)
-          return fail(
-            res,
-            400,
-            "VALIDATION_ERROR",
-            "Không thể duyệt nhận định: cần ít nhất 1 minh chứng quan sát đang hoạt động của đúng học sinh trong buổi học",
-          );
-      }
-
       const updatedClaim = await db.$transaction(async (tx) => {
+        const currentSession = await lockSession(tx, claim.sessionId);
+        const currentClaim = await tx.claim.findUniqueOrThrow({
+          where: { id: claim.id },
+        });
+        if (currentClaim.revision !== cmd.revision) return null;
+        if (cmd.action === "approve" || cmd.action === "edit") {
+          if (cmd.evidenceIds.some((id) => !safeId.safeParse(id).success))
+            throw new SessionConflict(
+              "VALIDATION_ERROR",
+              "ID minh chứng không hợp lệ",
+            );
+          const evidenceRows = await tx.evidence.findMany({
+            where: { id: { in: cmd.evidenceIds } },
+            include: { sessionIdRef: { select: { teacherId: true } } },
+          });
+          const evidenceForApproval: EvidenceForApproval[] = [];
+          for (const row of evidenceRows) {
+            const sourceTypeParsed = z
+              .enum([
+                "note",
+                "submission",
+                "board_attempt",
+                "check_response",
+                "annotation",
+                "ai_suggestion",
+              ])
+              .safeParse(row.sourceType);
+            if (!sourceTypeParsed.success) continue;
+            const sourceId = row.sourceId ?? row.submissionId ?? row.id;
+            const currentSourceVersion =
+              sourceTypeParsed.data === "note"
+                ? row.sourceVersion
+                : await resolveCurrentSourceVersion(
+                    sourceTypeParsed.data,
+                    sourceId,
+                    row.sessionId,
+                    tx,
+                  );
+            const itemParsed = EvidenceForApproval.safeParse({
+              id: row.id,
+              teacherId: row.sessionIdRef.teacherId,
+              studentId: row.studentId,
+              sessionId: row.sessionId,
+              kind: row.kind,
+              status: row.status,
+              isObservation: row.isObservation,
+              version: row.version,
+              currentEvidenceVersion: row.version,
+              source: {
+                type: sourceTypeParsed.data,
+                id: sourceId,
+                version: row.sourceVersion,
+              },
+              currentSourceVersion,
+            });
+            if (itemParsed.success) {
+              evidenceForApproval.push(itemParsed.data);
+            }
+          }
+          const approvalCheck = ApprovalContext.safeParse({
+            teacherId: res.locals.actor.id,
+            studentId: claim.studentId,
+            sessionId: claim.sessionId,
+            evidenceIds: cmd.evidenceIds,
+            evidence: evidenceForApproval,
+          });
+          if (!approvalCheck.success)
+            throw new SessionConflict(
+              "VALIDATION_ERROR",
+              "Minh chứng không còn hợp lệ",
+            );
+        }
+
         const nextStatus =
           cmd.action === "approve"
             ? "approved"
@@ -1155,9 +1277,9 @@ export function reviewRouter(config: AppConfig) {
           },
         });
 
-        if (cmd.action === "edit" && claim.sessionIdRef.status === "reviewed") {
+        if (cmd.action === "edit" && currentSession.status === "reviewed") {
           const reopened = nextSessionStatus(
-            claim.sessionIdRef.status,
+            currentSession.status,
             "review_reopened",
           );
           if (reopened === "ended") {
@@ -1242,40 +1364,36 @@ export function reviewRouter(config: AppConfig) {
           "VALIDATION_ERROR",
           "Dữ liệu hoàn tất duyệt không hợp lệ",
         );
-      if (session.status !== "ended")
-        return fail(
-          res,
-          409,
-          "SESSION_STATE_INVALID",
-          "Chỉ có thể hoàn tất duyệt khi buổi học đã kết thúc (ended)",
-        );
-
-      const [totalClaims, pendingClaims] = await Promise.all([
-        db.claim.count({ where: { sessionId: session.id } }),
-        db.claim.count({
-          where: { sessionId: session.id, status: "pending" },
-        }),
-      ]);
-      const effectiveNote =
-        parsed.data.reviewNote ?? session.reviewNote ?? undefined;
-      const check = ReviewCompletionContext.safeParse({
-        status: session.status,
-        pendingClaims,
-        totalClaims,
-        ...(effectiveNote ? { reviewNote: effectiveNote } : {}),
-      });
-      if (!check.success)
-        return fail(
-          res,
-          400,
-          "VALIDATION_ERROR",
-          pendingClaims > 0
-            ? "Cần duyệt hoặc từ chối hết các nhận định đang chờ trước khi hoàn tất"
-            : "Buổi học chưa có nhận định nào cần có ghi chú tổng kết (reviewNote)",
-        );
-
       const updated = await db.$transaction(async (tx) => {
-        const next = nextSessionStatus(session.status, "complete_review");
+        const current = await lockSession(tx, session.id);
+        if (current.status !== "ended")
+          throw new SessionConflict(
+            "SESSION_STATE_INVALID",
+            "Chỉ có thể duyệt buổi học đã kết thúc",
+          );
+        const [totalClaims, pendingClaims] = await Promise.all([
+          tx.claim.count({ where: { sessionId: session.id } }),
+          tx.claim.count({
+            where: { sessionId: session.id, status: "pending" },
+          }),
+        ]);
+        const effectiveNote =
+          parsed.data.reviewNote ?? current.reviewNote ?? undefined;
+        if (
+          !ReviewCompletionContext.safeParse({
+            status: current.status,
+            totalClaims,
+            pendingClaims,
+            ...(effectiveNote ? { reviewNote: effectiveNote } : {}),
+          }).success
+        )
+          throw new SessionConflict(
+            "VALIDATION_ERROR",
+            pendingClaims
+              ? "Cần duyệt hoặc từ chối hết nhận định đang chờ"
+              : "Cần ghi chú khi không có nhận định",
+          );
+        const next = nextSessionStatus(current.status, "complete_review");
         if (next !== "reviewed") throw new Error("INVALID_STATE");
         const row = await tx.session.update({
           where: { id: session.id },

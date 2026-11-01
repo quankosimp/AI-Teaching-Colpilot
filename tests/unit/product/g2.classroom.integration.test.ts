@@ -169,13 +169,45 @@ test(
         ).status,
         200,
       );
+      const starts = await Promise.all([
+        call(`/sessions/${id}/start`, a, "POST", {}),
+        call(`/sessions/${id}/start`, a, "POST", {}),
+      ]);
+      assert.deepEqual(
+        starts.map((r) => r.status),
+        [200, 200],
+      );
       assert.equal(
-        (await call(`/sessions/${id}/start`, a, "POST", {})).status,
-        200,
+        await db.sessionEventOutbox.count({
+          where: { sessionId: id, kind: "session.started" },
+        }),
+        1,
       );
       const room = await (await call("/room/state", g1.accessToken)).json();
       assert.equal(room.session.sharedGoal, "public");
       assert.equal(room.session.goal, undefined);
+      const orderedRace = async (
+        first: () => Promise<Response>,
+        second: () => Promise<Response>,
+      ) => {
+        let unlock!: () => void;
+        let signal!: () => void;
+        const ready = new Promise<void>((r) => (signal = r));
+        const gate = new Promise<void>((r) => (unlock = r));
+        const holder = db.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "Session" WHERE id = ${id}::uuid FOR UPDATE`;
+          signal();
+          await gate;
+        });
+        await ready;
+        const one = first();
+        await new Promise((r) => setTimeout(r, 100));
+        const two = second();
+        await new Promise((r) => setTimeout(r, 100));
+        unlock();
+        await holder;
+        return Promise.all([one, two]);
+      };
       const stroke = {
         id: crypto.randomUUID(),
         authorId: g1.studentId,
@@ -207,22 +239,18 @@ test(
         ).status,
         403,
       );
-      assert.equal(
-        (
-          await call(`/sessions/${id}/members/${g1.memberId}`, a, "PATCH", {
+      const [disabled, lateBoard] = await orderedRace(
+        () =>
+          call(`/sessions/${id}/members/${g1.memberId}`, a, "PATCH", {
             canWrite: false,
-          })
-        ).status,
-        200,
-      );
-      assert.equal(
-        (
-          await call(`/sessions/${id}/boards/own`, g1.accessToken, "PUT", {
+          }),
+        () =>
+          call(`/sessions/${id}/boards/own`, g1.accessToken, "PUT", {
             operation: "clearOwnStrokes",
-          })
-        ).status,
-        403,
+          }),
       );
+      assert.equal(disabled.status, 200);
+      assert.equal(lateBoard.status, 403);
       assert.equal(
         (
           await call(`/sessions/${id}/messages`, g1.accessToken, "POST", {
@@ -311,6 +339,34 @@ test(
           resolve();
         });
       });
+      const sessionState = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      const activityId = sessionState.session.currentActivityId;
+      const checkResult = await call(`/sessions/${id}/checks`, a, "POST", {
+        activityId,
+        question: "Race check",
+      });
+      assert.equal(checkResult.status, 201);
+      const check = (await checkResult.json()).check;
+      const [reply1, reply2] = await Promise.all([
+        call(`/checks/${check.id}/responses`, g2.accessToken, "POST", {
+          answer: "one",
+        }),
+        call(`/checks/${check.id}/responses`, g2.accessToken, "POST", {
+          answer: "two",
+        }),
+      ]);
+      assert.deepEqual([reply1.status, reply2.status].sort(), [201, 409]);
+      const [closed, lateAnswer] = await orderedRace(
+        () => call(`/checks/${check.id}`, a, "PATCH", { status: "closed" }),
+        () =>
+          call(`/checks/${check.id}/responses`, g1.accessToken, "POST", {
+            answer: "late",
+          }),
+      );
+      assert.equal(closed.status, 200);
+      assert.equal(lateAnswer.status, 409);
       const bytes = Buffer.from("%PDF-1.4\nprivate submission\n%%EOF\n");
       const intentResponse = await call(
         `/sessions/${id}/submissions/upload-intent`,
@@ -392,17 +448,21 @@ test(
       const disconnected = new Promise<void>((resolve) =>
         studentSocket.once("disconnect", () => resolve()),
       );
-      assert.equal(
-        (
-          await call(
+      const [revoked, lateMessage] = await orderedRace(
+        () =>
+          call(
             `/sessions/${id}/invites/${activeInvite.id}/revoke`,
             a,
             "POST",
             {},
-          )
-        ).status,
-        200,
+          ),
+        () =>
+          call(`/sessions/${id}/messages`, g1.accessToken, "POST", {
+            text: "too late",
+          }),
       );
+      assert.equal(revoked.status, 200);
+      assert.equal(lateMessage.status, 403);
       await Promise.race([
         disconnected,
         new Promise((_, reject) =>
@@ -422,9 +482,40 @@ test(
         401,
       );
       assert.ok(rotated);
+      let release!: () => void;
+      let locked!: () => void;
+      const lockedSignal = new Promise<void>((resolve) => {
+        locked = resolve;
+      });
+      const releaseSignal = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const blocker = db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Session" WHERE id = ${id}::uuid FOR UPDATE`;
+        locked();
+        await releaseSignal;
+      });
+      await lockedSignal;
+      const end1 = call(`/sessions/${id}/end`, a, "POST", {});
+      const end2 = call(`/sessions/${id}/end`, a, "POST", {});
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const late = call(`/sessions/${id}/boards/own`, g2.accessToken, "PUT", {
+        operation: "clearOwnStrokes",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      release();
+      await blocker;
+      const ends = await Promise.all([end1, end2]);
+      assert.deepEqual(
+        ends.map((r) => r.status),
+        [200, 200],
+      );
+      assert.equal((await late).status, 409);
       assert.equal(
-        (await call(`/sessions/${id}/end`, a, "POST", {})).status,
-        200,
+        await db.sessionEventOutbox.count({
+          where: { sessionId: id, kind: "session.ended" },
+        }),
+        1,
       );
       assert.equal(
         (
@@ -515,6 +606,66 @@ test(
         afterReview.claims.find((c: { id: string }) => c.id === claim.id)
           .status,
         "pending",
+      );
+      const pending = afterReview.claims.find(
+        (c: { id: string }) => c.id === claim.id,
+      );
+      const [approval, correction] = await orderedRace(
+        () =>
+          call(`/claims/${claim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: pending.revision,
+            evidenceIds: [evidence.id],
+          }),
+        () =>
+          call(
+            `/evidence/${evidence.id}`,
+            a,
+            "PATCH",
+            { detail: "Concurrent correction" },
+            { "If-Match-Version": String(evidence.version + 1) },
+          ),
+      );
+      assert.equal(correction.status, 200);
+      assert.ok([200, 409].includes(approval.status));
+      const postRace = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      const racedClaim = postRace.claims.find(
+        (c: { id: string }) => c.id === claim.id,
+      );
+      if (racedClaim.status === "pending")
+        assert.equal(
+          (
+            await call(`/claims/${claim.id}/review`, a, "PATCH", {
+              action: "approve",
+              revision: racedClaim.revision,
+              evidenceIds: [evidence.id],
+            })
+          ).status,
+          200,
+        );
+      const [complete, newClaim] = await orderedRace(
+        () => call(`/sessions/${id}/complete-review`, a, "POST", {}),
+        () =>
+          call(`/sessions/${id}/claims/draft`, a, "POST", {
+            studentId: g2.studentId,
+            text: "Another observation",
+            evidenceIds: [evidence.id],
+          }),
+      );
+      assert.ok([200, 400, 409].includes(complete.status));
+      assert.equal(newClaim.status, 201);
+      const finalState = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      assert.ok(
+        !(
+          finalState.session.status === "reviewed" &&
+          finalState.claims.some(
+            (c: { status: string }) => c.status === "pending",
+          )
+        ),
       );
       assert.equal(privateEvents, 0);
       assert.ok(teacherSocket.connected);

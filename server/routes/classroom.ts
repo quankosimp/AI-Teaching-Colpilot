@@ -1,3 +1,4 @@
+import { lockSession, SessionConflict } from "../sessionLock.js";
 import { Router, type Request, type Response } from "express";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
@@ -222,6 +223,47 @@ async function checkStudentToolAccess(
   return { session, member, grant, sessionTools };
 }
 
+async function lockLiveAccess(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  actor: TeacherActor | StudentActor,
+  tool: keyof z.infer<typeof Tools> | "reaction",
+) {
+  const session = await lockSession(tx, sessionId);
+  if (session.status !== "live")
+    throw new SessionConflict(
+      "SESSION_STATE_INVALID",
+      "Buổi học không còn trực tuyến",
+    );
+  if (actor.role === "student") {
+    const [member, grant] = await Promise.all([
+      tx.roomMember.findUnique({ where: { id: actor.memberId } }),
+      tx.studentRoomSession.findUnique({ where: { id: actor.grantId } }),
+    ]);
+    const tools = Tools.safeParse(session.tools).data;
+    const overrides = Tools.partial().safeParse(
+      member?.toolOverrides ?? {},
+    ).data;
+    if (
+      !member ||
+      member.sessionId !== sessionId ||
+      member.studentId !== actor.studentId ||
+      member.state !== "joined" ||
+      !grant ||
+      grant.revokedAt ||
+      grant.expiresAt <= new Date() ||
+      (tool === "board" && !member.canWrite) ||
+      (tool !== "reaction" &&
+        (tools?.[tool] === false || overrides?.[tool] === false))
+    )
+      throw new SessionConflict(
+        "PERMISSION_DENIED",
+        "Quyền thao tác không còn hiệu lực",
+      );
+  }
+  return session;
+}
+
 class BoardCommandError extends Error {
   constructor(
     public status: number,
@@ -356,6 +398,12 @@ export function classroomRouter(config: AppConfig) {
       const tokenHash = digest(rawToken);
       const maskedHint = rawToken.slice(-4);
       const invite = await db.$transaction(async (tx) => {
+        const locked = await lockSession(tx, session.id);
+        if (locked.status === "ended" || locked.status === "reviewed")
+          throw new SessionConflict(
+            "SESSION_STATE_INVALID",
+            "Buổi học đã kết thúc",
+          );
         await tx.invite.updateMany({
           where: {
             sessionId: session.id,
@@ -430,6 +478,7 @@ export function classroomRouter(config: AppConfig) {
       if (!invite) return fail(res, 404, "NOT_FOUND", "Không tìm thấy mã mời");
       const now = new Date();
       const updated = await db.$transaction(async (tx) => {
+        await lockSession(tx, session.id);
         await tx.invite.updateMany({
           where: {
             sessionId: session.id,
@@ -608,13 +657,33 @@ export function classroomRouter(config: AppConfig) {
       });
 
       const { grant, updatedMember } = await db.$transaction(async (tx) => {
+        const locked = await lockSession(tx, invite.sessionId);
+        const freshInvite = await tx.invite.findUnique({
+          where: { id: invite.id },
+        });
+        const freshMember = await tx.roomMember.findUniqueOrThrow({
+          where: { id: member.id },
+        });
+        if (
+          locked.status === "ended" ||
+          locked.status === "reviewed" ||
+          !freshInvite ||
+          freshInvite.revokedAt ||
+          freshInvite.expiresAt <= new Date()
+        )
+          throw new SessionConflict(
+            "SESSION_STATE_INVALID",
+            "Lời mời không còn hiệu lực",
+          );
+        const safeNextState =
+          freshMember.state === "joined" ? "joined" : "waiting";
         const updatedMemberRow = await tx.roomMember.update({
           where: { id: member.id },
           data: {
             displayName,
             consent: true,
             consentAt: member.consentAt ?? new Date(),
-            state: nextState,
+            state: safeNextState,
             leftAt: null,
           },
         });
@@ -673,7 +742,7 @@ export function classroomRouter(config: AppConfig) {
           studentId: invite.studentId,
           memberId: member.id,
           displayName: updatedMember.displayName || displayName,
-          memberState: nextState,
+          memberState: updatedMember.state === "joined" ? "joined" : "waiting",
         }),
       );
     }),
@@ -788,6 +857,7 @@ export function classroomRouter(config: AppConfig) {
       if (!approved) {
         const now = new Date();
         const rejected = await db.$transaction(async (tx) => {
+          await lockSession(tx, session.id);
           await tx.studentRoomSession.updateMany({
             where: {
               sessionId: session.id,
@@ -839,6 +909,20 @@ export function classroomRouter(config: AppConfig) {
           "Học sinh chưa xác nhận tham gia phòng chờ",
         );
       const admitted = await db.$transaction(async (tx) => {
+        const locked = await lockSession(tx, session.id);
+        const fresh = await tx.roomMember.findUniqueOrThrow({
+          where: { id: member.id },
+        });
+        if (
+          locked.status === "ended" ||
+          locked.status === "reviewed" ||
+          !fresh.consent ||
+          fresh.state !== "waiting"
+        )
+          throw new SessionConflict(
+            "SESSION_STATE_INVALID",
+            "Học sinh không còn trong phòng chờ",
+          );
         const row = await tx.roomMember.update({
           where: { id: member.id },
           data: {
@@ -932,6 +1016,7 @@ export function classroomRouter(config: AppConfig) {
           : undefined;
         const now = new Date();
         const updated = await db.$transaction(async (tx) => {
+          await lockSession(tx, member.sessionId);
           if (parsed.data.leave) {
             await tx.studentRoomSession.updateMany({
               where: {
@@ -1053,6 +1138,7 @@ export function classroomRouter(config: AppConfig) {
         );
       const now = new Date();
       const updated = await db.$transaction(async (tx) => {
+        await lockLiveAccess(tx, member.sessionId, actor, "reaction");
         if (parsed.data.leave) {
           await tx.studentRoomSession.updateMany({
             where: { id: actor.grantId, revokedAt: null },
@@ -1151,15 +1237,25 @@ export function classroomRouter(config: AppConfig) {
         res,
         `/sessions/${session.id}/start`,
         async (tx) => {
+          await lockSession(tx, session.id);
           const current = await tx.session.findUniqueOrThrow({
             where: { id: session.id },
             include: {
               Activity_sessionId_items: { orderBy: { order: "asc" } },
             },
           });
+          if (expected !== null && current.version !== expected)
+            throw new SessionConflict(
+              "VERSION_CONFLICT",
+              "Phiên bản buổi học đã thay đổi",
+            );
           if (current.status === "live") return current.id;
           const next = nextSessionStatus(current.status, "start");
-          if (!next) throw new Error("INVALID_STATE");
+          if (!next)
+            throw new SessionConflict(
+              "SESSION_STATE_INVALID",
+              "Trạng thái buổi học không hợp lệ",
+            );
           const activeActId =
             current.currentActivityId ??
             current.Activity_sessionId_items[0]?.id ??
@@ -1282,12 +1378,22 @@ export function classroomRouter(config: AppConfig) {
         res,
         `/sessions/${session.id}/end`,
         async (tx) => {
+          await lockSession(tx, session.id);
           const current = await tx.session.findUniqueOrThrow({
             where: { id: session.id },
           });
+          if (expected !== null && current.version !== expected)
+            throw new SessionConflict(
+              "VERSION_CONFLICT",
+              "Phiên bản buổi học đã thay đổi",
+            );
           if (current.status === "ended") return current.id;
           const next = nextSessionStatus(current.status, "end");
-          if (!next) throw new Error("INVALID_STATE");
+          if (!next)
+            throw new SessionConflict(
+              "SESSION_STATE_INVALID",
+              "Trạng thái buổi học không hợp lệ",
+            );
           const now = new Date();
           const updated = await tx.session.update({
             where: { id: current.id },
@@ -2324,6 +2430,7 @@ export function classroomRouter(config: AppConfig) {
         res,
         `/sessions/${session.id}/boards/${req.params.boardKey}/attempts`,
         async (tx) => {
+          await lockLiveAccess(tx, session.id, actor, "board");
           const board = await tx.board.upsert({
             where: { id: target.boardId },
             update: {},
@@ -2442,6 +2549,12 @@ export function classroomRouter(config: AppConfig) {
         res,
         `/sessions/${session.id}/checks`,
         async (tx) => {
+          const locked = await lockSession(tx, session.id);
+          if (locked.status !== "live")
+            throw new SessionConflict(
+              "SESSION_STATE_INVALID",
+              "Buổi học đã kết thúc",
+            );
           await tx.quickCheck.updateMany({
             where: { sessionId: session.id, status: "open" },
             data: { status: "closed", closedAt: new Date() },
@@ -2513,6 +2626,21 @@ export function classroomRouter(config: AppConfig) {
       if (parsed.data.status === "open" && check.sessionIdRef.status !== "live")
         return fail(res, 409, "SESSION_NOT_LIVE", "Buổi học đã kết thúc");
       const updated = await db.$transaction(async (tx) => {
+        const locked = await lockSession(tx, check.sessionId);
+        if (parsed.data.status === "open" && locked.status !== "live")
+          throw new SessionConflict(
+            "SESSION_STATE_INVALID",
+            "Buổi học đã kết thúc",
+          );
+        if (parsed.data.status === "open")
+          await tx.quickCheck.updateMany({
+            where: {
+              sessionId: check.sessionId,
+              status: "open",
+              id: { not: check.id },
+            },
+            data: { status: "closed", closedAt: new Date() },
+          });
         const row = await tx.quickCheck.update({
           where: { id: check.id },
           data: {
@@ -2604,6 +2732,25 @@ export function classroomRouter(config: AppConfig) {
         );
 
       const result = await createOnce(req, res, routeKey, async (tx) => {
+        await lockLiveAccess(tx, check.sessionId, actor, "check");
+        const fresh = await tx.quickCheck.findUniqueOrThrow({
+          where: { id: check.id },
+        });
+        if (fresh.status !== "open")
+          throw new SessionConflict("VERSION_CONFLICT", "Câu hỏi đã đóng");
+        const already = await tx.checkResponse.findUnique({
+          where: {
+            checkId_studentId: {
+              checkId: check.id,
+              studentId: actor.studentId,
+            },
+          },
+        });
+        if (already)
+          throw new SessionConflict(
+            "VERSION_CONFLICT",
+            "Bạn đã nộp câu trả lời",
+          );
         const created = await tx.checkResponse.create({
           data: {
             checkId: check.id,
@@ -2671,6 +2818,7 @@ export function classroomRouter(config: AppConfig) {
         return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập");
       const { updatedResponse, evidence } = await db.$transaction(
         async (tx) => {
+          await lockSession(tx, responseRow.sessionId);
           const updated = await tx.checkResponse.update({
             where: { id: responseRow.id },
             data: {
@@ -2973,6 +3121,7 @@ export function classroomRouter(config: AppConfig) {
         }
 
         const result = await createOnce(req, res, routeKey, async (tx) => {
+          await lockLiveAccess(tx, session.id, actor, "upload");
           if (upload) {
             const claimed = await tx.uploadIntent.updateMany({
               where: {
@@ -3168,6 +3317,7 @@ export function classroomRouter(config: AppConfig) {
 
       const { updatedSubmission, evidence } = await db.$transaction(
         async (tx) => {
+          await lockSession(tx, submission.sessionId);
           const updated = await tx.submission.update({
             where: { id: submission.id },
             data: {
@@ -3363,6 +3513,7 @@ export function classroomRouter(config: AppConfig) {
         authorId = "teacher";
       }
       const message = await db.$transaction(async (tx) => {
+        await lockLiveAccess(tx, req.params.id, actor, "chat");
         const created = await tx.roomMessage.create({
           data: {
             sessionId: req.params.id,
@@ -3404,6 +3555,7 @@ export function classroomRouter(config: AppConfig) {
       );
       if (!access) return;
       const reaction = await db.$transaction(async (tx) => {
+        await lockLiveAccess(tx, req.params.id, actor, "reaction");
         const saved = await tx.roomReaction.upsert({
           where: {
             sessionId_studentId: {

@@ -1,3 +1,4 @@
+import { lockSession } from "../sessionLock.js";
 import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -555,8 +556,11 @@ export function teacherRouter(config: AppConfig) {
       const mergedTools = patch.data.tools
         ? { ...existingTools, ...patch.data.tools }
         : undefined;
-      const { tools: _tools, sharedBoardOwnerId: _sbo, ...restPatch } =
-        patch.data;
+      const {
+        tools: _tools,
+        sharedBoardOwnerId: _sbo,
+        ...restPatch
+      } = patch.data;
       const changed = await db.$transaction(async (tx) => {
         const result = await tx.session.updateMany({
           where: {
@@ -771,6 +775,7 @@ export function teacherRouter(config: AppConfig) {
         res,
         `/sessions/${session.id}/annotations`,
         async (tx) => {
+          await lockSession(tx, session.id);
           const annotation = await tx.annotation.create({
             data: {
               sessionId: session.id,

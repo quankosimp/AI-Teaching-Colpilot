@@ -1,4 +1,5 @@
 import http from "node:http";
+import { SessionConflict } from "./sessionLock.js";
 import express, { type ErrorRequestHandler } from "express";
 import cookieParser from "cookie-parser";
 import { requestId, originGuard, fail, db, type AppConfig } from "./context.js";
@@ -78,7 +79,18 @@ export function createApp(config?: AppConfig) {
       return httpServer.listen(...args);
     }) as typeof app.listen;
   }
-  const errorHandler: ErrorRequestHandler = (_error, _req, res, _next) => {
+  const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
+    if (error instanceof SessionConflict)
+      return void fail(
+        res,
+        error.code === "VALIDATION_ERROR"
+          ? 400
+          : error.code === "PERMISSION_DENIED"
+            ? 403
+            : 409,
+        error.code,
+        error.message,
+      );
     fail(res, 500, "INTERNAL_ERROR", "Không thể hoàn thành yêu cầu");
   };
   app.use(errorHandler);
