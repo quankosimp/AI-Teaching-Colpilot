@@ -32,7 +32,15 @@ export async function filterEligibleApprovedClaims<
       isObservation: true,
       kind: true,
       sourceType: true,
+      sourceId: true,
     },
+  });
+  const annotationIds = evidence
+    .filter((item) => item.sourceType === "annotation" && item.sourceId)
+    .map((item) => item.sourceId!);
+  const annotations = await db.annotation.findMany({
+    where: { id: { in: annotationIds } },
+    select: { id: true, sessionId: true, studentId: true },
   });
   return claims.filter((claim) => {
     if (
@@ -50,7 +58,17 @@ export async function filterEligibleApprovedClaims<
       ),
     );
     return (
-      selected.every(Boolean) &&
+      selected.every(
+        (item) =>
+          Boolean(item) &&
+          (item!.sourceType !== "annotation" ||
+            annotations.some(
+              (annotation) =>
+                annotation.id === item!.sourceId &&
+                annotation.sessionId === claim.sessionId &&
+                annotation.studentId === claim.studentId,
+            )),
+      ) &&
       selected.some(
         (item) =>
           item?.isObservation &&

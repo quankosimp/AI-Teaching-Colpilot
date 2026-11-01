@@ -1,3 +1,4 @@
+import { publicSubmission } from "../submissionProjection.js";
 import { lockSession, SessionConflict } from "../sessionLock.js";
 import { Router, type Request, type Response } from "express";
 import { Prisma } from "@prisma/client";
@@ -85,14 +86,14 @@ async function resolveCurrentSourceVersion(
   }
   if (sourceType === "annotation") {
     const ann = await client.annotation.findFirst({
-      where: { id: sourceId, sessionId },
+      where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
       select: { id: true },
     });
     return ann ? 1 : 0;
   }
   if (sourceType === "ai_suggestion") {
     const ai = await client.aIRequest.findFirst({
-      where: { id: sourceId, sessionId },
+      where: { id: sourceId, sessionId, ...(studentId ? { studentId } : {}) },
       select: { id: true },
     });
     return ai ? 1 : 0;
@@ -818,7 +819,7 @@ export function reviewRouter(config: AppConfig) {
       triggerOutboxPublish(submission.sessionId);
       triggerOutboxPublish(parsed.data.sessionId);
       return res.json({
-        submission: updatedSubmission,
+        submission: publicSubmission(updatedSubmission),
         invalidatedClaimIds,
       });
     }),
@@ -1061,6 +1062,7 @@ export function reviewRouter(config: AppConfig) {
                 item.sourceId ?? item.submissionId,
                 item.sessionId,
                 tx,
+                item.studentId,
               )) !== item.sourceVersion
             )
               throw new SessionConflict(
@@ -1244,6 +1246,7 @@ export function reviewRouter(config: AppConfig) {
                     sourceId,
                     row.sessionId,
                     tx,
+                    row.studentId,
                   );
             const itemParsed = EvidenceForApproval.safeParse({
               id: row.id,
@@ -1551,7 +1554,7 @@ export function reviewRouter(config: AppConfig) {
                     Activity_sessionId_items: {
                       create: eligibleClaims.map((cl, idx) => ({
                         order: idx,
-                        title: `Củng cố: ${cl.text.slice(0, 60)}`,
+                        title: `Hoạt động củng cố ${idx + 1}`,
                         description:
                           "Hoạt động luyện tập tiếp nối dựa trên kết quả buổi trước.",
                         teacherNotes: cl.text,

@@ -251,6 +251,21 @@ export function attachClassroomRealtime(
   });
   const namespace = io.of("/classroom");
   const principals = new Map<string, SocketPrincipal>();
+  const socketWork = new Map<string, Promise<void>>();
+  const socketCursor = new Map<string, number>();
+  const enqueueSocket = (socket: Socket, work: () => Promise<void>) => {
+    const previous = socketWork.get(socket.id) ?? Promise.resolve();
+    const next = previous.then(work).catch(() => {
+      socket.disconnect(true);
+    });
+    socketWork.set(socket.id, next);
+    return next;
+  };
+  const emitOrdered = (socket: Socket, envelope: RealtimeEnvelope) => {
+    if (envelope.seq <= (socketCursor.get(socket.id) ?? 0)) return;
+    socket.emit("classroom.event", envelope);
+    socketCursor.set(socket.id, envelope.seq);
+  };
 
   const syncSocketRooms = (
     socket: Socket,
@@ -304,18 +319,28 @@ export function attachClassroomRealtime(
         lastEventSeq: maxSeq,
       });
       socket.emit("room.resync_required", resync);
+      socketCursor.set(socket.id, maxSeq);
       return;
     }
+    const firstUnpublished = await db.sessionEventOutbox.findFirst({
+      where: { sessionId: principal.sessionId, publishedAt: null },
+      orderBy: { seq: "asc" },
+      select: { seq: true },
+    });
     const rows = await db.sessionEventOutbox.findMany({
       where: {
         sessionId: principal.sessionId,
-        seq: { gt: lastEventSeq },
+        seq: {
+          gt: lastEventSeq,
+          ...(firstUnpublished ? { lt: firstUnpublished.seq } : {}),
+        },
+        publishedAt: { not: null },
       },
       orderBy: { seq: "asc" },
     });
     for (const row of rows) {
       if (canSocketReceive(principal, status.memberState, row)) {
-        socket.emit("classroom.event", rowToEnvelope(row));
+        emitOrdered(socket, rowToEnvelope(row));
       }
     }
   };
@@ -396,32 +421,27 @@ export function attachClassroomRealtime(
     socket.on("disconnect", () => {
       clearTimeout(expiryTimer);
       principals.delete(socket.id);
+      socketWork.delete(socket.id);
+      socketCursor.delete(socket.id);
     });
-    const status = await revalidateSocketPrincipal(principal);
-    if (!status.valid) {
-      socket.disconnect(true);
-      return;
-    }
-    syncSocketRooms(socket, principal, status.memberState);
-
     const rawSeq =
       socket.handshake.auth?.lastEventSeq ??
       socket.handshake.query?.lastEventSeq;
-    if (rawSeq !== undefined) {
-      const parsed = ClassroomReconnect.safeParse({
-        sessionId: principal.sessionId,
-        lastEventSeq: Number(rawSeq),
-      });
-      if (parsed.success) {
-        await replaySince(socket, principal, parsed.data.lastEventSeq);
-      }
-    }
-
-    socket.on("classroom.reconnect", async (payload: unknown) => {
+    const parsed = ClassroomReconnect.safeParse({
+      sessionId: principal.sessionId,
+      lastEventSeq: Number(rawSeq ?? 0),
+    });
+    const initialSeq = parsed.success ? parsed.data.lastEventSeq : 0;
+    socketCursor.set(socket.id, initialSeq);
+    void enqueueSocket(socket, () =>
+      replaySince(socket, principal, initialSeq),
+    );
+    socket.on("classroom.reconnect", (payload: unknown) => {
       const parsed = ClassroomReconnect.safeParse(payload);
-      if (!parsed.success || parsed.data.sessionId !== principal.sessionId)
-        return;
-      await replaySince(socket, principal, parsed.data.lastEventSeq);
+      if (parsed.success && parsed.data.sessionId === principal.sessionId)
+        void enqueueSocket(socket, () =>
+          replaySince(socket, principal, parsed.data.lastEventSeq),
+        );
     });
   });
 
@@ -436,30 +456,41 @@ export function attachClassroomRealtime(
     try {
       do {
         rerun = false;
-        const pending = await db.sessionEventOutbox.findMany({
-          where: {
-            publishedAt: null,
-            publicationAttempts: { lt: 10 },
-          },
-          orderBy: [{ sessionId: "asc" }, { seq: "asc" }],
-          take: 100,
+        const sessions = await db.sessionEventOutbox.findMany({
+          where: { publishedAt: null },
+          distinct: ["sessionId"],
+          select: { sessionId: true },
+          orderBy: { sessionId: "asc" },
         });
+        const batches = await Promise.all(
+          sessions.map(({ sessionId }) =>
+            db.sessionEventOutbox.findMany({
+              where: { sessionId, publishedAt: null },
+              orderBy: { seq: "asc" },
+              take: 100,
+            }),
+          ),
+        );
+        const pending = batches.flat();
+        const blockedSessions = new Set<string>();
         for (const row of pending) {
+          if (blockedSessions.has(row.sessionId)) continue;
           const now = new Date();
           try {
             const envelope = rowToEnvelope(row);
             for (const [socketId, socket] of namespace.sockets) {
               const principal = principals.get(socketId);
               if (!principal || principal.sessionId !== row.sessionId) continue;
-              const status = await revalidateSocketPrincipal(principal);
-              if (!status.valid) {
-                socket.disconnect(true);
-                continue;
-              }
-              syncSocketRooms(socket, principal, status.memberState);
-              if (canSocketReceive(principal, status.memberState, row)) {
-                socket.emit("classroom.event", envelope);
-              }
+              await enqueueSocket(socket, async () => {
+                const status = await revalidateSocketPrincipal(principal);
+                if (!status.valid) {
+                  socket.disconnect(true);
+                  return;
+                }
+                syncSocketRooms(socket, principal, status.memberState);
+                if (canSocketReceive(principal, status.memberState, row))
+                  emitOrdered(socket, envelope);
+              });
             }
             await db.sessionEventOutbox.update({
               where: { id: row.id },
@@ -469,7 +500,21 @@ export function attachClassroomRealtime(
                 lastAttemptAt: now,
               },
             });
+            // A socket may connect after fanout but before the publication marker.
+            // Queue a catch-up after marking; per-socket ordering removes duplicates.
+            for (const [socketId, socket] of namespace.sockets) {
+              const principal = principals.get(socketId);
+              if (principal?.sessionId === row.sessionId)
+                await enqueueSocket(socket, () =>
+                  replaySince(
+                    socket,
+                    principal,
+                    socketCursor.get(socket.id) ?? 0,
+                  ),
+                );
+            }
           } catch {
+            blockedSessions.add(row.sessionId);
             await db.sessionEventOutbox
               .update({
                 where: { id: row.id },
