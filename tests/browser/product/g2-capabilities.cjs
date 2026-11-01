@@ -311,12 +311,41 @@ const path = require("node:path");
     await t.getByLabel("Hoạt động hiện tại").selectOption({ label: "Phiếu học tập" });
     const stage = t.locator(".online-room__stage");
     await stage.getByRole("button", { name: "Học liệu" }).click();
+    // Page counters alone do not prove that an auto-detected PDF was rendered.
+    await stage.locator("canvas").waitFor();
+    await t.waitForFunction(() => {
+      const canvas = document.querySelector(".online-room__stage canvas");
+      return canvas && canvas.width > 0 && canvas.height > 0 && Number(canvas.dataset.renderedPage) > 0;
+    });
+    if (await stage.locator("img").count()) throw Error("PDF stage incorrectly rendered as image");
     await stage.getByText("Phiếu học tập").waitFor();
     await stage.getByText("Trang 1/2").waitFor();
 
     // Student syncs page
     await p1.locator(".online-room__stage").getByText("Phiếu học tập").waitFor();
     await p1.locator(".online-room__stage").getByText("Trang 1/2").waitFor();
+
+    await p1.waitForFunction(() => Number(document.querySelector(".online-room__stage canvas")?.dataset.renderedPage) === 1);
+    for (const [role, page] of [["teacher", t], ["student", p1]]) {
+      for (const width of [360, 375, 768, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        for (const theme of ["light", "dark"]) {
+          const isDark = await page.evaluate(() => document.body.classList.contains("dark"));
+          if (isDark !== (theme === "dark")) await page.getByRole("button", { name: "Đổi giao diện" }).click();
+          const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+          if (overflow) throw Error(`${role} overflows at ${width}px ${theme}`);
+          if (role === "teacher" && width === 1440) {
+            const stageBox = await page.locator(".online-room__stage").boundingBox();
+            const dockBox = await page.locator(".online-room__dock").boundingBox();
+            if (!stageBox || !dockBox || dockBox.x < stageBox.x + stageBox.width) throw Error("desktop dock must sit beside stage");
+          }
+          await page.screenshot({ path: path.join(artifacts, `final-${role}-${width}-${theme}.png`), fullPage: true });
+        }
+      }
+      await page.getByRole("button", { name: "Đổi giao diện" }).click();
+    }
+    await t.setViewportSize({ width: 1200, height: 800 });
+    await p1.setViewportSize({ width: 360, height: 800 });
 
     // Teacher flips page
     await stage.getByRole("button", { name: "Trang sau" }).click();

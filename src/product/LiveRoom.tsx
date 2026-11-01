@@ -465,11 +465,32 @@ export function LiveRoom({
     <main className={`card online-room${room?.waiting ? " online-lobby" : ""}`}>
       <header className="online-room__header">
         <button onClick={onExit}>Quay lại</button>
+        <button type="button" onClick={() => document.body.classList.toggle("dark")}>
+          Đổi giao diện
+        </button>
         <h1>{s?.title || "Phòng chờ"}</h1>
         <p>
           Kết nối dữ liệu: {connected ? "đang kết nối" : "mất kết nối"} · Video:
           chưa cấu hình
         </p>
+        {!grant && s && <div className="online-room__lifecycle">
+              <button
+                onClick={() =>
+                  void command(`/sessions/${sessionId}/start`, "POST", {})
+                }
+                disabled={s.status === "ended" || s.status === "reviewed"}
+              >
+                Bắt đầu
+              </button>
+              <button
+                onClick={() =>
+                  void command(`/sessions/${sessionId}/end`, "POST", {})
+                }
+                disabled={s.status !== "live"}
+              >
+                Kết thúc
+              </button>
+        </div>}
       </header>
       {error && <p role="alert">{error}</p>}
       {!room && !error && (
@@ -487,6 +508,7 @@ export function LiveRoom({
           <p>
             {s.sharedGoal} · {statusLabel(s.status)}
           </p>
+          <div className={`online-room__workspace${grant ? "" : " online-room__workspace--teacher"}`}>
           <div className="online-room__stage" aria-label="Sân khấu lớp học">
             <p>Video chưa cấu hình; khu vực video sẽ sẵn sàng khi dịch vụ được kết nối.</p>
             {!grant && (
@@ -631,93 +653,6 @@ export function LiveRoom({
             />
           </section>
           {!grant && (
-            <>
-              <button
-                onClick={() =>
-                  void command(`/sessions/${sessionId}/start`, "POST", {})
-                }
-                disabled={s.status === "ended" || s.status === "reviewed"}
-              >
-                Bắt đầu
-              </button>
-              <button
-                onClick={() =>
-                  void command(`/sessions/${sessionId}/end`, "POST", {})
-                }
-                disabled={s.status !== "live"}
-              >
-                Kết thúc
-              </button>
-              <section
-                className="online-room__members"
-                aria-label="Học sinh trong phòng"
-              >
-                <h2>Học sinh</h2>
-                <label>Thời hạn liên kết (giờ)<input type="number" min="1" max="720" value={ttl} onChange={e => setTtl(Number(e.target.value))}/></label>
-                <fieldset><legend>Công cụ cả lớp</legend>{(Object.keys(toolNames) as (keyof Tools)[]).map(key => <label key={key}><input type="checkbox" checked={s.tools?.[key] !== false} onChange={e => patchClassroom({tools: {[key]: e.target.checked}})}/>{toolNames[key]}</label>)}</fieldset>
-                {members.map((m) => (
-                  <div key={m.id}>
-                    <button type="button" aria-pressed={selected === m.studentId} onClick={() => { setSelectedStudent(m.studentId); setInspectBoard(false); }}>{m.displayName || m.studentIdRef?.name || m.studentId}</button> ·{" "}
-                    {statusLabel(m.state)}{" "}
-                    <button
-                      onClick={() =>
-                        void request<{ inviteUrl: string }>(
-                          `/sessions/${sessionId}/invites`,
-                          {
-                            method: "POST",
-                            body: JSON.stringify({ studentId: m.studentId, expiresAt: new Date(Date.now() + ttl * 3600000).toISOString() }),
-                          },
-                        )
-                          .then((r) => setLink(r.inviteUrl))
-                          .catch((e) => setError(e.message))
-                      }
-                    >
-                      Tạo liên kết mời
-                    </button>
-                    <fieldset><legend>Quyền {m.displayName || m.studentIdRef?.name}</legend>{(Object.keys(toolNames) as (keyof Tools)[]).map(key => <label key={key}><input type="checkbox" checked={m.toolOverrides?.[key] !== false} onChange={e => void command(`/sessions/${sessionId}/members/${m.id}`, "PATCH", {toolOverrides: {[key]: e.target.checked}})}/>{toolNames[key]}</label>)}</fieldset>
-                    {room?.invites?.filter(i => i.studentId === m.studentId && i.state === "active").map(i => <button key={i.id} onClick={() => void command(`/sessions/${sessionId}/invites/${i.id}/revoke`, "POST", {})}>Thu hồi liên kết</button>)}
-                    {m.state === "waiting" && (
-                      <>
-                        <button
-                          onClick={() =>
-                            void command(
-                              `/sessions/${sessionId}/members/${m.id}/admit`,
-                              "POST",
-                              { approved: true },
-                            )
-                          }
-                        >
-                          Cho vào
-                        </button>
-                        <button
-                          onClick={() =>
-                            void command(
-                              `/sessions/${sessionId}/members/${m.id}/admit`,
-                              "POST",
-                              { approved: false },
-                            )
-                          }
-                        >
-                          Từ chối
-                        </button>
-                      </>
-                    )}
-                  </div>
-                ))}
-                {link && (
-                  <p>
-                    Liên kết mời một lần:{" "}
-                    <input
-                      readOnly
-                      value={link}
-                      onFocus={(e) => e.currentTarget.select()}
-                    />
-                  </p>
-                )}
-              </section>
-            </>
-          )}
-          {!grant && (
             <aside className="online-room__dock" aria-label="Hỗ trợ học sinh đã chọn">
               <h2>Học sinh được chọn</h2>
               <p>{members.find((m) => m.studentId === selected)?.displayName || selected || "Chưa chọn học sinh"}</p>
@@ -798,6 +733,78 @@ export function LiveRoom({
                 <button disabled={!selected || !note.trim()}>Lưu ghi chú</button>
               </form>
             </aside>
+          )}
+          </div>
+          {!grant && (
+            <>
+              <section
+                className="online-room__members"
+                aria-label="Học sinh trong phòng"
+              >
+                <h2>Học sinh</h2>
+                <label>Thời hạn liên kết (giờ)<input type="number" min="1" max="720" value={ttl} onChange={e => setTtl(Number(e.target.value))}/></label>
+                <fieldset><legend>Công cụ cả lớp</legend>{(Object.keys(toolNames) as (keyof Tools)[]).map(key => <label key={key}><input type="checkbox" checked={s.tools?.[key] !== false} onChange={e => patchClassroom({tools: {[key]: e.target.checked}})}/>{toolNames[key]}</label>)}</fieldset>
+                {members.map((m) => (
+                  <div key={m.id}>
+                    <button type="button" aria-pressed={selected === m.studentId} onClick={() => { setSelectedStudent(m.studentId); setInspectBoard(false); }}>{m.displayName || m.studentIdRef?.name || m.studentId}</button> ·{" "}
+                    {statusLabel(m.state)}{" "}
+                    <button
+                      onClick={() =>
+                        void request<{ inviteUrl: string }>(
+                          `/sessions/${sessionId}/invites`,
+                          {
+                            method: "POST",
+                            body: JSON.stringify({ studentId: m.studentId, expiresAt: new Date(Date.now() + ttl * 3600000).toISOString() }),
+                          },
+                        )
+                          .then((r) => setLink(r.inviteUrl))
+                          .catch((e) => setError(e.message))
+                      }
+                    >
+                      Tạo liên kết mời
+                    </button>
+                    <fieldset><legend>Quyền {m.displayName || m.studentIdRef?.name}</legend>{(Object.keys(toolNames) as (keyof Tools)[]).map(key => <label key={key}><input type="checkbox" checked={m.toolOverrides?.[key] !== false} onChange={e => void command(`/sessions/${sessionId}/members/${m.id}`, "PATCH", {toolOverrides: {[key]: e.target.checked}})}/>{toolNames[key]}</label>)}</fieldset>
+                    {room?.invites?.filter(i => i.studentId === m.studentId && i.state === "active").map(i => <button key={i.id} onClick={() => void command(`/sessions/${sessionId}/invites/${i.id}/revoke`, "POST", {})}>Thu hồi liên kết</button>)}
+                    {m.state === "waiting" && (
+                      <>
+                        <button
+                          onClick={() =>
+                            void command(
+                              `/sessions/${sessionId}/members/${m.id}/admit`,
+                              "POST",
+                              { approved: true },
+                            )
+                          }
+                        >
+                          Cho vào
+                        </button>
+                        <button
+                          onClick={() =>
+                            void command(
+                              `/sessions/${sessionId}/members/${m.id}/admit`,
+                              "POST",
+                              { approved: false },
+                            )
+                          }
+                        >
+                          Từ chối
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+                {link && (
+                  <p>
+                    Liên kết mời một lần:{" "}
+                    <input
+                      readOnly
+                      value={link}
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                  </p>
+                )}
+              </section>
+            </>
           )}
           {!grant && s.Activity_sessionId_items && (
             <section className="online-room__activity">

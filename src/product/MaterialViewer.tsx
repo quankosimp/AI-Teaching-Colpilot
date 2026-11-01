@@ -259,7 +259,7 @@ export function MaterialViewer({
         <AnnotationLayer
           annotations={visible}
           currentPage={page}
-          readOnly={readOnly || (kind === "PDF" && renderedPage !== page)}
+          readOnly={readOnly || (!!pdf && renderedPage !== page)}
           highlightedId={opened}
           onCreatePin={(position) => {
             setText("");
@@ -269,8 +269,8 @@ export function MaterialViewer({
           }}
           onOpenAnnotation={setOpened}
         >
-          {kind === "PDF" ? (
-            <canvas ref={canvas} aria-label={`Trang ${page} của ${title}`} />
+          {pdf ? (
+            <canvas ref={canvas} data-rendered-page={renderedPage} aria-label={`Trang ${page} của ${title}`} />
           ) : (
             <img src={image || ""} alt={title} />
           )}
