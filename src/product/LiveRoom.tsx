@@ -5,6 +5,7 @@ import { statusLabel } from "./statusLabels";
 import { ReviewPanel } from "./ReviewPanel";
 import { SubmissionForm } from "./SubmissionForm";
 import { OnlineBoard, type BoardState } from "./OnlineBoard";
+import { MaterialViewer } from "./MaterialViewer";
 import { BoundedReconnectQueue } from "./reconnectQueue";
 
 type Grant = {
@@ -15,16 +16,24 @@ type Grant = {
   memberId: string;
   displayName: string;
 };
+type Tools = Record<"board" | "upload" | "check" | "chat", boolean>;
+const toolNames = { board: "Bảng", upload: "Nộp bài", check: "Kiểm tra", chat: "Trò chuyện" } as const;
 type Member = {
   id: string;
   studentId: string;
   state: string;
   displayName: string;
+  toolOverrides?: Partial<Tools>;
   studentIdRef?: { name: string };
 };
 type Room = {
   waiting?: boolean;
-  capabilities?: { boardWrite: boolean };
+  capabilities?: {
+    boardWrite: boolean;
+    upload?: boolean;
+    check?: boolean;
+    chat?: boolean;
+  };
   sessionStatus?: string;
   session?: {
     id: string;
@@ -33,10 +42,21 @@ type Room = {
     version: number;
     sharedGoal: string;
     currentActivityId: string | null;
-    Activity_sessionId_items?: { id: string; title: string }[];
+    completedActivityIds?: string[];
+    sharedView?: "document" | "board" | "check";
+    sharedBoardOwnerId?: string;
+    materialPage?: number;
+    tools?: Tools;
+    Activity_sessionId_items?: { id: string; title: string; materialId?: string | null; materialVersion?: number | null }[];
     RoomMember_sessionId_items?: Member[];
   };
   boards?: BoardState[];
+  sharedBoard?: BoardState | null;
+  currentMaterial?: { id: string; title: string; version: number; readUrl: string; page: number } | null;
+  annotations?: { id: string; materialId?: string; materialVersion?: number; activityId?: string; page: number; x: number; y: number; text: string }[];
+  invites?: { id: string; studentId: string; state: string; expiresAt: string }[];
+  messages?: { id: string; authorId: string; text: string }[];
+  roomMessages?: { id: string; authorId: string; text: string }[];
   commonBoard?: BoardState | null;
   ownBoard?: BoardState | null;
   evidence?: {
@@ -69,8 +89,9 @@ type Room = {
     title: string;
     answer: string;
     finalFeedback: string | null;
+    support?: string | null;
   }[];
-  checks?: { id: string; question: string; status: string }[];
+  checks?: { id: string; question: string; status: string; CheckResponse_checkId_items?: { id: string; studentId: string; answer: string; support: string | null; feedback: string | null }[] }[];
   submissions?: {
     id: string;
     studentId: string;
@@ -243,6 +264,11 @@ export function LiveRoom({
   teacherId?: string;
   onExit: () => void;
 }) {
+  const [selectedStudent, setSelectedStudent] = useState("");
+  const [inspectBoard, setInspectBoard] = useState(false);
+  const [note, setNote] = useState("");
+  const [chat, setChat] = useState("");
+  const [ttl, setTtl] = useState(24);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [room, setRoom] = useState<Room | null>(null);
@@ -283,6 +309,7 @@ export function LiveRoom({
   useEffect(() => {
     let active = true;
     const refresh = () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
       void load().catch((e) => {
         if (active) {
           if (grant && (e.status === 401 || e.status === 403)) {
@@ -391,12 +418,49 @@ export function LiveRoom({
   };
   const s = room?.session;
   const members = s?.RoomMember_sessionId_items || [];
+  const patchQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const patchClassroom = (value: object) => {
+    if (!s) return;
+    patchQueue.current = patchQueue.current
+      .catch(() => {})
+      .then(async () => {
+        const fresh = await load();
+        const ver = fresh.session?.version ?? s.version;
+        await request(`/sessions/${sessionId}/classroom`, {
+          method: "PATCH",
+          headers: { "If-Match-Version": String(ver) },
+          body: JSON.stringify(value),
+        });
+        await load();
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  };
+  const selected = selectedStudent || members[0]?.studentId || "";
+  const activity = s?.Activity_sessionId_items?.find(a => a.id === s.currentActivityId);
+  const material = grant
+    ? room?.currentMaterial
+    : activity?.materialId && activity.materialVersion
+      ? { id: activity.materialId, version: activity.materialVersion, title: activity.title, readUrl: undefined, page: s?.materialPage || 0 }
+      : null;
   const board = grant
     ? room?.ownBoard
     : room?.boards?.find(
         (b) =>
-          b.ownerId === "common" && b.id.includes(`:${s?.currentActivityId}:`),
+          b.ownerId === (inspectBoard ? selected : (s?.sharedBoardOwnerId || "common")) &&
+          (!s?.currentActivityId || b.id.includes(`:${s.currentActivityId}:`)),
       );
+
+  const chatAllowed = grant
+    ? s?.status === "live" && room?.capabilities?.chat === true
+    : s?.status === "live" && s?.tools?.chat !== false;
+
+  const checkAllowed = grant
+    ? s?.status === "live" && room?.capabilities?.check === true
+    : s?.status === "live" && s?.tools?.check !== false;
+
+  const uploadAllowed = grant
+    ? s?.status === "live" && room?.capabilities?.upload === true
+    : false;
   return (
     <main className={`card online-room${room?.waiting ? " online-lobby" : ""}`}>
       <header className="online-room__header">
@@ -423,6 +487,75 @@ export function LiveRoom({
           <p>
             {s.sharedGoal} · {statusLabel(s.status)}
           </p>
+          <div className="online-room__stage" aria-label="Sân khấu lớp học">
+            <p>Video chưa cấu hình; khu vực video sẽ sẵn sàng khi dịch vụ được kết nối.</p>
+            {!grant && (
+              <div aria-label="Chọn nội dung chung">
+                {([ ["document", "Học liệu"], ["board", "Bảng"], ["check", "Kiểm tra"] ] as const).map(([value, label]) => (
+                  <button
+                    type="button"
+                    key={value}
+                    aria-pressed={(s.sharedView || "document") === value}
+                    onClick={() => patchClassroom({ sharedView: value })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {s.sharedView === "document" && (
+              material ? (
+                <MaterialViewer
+                  materialId={material.id}
+                  version={material.version}
+                  title={material.title}
+                  kind="auto"
+                  directReadUrl={material.readUrl}
+                  controlledPage={s.materialPage || 0}
+                  onPageChange={grant ? undefined : (page) => patchClassroom({ materialPage: page })}
+                  annotations={room?.annotations || []}
+                  sessionId={grant ? undefined : sessionId}
+                  activityId={s.currentActivityId || undefined}
+                  students={members.map((m) => ({ id: m.studentId, name: m.displayName || m.studentIdRef?.name || m.studentId }))}
+                  onSaved={grant ? undefined : () => { void load(); }}
+                />
+              ) : (
+                <p>Hoạt động chưa có học liệu.</p>
+              )
+            )}
+            {s.sharedView === "check" && (
+              <div>
+                <p>{room?.activeQuickCheck?.question || room?.checks?.find((c) => c.status === "open")?.question || "Chưa có câu hỏi đang mở."}</p>
+              </div>
+            )}
+            {s.sharedView === "board" && (
+              grant ? (
+                s.sharedBoardOwnerId && s.sharedBoardOwnerId !== "common" && s.sharedBoardOwnerId !== grant.studentId ? (
+                  <OnlineBoard
+                    testId="stage-board"
+                    title={`Bảng đang trình bày (${members.find(m => m.studentId === s.sharedBoardOwnerId)?.displayName || s.sharedBoardOwnerId})`}
+                    board={room?.sharedBoard || null}
+                    actorId={grant.studentId}
+                    canWrite={false}
+                    onCommand={async () => {}}
+                  />
+                ) : s.sharedBoardOwnerId === grant.studentId ? (
+                  <p>Bảng nháp của bạn đang được trình bày cho cả lớp.</p>
+                ) : (
+                  <OnlineBoard
+                    testId="stage-board"
+                    title="Bảng đang trình bày (Bảng chung)"
+                    board={room?.sharedBoard || room?.commonBoard || null}
+                    actorId={grant.studentId}
+                    canWrite={false}
+                    onCommand={async () => {}}
+                  />
+                )
+              ) : (
+                <p>Bảng đang trình bày trên sân khấu: {s.sharedBoardOwnerId === "common" ? "Bảng chung" : (members.find(m => m.studentId === s.sharedBoardOwnerId)?.displayName || s.sharedBoardOwnerId)}.</p>
+              )
+            )}
+          </div>
           <section className="online-room__board" aria-label="Bảng học tập">
             {unsentStroke && (
               <div role="status">
@@ -431,7 +564,7 @@ export function LiveRoom({
                   disabled={!connected || s.status !== "live"}
                   onClick={() =>
                     void command(
-                      `/sessions/${sessionId}/boards/${grant ? "own" : "common"}`,
+                      `/sessions/${sessionId}/boards/${grant ? "own" : (s?.sharedBoardOwnerId || "common")}`,
                       "PUT",
                       unsentStroke,
                       true,
@@ -445,18 +578,27 @@ export function LiveRoom({
               </div>
             )}
             <OnlineBoard
-              title={grant ? "Bảng nháp của tôi" : "Bảng chung"}
+              title={
+                grant
+                  ? "Bảng nháp của tôi"
+                  : inspectBoard
+                    ? `Xem bảng riêng: ${members.find((m) => m.studentId === selected)?.displayName || selected}`
+                    : s?.sharedBoardOwnerId && s.sharedBoardOwnerId !== "common"
+                      ? `Bảng trình bày: ${members.find((m) => m.studentId === s.sharedBoardOwnerId)?.displayName || s.sharedBoardOwnerId}`
+                      : "Bảng chung"
+              }
               board={board || null}
               actorId={grant?.studentId || teacherId || ""}
               canWrite={
                 s.status === "live" &&
+                !inspectBoard &&
                 (!grant || room?.capabilities?.boardWrite === true)
               }
               isOwnPrivateBoard={!!grant}
               busy={!!unsentStroke}
               onCommand={async (cmd) => {
                 const accepted = await command(
-                  `/sessions/${sessionId}/boards/${grant ? "own" : "common"}`,
+                  `/sessions/${sessionId}/boards/${grant ? "own" : (s?.sharedBoardOwnerId || "common")}`,
                   "PUT",
                   cmd,
                   true,
@@ -476,7 +618,15 @@ export function LiveRoom({
                         {},
                       );
                     }
-                  : undefined
+                  : selected
+                    ? async () => {
+                        await command(
+                          `/sessions/${sessionId}/boards/${selected}/attempts`,
+                          "POST",
+                          {},
+                        );
+                      }
+                    : undefined
               }
             />
           </section>
@@ -503,9 +653,11 @@ export function LiveRoom({
                 aria-label="Học sinh trong phòng"
               >
                 <h2>Học sinh</h2>
+                <label>Thời hạn liên kết (giờ)<input type="number" min="1" max="720" value={ttl} onChange={e => setTtl(Number(e.target.value))}/></label>
+                <fieldset><legend>Công cụ cả lớp</legend>{(Object.keys(toolNames) as (keyof Tools)[]).map(key => <label key={key}><input type="checkbox" checked={s.tools?.[key] !== false} onChange={e => patchClassroom({tools: {[key]: e.target.checked}})}/>{toolNames[key]}</label>)}</fieldset>
                 {members.map((m) => (
                   <div key={m.id}>
-                    {m.displayName || m.studentIdRef?.name} ·{" "}
+                    <button type="button" aria-pressed={selected === m.studentId} onClick={() => { setSelectedStudent(m.studentId); setInspectBoard(false); }}>{m.displayName || m.studentIdRef?.name || m.studentId}</button> ·{" "}
                     {statusLabel(m.state)}{" "}
                     <button
                       onClick={() =>
@@ -513,7 +665,7 @@ export function LiveRoom({
                           `/sessions/${sessionId}/invites`,
                           {
                             method: "POST",
-                            body: JSON.stringify({ studentId: m.studentId }),
+                            body: JSON.stringify({ studentId: m.studentId, expiresAt: new Date(Date.now() + ttl * 3600000).toISOString() }),
                           },
                         )
                           .then((r) => setLink(r.inviteUrl))
@@ -522,6 +674,8 @@ export function LiveRoom({
                     >
                       Tạo liên kết mời
                     </button>
+                    <fieldset><legend>Quyền {m.displayName || m.studentIdRef?.name}</legend>{(Object.keys(toolNames) as (keyof Tools)[]).map(key => <label key={key}><input type="checkbox" checked={m.toolOverrides?.[key] !== false} onChange={e => void command(`/sessions/${sessionId}/members/${m.id}`, "PATCH", {toolOverrides: {[key]: e.target.checked}})}/>{toolNames[key]}</label>)}</fieldset>
+                    {room?.invites?.filter(i => i.studentId === m.studentId && i.state === "active").map(i => <button key={i.id} onClick={() => void command(`/sessions/${sessionId}/invites/${i.id}/revoke`, "POST", {})}>Thu hồi liên kết</button>)}
                     {m.state === "waiting" && (
                       <>
                         <button
@@ -563,6 +717,88 @@ export function LiveRoom({
               </section>
             </>
           )}
+          {!grant && (
+            <aside className="online-room__dock" aria-label="Hỗ trợ học sinh đã chọn">
+              <h2>Học sinh được chọn</h2>
+              <p>{members.find((m) => m.studentId === selected)?.displayName || selected || "Chưa chọn học sinh"}</p>
+              <p>Giáo viên có thể xem bảng riêng để hỗ trợ; chỉ bảng đã chia sẻ mới được trình bày cho lớp.</p>
+              <button
+                type="button"
+                disabled={!selected}
+                onClick={() => setInspectBoard(!inspectBoard)}
+              >
+                {inspectBoard ? "Trở về bảng chung" : "Xem bảng riêng"}
+              </button>
+              <button
+                type="button"
+                disabled={
+                  !room?.boards?.some(
+                    (b) =>
+                      b.ownerId === selected &&
+                      b.shared &&
+                      (!s.currentActivityId || b.id.includes(`:${s.currentActivityId}:`)),
+                  )
+                }
+                onClick={() => {
+                  setInspectBoard(false);
+                  patchClassroom({ sharedBoardOwnerId: selected, sharedView: "board" });
+                }}
+              >
+                Trình bày bảng đã chia sẻ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setInspectBoard(false);
+                  patchClassroom({ sharedBoardOwnerId: "common", sharedView: "board" });
+                }}
+              >
+                Trình bày bảng chung
+              </button>
+              <button
+                type="button"
+                disabled={!selected}
+                onClick={() => void command(`/sessions/${sessionId}/boards/${selected}/attempts`, "POST", {})}
+              >
+                Chụp bảng học sinh
+              </button>
+              <h3>Minh chứng gần đây</h3>
+              {room?.evidence
+                ?.filter((e) => e.studentId === selected)
+                .slice(0, 3)
+                .map((e) => (
+                  <p key={e.id}>
+                    {e.title}: {e.detail} ({statusLabel(e.support)})
+                  </p>
+                ))}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void command(`/sessions/${sessionId}/evidence`, "POST", {
+                    studentId: selected,
+                    activityId: s.currentActivityId,
+                    kind: "GhiChu",
+                    title: "Quan sát của giáo viên",
+                    detail: note,
+                    support: "ChuaRo",
+                  }).then((ok) => {
+                    if (ok) setNote("");
+                  });
+                }}
+              >
+                <label>
+                  Ghi chú quan sát
+                  <textarea
+                    aria-label="Ghi chú quan sát"
+                    required
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                </label>
+                <button disabled={!selected || !note.trim()}>Lưu ghi chú</button>
+              </form>
+            </aside>
+          )}
           {!grant && s.Activity_sessionId_items && (
             <section className="online-room__activity">
               <h2>Hoạt động</h2>
@@ -570,24 +806,31 @@ export function LiveRoom({
                 aria-label="Hoạt động hiện tại"
                 value={s.currentActivityId || ""}
                 onChange={(e) =>
-                  void request(`/sessions/${sessionId}/classroom`, {
-                    method: "PATCH",
-                    headers: { "If-Match-Version": String(s.version) },
-                    body: JSON.stringify({
-                      currentActivityId: e.target.value || null,
-                    }),
-                  })
-                    .then(load)
-                    .catch((e) => setError(e.message))
+                  patchClassroom({ currentActivityId: e.target.value || null })
                 }
               >
                 <option value="">Chọn hoạt động</option>
                 {s.Activity_sessionId_items.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.title}
+                    {a.title} {s.completedActivityIds?.includes(a.id) ? " (Đã hoàn tất)" : ""}
                   </option>
                 ))}
               </select>
+              <button
+                disabled={!s.currentActivityId}
+                onClick={() => {
+                  if (s.currentActivityId)
+                    patchClassroom({
+                      completedActivityIds: Array.from(
+                        new Set([...(s.completedActivityIds || []), s.currentActivityId]),
+                      ),
+                    });
+                }}
+              >
+                {s.completedActivityIds?.includes(s.currentActivityId || "")
+                  ? "Đã hoàn tất hoạt động"
+                  : "Đánh dấu hoàn tất"}
+              </button>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -605,25 +848,45 @@ export function LiveRoom({
                   placeholder="Câu hỏi kiểm tra nhanh"
                   required
                 />
-                <button disabled={s.status !== "live" || !s.currentActivityId}>
+                <button disabled={s.status !== "live" || !s.currentActivityId || s.tools?.check === false}>
                   Mở câu hỏi
                 </button>
               </form>
               {room?.checks?.map((c) => (
-                <p key={c.id}>
-                  {c.question} · {statusLabel(c.status)}{" "}
-                  {c.status === "open" && (
-                    <button
-                      onClick={() =>
-                        void command(`/checks/${c.id}`, "PATCH", {
-                          status: "closed",
-                        })
-                      }
+                <div key={c.id}>
+                  <p>
+                    {c.question} · {statusLabel(c.status)}{" "}
+                    {c.status === "open" && (
+                      <button
+                        onClick={() =>
+                          void command(`/checks/${c.id}`, "PATCH", {
+                            status: "closed",
+                          })
+                        }
+                      >
+                        Đóng
+                      </button>
+                    )}
+                  </p>
+                  {c.CheckResponse_checkId_items?.map((r) => (
+                    <SubmissionGrade
+                      key={r.id}
+                      title={`kiểm tra ${members.find((m) => m.studentId === r.studentId)?.displayName || r.studentId}`}
+                      onGrade={async (feedback, support) => {
+                        await command(
+                          `/checks/${c.id}/responses/${r.id}/review`,
+                          "POST",
+                          { feedback, support },
+                        );
+                      }}
                     >
-                      Đóng
-                    </button>
-                  )}
-                </p>
+                      <span>
+                        {members.find((m) => m.studentId === r.studentId)?.displayName || r.studentId}: {r.answer}
+                        {r.feedback && ` — ${r.feedback}`} {r.support && ` (${statusLabel(r.support)})`}
+                      </span>
+                    </SubmissionGrade>
+                  ))}
+                </div>
               ))}
             </section>
           )}
@@ -649,10 +912,13 @@ export function LiveRoom({
                     onChange={(e) => setAnswer(e.target.value)}
                     required
                   />
-                  <button disabled={s.status !== "live"}>
+                  <button disabled={!checkAllowed}>
                     Gửi câu trả lời
                   </button>
                 </form>
+              )}
+              {!checkAllowed && (
+                <p>Giáo viên đã tắt kiểm tra nhanh.</p>
               )}
             </section>
           )}
@@ -662,17 +928,21 @@ export function LiveRoom({
               <SubmissionForm
                 sessionId={sessionId}
                 activityId={s.currentActivityId}
-                enabled={s.status === "live"}
+                enabled={uploadAllowed}
                 request={request}
                 onSubmitted={load}
               />
+              {!uploadAllowed && (
+                <p>Giáo viên đã tắt nộp bài.</p>
+              )}
               {!room?.ownSubmissions?.length && (
                 <p>Chưa có bài làm nào được nộp.</p>
               )}
               {room?.ownSubmissions?.map((x) => (
                 <p key={x.id}>
                   {x.title}: {x.answer}{" "}
-                  {x.finalFeedback && `— ${x.finalFeedback}`}
+                  {x.finalFeedback && `— ${x.finalFeedback}`}{" "}
+                  {x.support && `(${statusLabel(x.support)})`}
                 </p>
               ))}
             </section>
@@ -723,6 +993,40 @@ export function LiveRoom({
               ))}
             </section>
           )}
+          <section aria-label="Trò chuyện" className="online-room__chat">
+            <h2>Trò chuyện</h2>
+            {(grant ? room?.roomMessages : room?.messages)?.map((m) => (
+              <p key={m.id}>
+                {m.authorId}: {m.text}
+              </p>
+            ))}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void command(`/sessions/${sessionId}/messages`, "POST", {
+                  text: chat,
+                }).then((ok) => {
+                  if (ok) setChat("");
+                });
+              }}
+            >
+              <label>
+                Tin nhắn
+                <input
+                  aria-label="Tin nhắn"
+                  value={chat}
+                  required
+                  onChange={(e) => setChat(e.target.value)}
+                />
+              </label>
+              <button disabled={!chatAllowed}>
+                Gửi
+              </button>
+            </form>
+            {!chatAllowed && (
+              <p>Giáo viên đã tắt trò chuyện.</p>
+            )}
+          </section>
           {!grant && (
             <ReviewPanel
               sessionId={sessionId}

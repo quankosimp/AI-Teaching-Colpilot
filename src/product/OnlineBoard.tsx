@@ -19,6 +19,7 @@ type Props = {
   canWrite: boolean;
   isOwnPrivateBoard?: boolean;
   busy?: boolean;
+  testId?: string;
   onCommand: (cmd: {
     operation:
       | "addStroke"
@@ -48,6 +49,7 @@ export function OnlineBoard({
   canWrite,
   isOwnPrivateBoard = false,
   busy = false,
+  testId,
   onCommand,
   onCaptureAttempt,
 }: Props) {
@@ -189,7 +191,7 @@ export function OnlineBoard({
   const strokes = board?.strokes ?? [];
 
   return (
-    <div className="form-stack" data-testid="online-board">
+    <div className="form-stack" data-testid={testId || "online-board"}>
       <div className="row-actions">
         <strong>{title}</strong>
         <span className="muted">
