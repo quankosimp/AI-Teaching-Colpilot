@@ -10,6 +10,7 @@
 
 - Dedicated UI worker60cbc5dd launched on the existing separate UI worktree to finish classroom/lobby/tools/review presentation and 360px/light/dark/keyboard checks against exact G2 source1955fca. Product owns container wiring; UI edits remain restricted to presentation/CSS/ui.tsx. Current concurrent workers after re-audit: Product and QA; UI is awaiting the updated JSX source for final validation and independent reviewer is idle after reporting.
 - UI da85a0b plus contrast follow-up917a664 now has reported three-context browser coverage of core room/upload/review flows, responsive screenshots and no document overflow in admitted states. Supervisor viewed representative images and routed labels/loading/empty/localization and layout-hook gaps to Product. Negative invites and modal focus remain untested. Offline timeout was a test-version message mismatch (1955 target vs80 counter expectation), pending actual retest on matching final source. UI remains unaccepted/unintegrated. Evidence: evidence/ui-interim-browser-audit.json.
+- Product d9c1602 adds labels/loading/status translations and stable room layout hooks; UI234093f applies its CSS to those hooks. UI worker reran the newer Product browser harness on3131: offline/replay and teacher/two-student upload/review flow passed, resolving the earlier selector mismatch. Board now precedes review. Final current-source viewport/theme/negative-invite/keyboard checks remain in progress; UI still not accepted.
 
 ### Earlier execution records
 
