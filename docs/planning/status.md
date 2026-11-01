@@ -2,6 +2,7 @@
 
 ## Current
 
+- Independent static review of published backendf6a40bc found original historical-duplicate/manual-observation/annotation-scoping fixes addressed at code level, but still blocks on tool override semantics: locked checks and student capabilities can let membertrue override sessionfalse, unlike the initial guard. Backend writer received CG2-01 fix and actual HTTP/race regression requirements. Evidence: evidence/g2-independent-review-f6a40bc.md. No G2 acceptance.
 - User requested repository checkpoint publication: backendf6a40bc and frontendWIP2555198 are committed; UI f55ef71, QA1501d80 and Ops29f97ca preserved. Supervisor independently passed backend14 focused tests/server types and frontend typecheck/build. All remain separate from finalG2 acceptance. Publication report: checkpoint-20261101.md.
 
 - Accepted local gates: G0 contract v1 and G1-local. Provider-real and public HTTPS gates remain blocked on credentials/target.
