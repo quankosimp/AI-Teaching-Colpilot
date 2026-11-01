@@ -972,16 +972,16 @@
       "parent_task": "PRODUCT-12",
       "executor": "317620c0-a51f-430f-a95a-54eec19c5287",
       "title": "Isolated local Docker application packaging",
-      "status": "running",
+      "status": "done",
       "srs_ids": [],
       "gate": "G1/G5-local",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Reproducible full local application stack, localhost-only published ports/private persistence and real gateway/upload checks after primary PRODUCT bind/public-signer hooks. No external-provider acceptance.",
-      "commit": "1f6ba6f34dc116f6e2de1a60d9bf6e6272a586b4",
+      "commit": "583784d851f849aa433e0fdb43208eca58afa9be",
       "evidence": [
-        "docs/planning/evidence/docker-integrated-1f6ba6f.json",
+        "docs/planning/evidence/docker-accepted-583784d.json",
         "docs/planning/evidence/docker-review-c681776.md"
       ]
     }
@@ -1007,7 +1007,8 @@
       "agentId": "317620c0-a51f-430f-a95a-54eec19c5287",
       "provider": "codex-alt/gpt-6.1-terra",
       "task": "PRODUCT-12-A",
-      "scope": "Same preserved operations worktree and exclusive Docker/deploy files; previous worker output ended in provider filter error after clean commit c681776."
+      "scope": "Same preserved operations worktree and exclusive Docker/deploy files; previous worker output ended in provider filter error after clean commit c681776.",
+      "last_event": "PRODUCT-12-A accepted locally at583784d after independent review and supervisor runtime checks; executor idle, parent PRODUCT-12 operations still incomplete."
     }
   }
 }

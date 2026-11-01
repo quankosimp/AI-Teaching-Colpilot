@@ -3,9 +3,9 @@
 ## Current
 
 - Accepted local gates: G0 contract v1 and G1-local. Provider-real and public HTTPS gates remain blocked on credentials/target.
-- Root source now includes Docker packaging through 1f6ba6f. Supervisor verified 41 tests passed / 0 failed / 6 prerequisite-skipped against isolated Docker, doctor positive exit0/unreachable exit1, real signed PNG upload/download and same-object permissions. Independent audit of final packaging c681776 still found three items: private policy init must gate API startup, exact container health/presence checks, and network-safe denied-origin probe. Ops recovery317620c0 is fixing them. Evidence: evidence/docker-integrated-1f6ba6f.json and evidence/docker-review-c681776.md. Packaging gate remains open.
+- PRODUCT-12-A local Docker packaging accepted at583784d after independent code remediation review of29f97ca and supervisor startup/runtime/failure checks. Doctor passes actual file/permission flow and rejects unavailable storage; private init gates API and API health gates gateway. Scratch probe was safely cleaned. Evidence: evidence/docker-accepted-583784d.json. Parent operations/final release remain open.
 - G2 Product source advanced to1955fca after initial94380a7, with upload/review UI and reported controlled transaction-race tests. Independent QA is validating it in its own worktree; Product80137a9b is completing remaining source-grade/relabel/annotation race and browser coverage. No G2 gate acceptance or root G2 merge yet.
-- Preferred Review providers are quota-blocked (Gemini34h, Opus155h); independent Codex reviewer865d2663 completed the Docker audit. Product/Ops code writers remain separate from reviewer. At most three workers execute concurrently.
+- Preferred Review providers are quota-blocked (Gemini34h, Opus155h); independent Codex reviewer865d2663 completed Docker remediation audit and is reviewing G2. Product/Ops code writers remain separate from reviewer. At most three workers execute concurrently.
 
 ### Earlier execution records
 

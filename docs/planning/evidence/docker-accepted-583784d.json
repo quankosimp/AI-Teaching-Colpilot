@@ -1,0 +1,63 @@
+{
+  "scope": "PRODUCT-12-A local Docker packaging only",
+  "integratedCommit": "583784d851f849aa433e0fdb43208eca58afa9be",
+  "sourceCandidate": "29f97ca3c670635500fd2a042dc365e95a6c813a",
+  "contractVersion": "v1",
+  "environment": "Local-Docker",
+  "runtime": "Node22.23.4",
+  "review": {
+    "agent": "865d2663-05ee-4be1-8f8a-f295467c7006",
+    "independentFromWriter": true,
+    "verdict": "PASS code remediation MF-OPS07/08/09; prior final-candidate review identified only these remaining findings",
+    "limits": "Reviewer reran committed assertions and inspected scratch API created state; live doctor and failed-init invocation are separately attributed below"
+  },
+  "checks": [
+    {
+      "name": "Startup config applies private policy before API and API health before gateway",
+      "status": "passed",
+      "evidence": "Supervisor docker compose up -d --wait returned exit0; minio-init exited successfully, required services healthy"
+    },
+    {
+      "name": "Doctor health/presence/network-error fixture assertions",
+      "status": "passed",
+      "reportedBy": "supervisor",
+      "testCommand": "node --test deploy/tests/docker-doctor-checks.test.mjs",
+      "passedTestFiles": 1,
+      "failed": 0
+    },
+    {
+      "name": "Actual gateway/private file doctor after final fixes",
+      "status": "passed",
+      "reportedBy": "supervisor",
+      "doctorExit": 0,
+      "artifact": "docker-doctor-583784d-positive.txt"
+    },
+    {
+      "name": "Actual unavailable-storage negative doctor",
+      "status": "passed",
+      "reportedBy": "supervisor",
+      "doctorExit": 1,
+      "artifact": "docker-doctor-583784d-negative.txt"
+    },
+    {
+      "name": "Initialization failure prevents API start",
+      "status": "passed",
+      "invocationReportedBy": "Ops",
+      "detail": "Isolated scratch init exited42, compose up exited1; supervisor independently inspected init exited42 and API created with no mounts"
+    },
+    {
+      "name": "Scratch cleanup",
+      "status": "passed",
+      "detail": "Worker cleanup attempt rejected for rm -f pattern; supervisor verified exact project labels/no mounts and safely ran Compose down without volume deletion; no probe containers remain"
+    }
+  ],
+  "previousFunctionalRegressionEvidence": "docker-integrated-1f6ba6f.json (41 passed/0 failed/6 skipped on earlier exact source; not rerun as a new test count on this commit)",
+  "supervisorDecision": "accepted local packaging subtask",
+  "notAccepted": [
+    "G2 classroom",
+    "G3/G4 provider integration",
+    "G5 final demo",
+    "Global 60-P0 release"
+  ],
+  "externalProviders": "blocked expected: no VPS/domain or real credentials"
+}

@@ -30,6 +30,12 @@
     "G5": {
       "state": "planned",
       "reason": "Requires all mandatory implemented tests/real-provider evidence and release operations; 60/60 global P0 acceptance not reached"
+    },
+    "PRODUCT-12-A-local": {
+      "state": "accepted",
+      "commit": "583784d851f849aa433e0fdb43208eca58afa9be",
+      "evidence": "evidence/docker-accepted-583784d.json",
+      "scope": "Isolated local Docker packaging/runtime; excludes G2 and real-provider/final-release acceptance"
     }
   }
 }

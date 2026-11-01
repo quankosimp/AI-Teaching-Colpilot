@@ -1,0 +1,74 @@
+
+================================================================
+Teaching Copilot — Docker Doctor Diagnostic & Verification Suite
+Gateway Target : http://127.0.0.1:4170
+MinIO Target   : http://127.0.0.1:59002
+Compose File   : compose.docker.yml
+Env File       : deploy/local.env.example
+================================================================
+
+1. Packaging Files Integrity
+       • Dockerfile: present
+       • .dockerignore: present
+       • compose.docker.yml: present
+       • deploy/local.env.example: present
+       • deploy/caddy/Caddyfile: present
+       • deploy/caddy/Caddyfile.production.example: present
+       • deploy/entrypoint.sh: present
+       • deploy/scripts/init-minio.sh: present
+       • deploy/README.md: present
+[PASS] All required packaging files exist
+
+2. Docker Build Context Security (.dockerignore)
+[PASS] .dockerignore patterns - Worktree .git file, secrets, recursive nested envs, build artifacts and docs excluded
+
+3. Rendered Docker Compose JSON Inspection (Safe argv, --env-file)
+[PASS] Rendered compose JSON parsed successfully via execFileSync
+[PASS] Project name isolation - Exact match: 'teaching-copilot-local'
+       • Service 'gateway': 127.0.0.1:4170 -> 4170 (safe loopback)
+       • Service 'minio': 127.0.0.1:59002 -> 9000 (safe loopback)
+       • Service 'minio': 127.0.0.1:59003 -> 9001 (safe loopback)
+       • Service 'postgres': 127.0.0.1:55433 -> 5432 (safe loopback)
+[PASS] All published ports (4) strictly bound to 127.0.0.1 (zero 0.0.0.0 exposure)
+[PASS] Persistent volumes naming isolation - teaching-copilot-local-pg-data, teaching-copilot-local-minio-data
+
+4. Running Container Instances
+[PASS] Required container postgres - state=running, health=healthy, count=1
+[PASS] Required container minio - state=running, health=healthy, count=1
+[PASS] Required container api - state=running, health=healthy, count=1
+[PASS] Required container gateway - state=running, health=healthy, count=1
+
+5. Actual MinIO OPTIONS CORS Policy Verification
+[PASS] Valid local origin CORS preflight - HTTP 204, Access-Control-Allow-Origin: http://127.0.0.1:4170, Methods: PUT
+[PASS] External non-local origin CORS restriction - Non-local origin 'https://external-client.example' was not granted CORS access (allow-origin header: none)
+
+6. Functional HTTP Assertions via Gateway (http://127.0.0.1:4170)
+[PASS] Gateway Static SPA Delivery - HTTP 200 OK, index.html served (1522 bytes)
+[PASS] Gateway -> API /health/live proxy - HTTP 200 OK (status: ok)
+[PASS] API Dependency Health (/api/v1/health) - PostgreSQL: ready, MinIO storage: ready, Mode status: degraded (valid unconfigured providers in local_mock)
+
+7. Teacher-A Flow: Auth -> Presign -> S3 PUT -> Finalize -> Read URL -> Content Match
+[PASS] Mock Teacher Auth (teacher-a) - HTTP 200 OK, valid access token received (token value redacted)
+[PASS] Upload Intent Creation - HTTP 201 Created, uploadId: c37cfd09-640a-49a9-a46f-3e3c0306a27a
+[PASS] Presigned URL Browser Host Accessibility - URL correctly targets host loopback: 127.0.0.1:59002 (http://127.0.0.1:59002/copilot-private/20fe6348-33e2-4f7f-9813-7135da2ad9e6/5f0d6ca1-4049-4e8e-9817-b10e5b69b8e5?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=%5BREDACTED%5D&X-Amz-Date=20261101T025513Z&X-Amz-Expires=600&X-Amz-SignedHeaders=host&X-Amz-Signature=%5BREDACTED%5D)
+[PASS] Direct Browser S3 PUT Upload - HTTP 200 OK, payload accepted by MinIO
+[PASS] Material Finalization - HTTP 201 Created, Material ID: 01573f40-7665-4e0b-b735-723d24253b00
+[PASS] Teacher Material Ownership List - HTTP 200 OK, created material 01573f40-7665-4e0b-b735-723d24253b00 present in teacher-a list
+[PASS] Teacher-A /materials/:id/read-url - HTTP 200 OK, signed readUrl received (http://127.0.0.1:59002/copilot-private/20fe6348-33e2-4f7f-9813-7135da2ad9e6/verified/a2b5a946-250b-4d07-84cb-64c1c644d748?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=%5BREDACTED%5D&X-Amz-Date=20261101T025513Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=%5BREDACTED%5D)
+[PASS] Teacher-A S3 Download Byte Verification - HTTP 200 OK, downloaded 69 bytes matching uploaded test PDF exactly!
+
+8. Cross-Owner Tenant Privacy Verification (Teacher-B)
+[PASS] Mock Teacher Auth (teacher-b) - HTTP 200 OK, valid access token received (token value redacted)
+[PASS] Cross-Tenant Material List Privacy - Teacher-B cannot see Teacher-A material 01573f40-7665-4e0b-b735-723d24253b00
+[PASS] Cross-Tenant /materials/:id/read-url Access Denial - Teacher-B request strictly rejected with HTTP 403 Forbidden (PERMISSION_DENIED)
+
+9. Direct MinIO Private Bucket Anonymous Access Rejection Probe
+[PASS] Actual Verified File Anonymous Access Rejection - Direct unauthenticated S3 GET to verified file rejected with HTTP 403 (bucket is strictly private; 404 rejected)
+
+================================================================
+Doctor Diagnostic Summary:
+================================================================
+
+>>> ALL PACKAGING, HEALTH & FUNCTIONAL ASSERTIONS PASSED! <<<
+Exit Code: 0
+
