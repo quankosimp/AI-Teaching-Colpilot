@@ -9,6 +9,7 @@
 - Preferred Review providers are quota-blocked (Gemini34h, Opus155h); independent Codex reviewer865d2663 completed Docker remediation audit and is reviewing G2. Product/Ops code writers remain separate from reviewer. At most three workers execute concurrently.
 
 - Dedicated UI worker60cbc5dd launched on the existing separate UI worktree to finish classroom/lobby/tools/review presentation and 360px/light/dark/keyboard checks against exact G2 source1955fca. Product owns container wiring; UI edits remain restricted to presentation/CSS/ui.tsx. Current concurrent workers: Product, QA and UI; independent reviewer is idle after reporting.
+- UI candidate da85a0b adds scoped classroom CSS and passes Node22 frontend lint/build, but has no browser/screenshots/integration proof yet. Supervisor directed the UI worker to continue its own isolated API/database/browser checks and report precise JSX/ARIA integration gaps. Candidate is not integrated or accepted.
 
 ### Earlier execution records
 
