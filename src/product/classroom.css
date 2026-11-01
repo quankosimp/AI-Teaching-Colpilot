@@ -2101,3 +2101,15 @@ main.card:has(> [data-testid="online-board"]) [role="alert"] { padding: 12px; bo
 }
 [data-theme="dark"] main.card:has(> [data-testid="online-board"]) [role="alert"],
 body.dark main.card:has(> [data-testid="online-board"]) [role="alert"] { color: #ffb8c5; background: #4b2531; }
+main.card:has(> [data-testid="online-board"]) .button:disabled {
+  opacity: 1;
+  color: #596579;
+  background: #e9ebf1;
+  border-color: #cbd1dd;
+}
+[data-theme="dark"] main.card:has(> [data-testid="online-board"]) .button:disabled,
+body.dark main.card:has(> [data-testid="online-board"]) .button:disabled {
+  color: #b9c2d3;
+  background: #30394c;
+  border-color: #566176;
+}
