@@ -55,7 +55,7 @@ async function ownedSession(id: string, actor: TeacherActor, res: Response) {
   return item;
 }
 
-async function resolveCurrentSourceVersion(
+export async function resolveCurrentSourceVersion(
   sourceType: string,
   sourceId: string | null,
   sessionId: string,

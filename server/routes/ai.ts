@@ -1,7 +1,6 @@
 import { Router } from "express";
-import { GoogleGenAI } from "@google/genai";
-import { filterEligibleApprovedClaims } from "../eligibleClaims.js";
 import { z } from "zod";
+import { filterEligibleApprovedClaims } from "../eligibleClaims.js";
 import {
   asyncRoute,
   db,
@@ -9,42 +8,941 @@ import {
   requireTeacher,
   type AppConfig,
 } from "../context.js";
+import { lockSession, SessionConflict } from "../sessionLock.js";
+import { createOnce, lookupReplay } from "../idempotency.js";
+import { appendOutboxEvent, triggerOutboxPublish } from "../realtime.js";
+import { resolveCurrentSourceVersion } from "./review.js";
+import {
+  getAIAdapter,
+  getCircuitStatus,
+  sanitizeContext,
+  isAIEnabled,
+} from "../ai/index.js";
+import {
+  AIRequestInput,
+  AIStatusUpdate,
+  AIClaimsDraftInput,
+} from "../../contracts/ai.js";
 
-// Remove URL, bearer and token-like substrings before constructing provider context.
-function minimize(value: string, names: string[] = []) {
-  let result = value;
-  for (const name of names) {
-    if (name.trim())
-      result = result.replace(
-        new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu"),
-        "[học sinh]",
-      );
-  }
-  return result
-    .replace(/https?:\/\/\S+/gi, "[link removed]")
-    .replace(/\bBearer\s+\S+/gi, "[credential removed]")
-    .replace(/\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/g, "[email removed]")
-    .replace(/(?<!\w)(?:\+?\d[\d .()-]{8,}\d)(?!\w)/g, "[phone removed]")
-    .replace(/\b[A-Za-z0-9_=-]{32,}\b/g, "[token removed]")
-    .slice(0, 1200);
+const safeId = z.string().uuid();
+
+// In-flight request coordinator to serialize duplicate concurrent calls with identical Idempotency-Key
+const inFlightRequests = new Map<string, Promise<void>>();
+
+function createInFlightBarrier(lockKey: string): { release: () => void } {
+  let releaseBarrier!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    releaseBarrier = resolve;
+  });
+  inFlightRequests.set(lockKey, promise);
+  return {
+    release: () => {
+      inFlightRequests.delete(lockKey);
+      releaseBarrier();
+    },
+  };
 }
+
 export function aiRouter(config: AppConfig) {
   const r = Router();
   r.use(requireTeacher(config));
+
+  // 1. In-Session Pedagogical Teaching Assistance (POST /sessions/:id/ai/suggestions - AI 001, AI 006, AI 007)
+  r.post(
+    "/sessions/:id/ai/suggestions",
+    asyncRoute(async (req, res) => {
+      if (!isAIEnabled()) {
+        return fail(res, 503, "AI_UNAVAILABLE", "AI chưa được bật");
+      }
+      const adapter = getAIAdapter();
+      if (!adapter) {
+        return fail(res, 503, "AI_UNAVAILABLE", "Dịch vụ AI không khả dụng trong môi trường hiện tại");
+      }
+
+      if (!safeId.safeParse(req.params.id).success)
+        return fail(res, 400, "VALIDATION_ERROR", "ID buổi học không hợp lệ");
+
+      const parsed = AIRequestInput.safeParse(req.body);
+      if (!parsed.success)
+        return fail(res, 400, "VALIDATION_ERROR", "Dữ liệu yêu cầu gợi ý không hợp lệ");
+
+      const session = await db.session.findUnique({
+        where: { id: req.params.id },
+      });
+      if (!session)
+        return fail(res, 404, "NOT_FOUND", "Không tìm thấy buổi học");
+      if (session.teacherId !== res.locals.actor.id)
+        return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập buổi học");
+      if (!["draft", "scheduled", "live"].includes(session.status))
+        return fail(
+          res,
+          409,
+          "SESSION_STATE_INVALID",
+          "Chỉ có thể yêu cầu gợi ý trong buổi học đang diễn ra hoặc chuẩn bị",
+        );
+
+      const member = await db.roomMember.findUnique({
+        where: {
+          sessionId_studentId: {
+            sessionId: session.id,
+            studentId: parsed.data.studentId,
+          },
+        },
+        include: { studentIdRef: true },
+      });
+      if (!member)
+        return fail(res, 403, "PERMISSION_DENIED", "Học sinh không thuộc buổi học");
+      if (!member.consent)
+        return fail(
+          res,
+          403,
+          "PERMISSION_DENIED",
+          "Học sinh chưa có sự đồng ý (consent) để sử dụng hỗ trợ AI",
+        );
+
+      const activity = await db.activity.findFirst({
+        where: {
+          id: parsed.data.activityId,
+          sessionId: session.id,
+        },
+      });
+      if (!activity)
+        return fail(res, 400, "VALIDATION_ERROR", "Hoạt động không thuộc buổi học này");
+
+      // Check adapter circuit breaker
+      const circuit = getCircuitStatus();
+      if (circuit.circuitOpen) {
+        return fail(
+          res,
+          503,
+          "AI_UNAVAILABLE",
+          "Dịch vụ AI tạm gián đoạn do lỗi liên tiếp; vui lòng thử lại sau giây lát hoặc soạn thủ công",
+        );
+      }
+
+      const routeKey = `/sessions/${session.id}/ai/suggestions`;
+
+      const formatSuggestion = (item: any) => ({
+        id: item.id,
+        sessionId: item.sessionId,
+        studentId: item.studentId,
+        activityId: item.activityId,
+        kind: item.kind,
+        prompt: item.prompt,
+        responseText: item.responseText,
+        editedText: item.editedText,
+        evidenceId: item.evidenceId,
+        provider: item.provider,
+        model: item.model,
+        modelVersion: item.modelVersion,
+        status: item.status,
+        actorId: item.actorId,
+        createdAt: item.createdAt.toISOString(),
+      });
+
+      // Preflight replay check: avoid calling provider if key already processed
+      const prior = await lookupReplay(req, res, routeKey);
+      if (prior === null) return;
+      if (prior) {
+        const existing = await db.aIRequest.findUniqueOrThrow({
+          where: { id: prior.resourceId },
+        });
+        return res.status(200).json({
+          suggestion: formatSuggestion(existing),
+        });
+      }
+
+      const idempotencyKey = req.get("Idempotency-Key") || "";
+      const lockKey = `${res.locals.actor.id}:${routeKey}:${idempotencyKey}`;
+
+      if (idempotencyKey) {
+        const inFlight = inFlightRequests.get(lockKey);
+        if (inFlight) {
+          // Concurrent request in flight: await settlement and return cached replay
+          await inFlight.catch(() => {});
+          const postReplay = await lookupReplay(req, res, routeKey);
+          if (postReplay === null) return;
+          if (postReplay) {
+            const existing = await db.aIRequest.findUniqueOrThrow({
+              where: { id: postReplay.resourceId },
+            });
+            return res.status(200).json({
+              suggestion: formatSuggestion(existing),
+            });
+          }
+        }
+      }
+
+      const barrier = idempotencyKey ? createInFlightBarrier(lockKey) : null;
+      try {
+        // Query ALL student personal names in workspace for context anonymization (target + all peers)
+        const allStudents = await db.student.findMany({
+          where: { teacherId: res.locals.actor.id },
+          select: { name: true },
+        });
+        const studentNames = allStudents.map((s) => s.name.trim()).filter((n) => n.length > 1);
+
+        // Minimized prior approved claims using reused G1 eligibility and consent rules
+        const rawClaims = await db.claim.findMany({
+          where: {
+            studentId: parsed.data.studentId,
+            status: "approved",
+            sessionIdRef: {
+              teacherId: res.locals.actor.id,
+              RoomMember_sessionId_items: {
+                some: { studentId: parsed.data.studentId, consent: true },
+              },
+            },
+          },
+          orderBy: { reviewedAt: "desc" },
+          select: {
+            id: true,
+            revision: true,
+            text: true,
+            evidenceIds: true,
+            sessionId: true,
+            studentId: true,
+            status: true,
+          },
+        });
+        const eligiblePrior = (await filterEligibleApprovedClaims(rawClaims, res.locals.actor.id)).slice(0, 3);
+
+        // Sanitize every field at provider boundary
+        const cleanPrompt = sanitizeContext(parsed.data.prompt, studentNames);
+        const cleanActivityTitle = sanitizeContext(activity.title, studentNames);
+        const cleanActivityDesc = sanitizeContext(activity.description || "", studentNames);
+        const cleanSubject = sanitizeContext(member.studentIdRef.subject || "", studentNames);
+        const cleanGrade = sanitizeContext(member.studentIdRef.grade || "", studentNames);
+        const cleanGoal = sanitizeContext(member.studentIdRef.goal || "", studentNames);
+        const cleanPriorClaims = eligiblePrior.map((c) => sanitizeContext(c.text, studentNames));
+
+        // Dispatch to AI adapter OUTSIDE transaction lock (never hold lock while awaiting model)
+        let aiResult;
+        try {
+          aiResult = await adapter.generateTeachingSuggestion({
+            mode: parsed.data.kind,
+            prompt: cleanPrompt,
+            student: {
+              id: member.studentId,
+              subject: cleanSubject,
+              grade: cleanGrade,
+              goal: cleanGoal,
+            },
+            activity: {
+              id: activity.id,
+              title: cleanActivityTitle,
+              description: cleanActivityDesc,
+              type: activity.type,
+            },
+            priorApprovedClaims: cleanPriorClaims,
+            studentNames,
+          });
+        } catch (err: unknown) {
+          const errorMsg =
+            err instanceof Error ? err.message : "Dịch vụ AI không khả dụng";
+          return fail(
+            res,
+            503,
+            "AI_UNAVAILABLE",
+            errorMsg.startsWith("AI_")
+              ? errorMsg
+              : "Gemini tạm không khả dụng; giáo viên có thể tiếp tục ghi chú thủ công",
+          );
+        }
+
+        // Revalidate and persist UNDER SESSION LOCK
+        const result = await createOnce(req, res, routeKey, async (tx) => {
+          await lockSession(tx, session.id);
+
+          const currentSession = await tx.session.findUniqueOrThrow({
+            where: { id: session.id },
+          });
+          if (!["draft", "scheduled", "live"].includes(currentSession.status))
+            throw new SessionConflict("SESSION_STATE_INVALID", "Trạng thái buổi học đã thay đổi");
+
+          const currentMember = await tx.roomMember.findUnique({
+            where: {
+              sessionId_studentId: {
+                sessionId: session.id,
+                studentId: parsed.data.studentId,
+              },
+            },
+          });
+          if (!currentMember || !currentMember.consent)
+            throw new SessionConflict("PERMISSION_DENIED", "Học sinh không còn quyền hoặc thiếu consent");
+
+          // Persist actual pedagogical kind and full sanitized instruction snapshot for audit
+          const created = await tx.aIRequest.create({
+            data: {
+              sessionId: session.id,
+              studentId: parsed.data.studentId,
+              activityId: activity.id,
+              kind: parsed.data.kind,
+              prompt: aiResult.promptUsed,
+              promptVersion: aiResult.promptVersion,
+              responseText: aiResult.text,
+              contextSummary: aiResult.contextSummary,
+              provider: aiResult.provider,
+              model: aiResult.model,
+              modelVersion: aiResult.modelVersion,
+              status: "ready",
+              actorId: res.locals.actor.id,
+            },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              workspaceId: res.locals.actor.workspaceId,
+              actorId: res.locals.actor.id,
+              actorRole: "teacher",
+              action: "ai.suggestion_requested",
+              targetType: "ai_request",
+              targetId: created.id,
+              sessionId: session.id,
+              requestId: res.locals.requestId,
+              metadata: {
+                mode: parsed.data.kind,
+                activityId: activity.id,
+                studentId: parsed.data.studentId,
+                provider: aiResult.provider,
+                model: aiResult.model,
+              },
+            },
+          });
+
+          return created.id;
+        });
+
+        if (!result) return;
+        const item = await db.aIRequest.findUniqueOrThrow({
+          where: { id: result.resourceId },
+        });
+
+        return res.status(201).json({
+          suggestion: formatSuggestion(item),
+        });
+      } finally {
+        barrier?.release();
+      }
+    }),
+  );
+
+  // 2. Suggestion Lifecycle Transition & Optional Evidence Creation (PATCH /ai-requests/:id - AI 002, AI 003)
+  r.patch(
+    "/ai-requests/:id",
+    asyncRoute(async (req, res) => {
+      if (!safeId.safeParse(req.params.id).success)
+        return fail(res, 400, "VALIDATION_ERROR", "ID gợi ý không hợp lệ");
+
+      const parsed = AIStatusUpdate.safeParse(req.body);
+      if (!parsed.success)
+        return fail(res, 400, "VALIDATION_ERROR", "Dữ liệu cập nhật gợi ý không hợp lệ");
+
+      const item = await db.aIRequest.findFirst({
+        where: {
+          id: req.params.id,
+          sessionIdRef: { teacherId: res.locals.actor.id },
+        },
+      });
+      if (!item)
+        return fail(res, 404, "NOT_FOUND", "Không tìm thấy gợi ý AI");
+      if (item.status !== "ready")
+        return fail(res, 409, "VERSION_CONFLICT", "Gợi ý đã được xử lý");
+
+      const editedText = parsed.data.editedText?.trim() || null;
+      const saveAsEvidence = parsed.data.saveAsEvidence === true && parsed.data.status === "used";
+
+      const updated = await db.$transaction(async (tx) => {
+        await lockSession(tx, item.sessionId);
+
+        const freshItem = await tx.aIRequest.findUniqueOrThrow({
+          where: { id: item.id },
+        });
+        if (freshItem.status !== "ready")
+          throw new SessionConflict("VERSION_CONFLICT", "Gợi ý đã được xử lý bởi thao tác khác");
+
+        const currentSession = await tx.session.findUniqueOrThrow({
+          where: { id: freshItem.sessionId },
+        });
+
+        let evidenceId: string | null = null;
+        let createdEvidence: unknown = null;
+
+        // AI 003: Save used suggestion as Evidence of kind GoiYGiangDay with isObservation: false
+        if (saveAsEvidence) {
+          // If session was reviewed, adding new evidence requires reopening to ended
+          if (currentSession.status === "reviewed") {
+            const reopened = await tx.session.update({
+              where: { id: currentSession.id },
+              data: { status: "ended", version: { increment: 1 } },
+            });
+            await appendOutboxEvent(tx, {
+              sessionId: currentSession.id,
+              type: "review.reopened",
+              label: "Mở lại duyệt do thêm minh chứng gợi ý giảng dạy từ AI",
+              actorId: res.locals.actor.id,
+              visibility: { scope: "teacher" },
+              resourceId: currentSession.id,
+              version: reopened.version,
+            });
+            await tx.auditLog.create({
+              data: {
+                workspaceId: res.locals.actor.workspaceId,
+                actorId: res.locals.actor.id,
+                actorRole: "teacher",
+                action: "review.reopened",
+                targetType: "session",
+                targetId: currentSession.id,
+                sessionId: currentSession.id,
+                requestId: res.locals.requestId,
+                metadata: {
+                  previousStatus: "reviewed",
+                  nextStatus: "ended",
+                  reasonCode: "evidence_created_from_ai",
+                },
+              },
+            });
+          }
+
+          const detail = editedText || freshItem.responseText;
+          const ev = await tx.evidence.create({
+            data: {
+              sessionId: freshItem.sessionId,
+              studentId: freshItem.studentId,
+              activityId: freshItem.activityId,
+              kind: "GoiYGiangDay",
+              title: `Gợi ý giảng dạy (${freshItem.promptVersion || "AI"})`,
+              detail: detail.slice(0, 4000),
+              support: "ChuaRo",
+              sourceType: "ai_suggestion",
+              sourceId: freshItem.id,
+              sourceVersion: 1,
+              isObservation: false, // CRITICAL: AI teaching aid is not a student competence observation
+              isAuto: false,
+              status: "active",
+              version: 1,
+              createdBy: res.locals.actor.id,
+            },
+          });
+          evidenceId = ev.id;
+          createdEvidence = ev;
+
+          await appendOutboxEvent(tx, {
+            sessionId: freshItem.sessionId,
+            type: "evidence.created",
+            label: "Gợi ý giảng dạy đã lưu làm minh chứng",
+            actorId: res.locals.actor.id,
+            visibility: { scope: "teacher" },
+            resourceId: ev.id,
+          });
+
+          await tx.auditLog.create({
+            data: {
+              workspaceId: res.locals.actor.workspaceId,
+              actorId: res.locals.actor.id,
+              actorRole: "teacher",
+              action: "evidence.created_from_ai",
+              targetType: "evidence",
+              targetId: ev.id,
+              sessionId: freshItem.sessionId,
+              requestId: res.locals.requestId,
+              metadata: {
+                aiRequestId: freshItem.id,
+                kind: "GoiYGiangDay",
+                isObservation: false,
+                model: freshItem.model,
+                modelVersion: freshItem.modelVersion,
+              },
+            },
+          });
+        }
+
+        const next = await tx.aIRequest.update({
+          where: { id: freshItem.id },
+          data: {
+            status: parsed.data.status,
+            editedText,
+            evidenceId,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            workspaceId: res.locals.actor.workspaceId,
+            actorId: res.locals.actor.id,
+            actorRole: "teacher",
+            action: "ai.status_updated",
+            targetType: "ai_request",
+            targetId: freshItem.id,
+            sessionId: freshItem.sessionId,
+            requestId: res.locals.requestId,
+            metadata: {
+              previousStatus: "ready",
+              nextStatus: parsed.data.status,
+              edited: Boolean(editedText),
+              saveAsEvidence,
+              evidenceId,
+            },
+          },
+        });
+
+        return { next, createdEvidence, sessionId: freshItem.sessionId };
+      });
+
+      triggerOutboxPublish(updated.sessionId);
+
+      return res.json({
+        id: updated.next.id,
+        status: updated.next.status,
+        editedText: updated.next.editedText,
+        evidenceId: updated.next.evidenceId,
+        evidence: updated.createdEvidence,
+      });
+    }),
+  );
+
+  // 3. Post-Session Sourced Pending Claims Generation (POST /sessions/:id/ai/claims-draft - AI 004)
+  r.post(
+    "/sessions/:id/ai/claims-draft",
+    asyncRoute(async (req, res) => {
+      if (!isAIEnabled()) {
+        return fail(res, 503, "AI_UNAVAILABLE", "AI chưa được bật");
+      }
+      const adapter = getAIAdapter();
+      if (!adapter) {
+        return fail(res, 503, "AI_UNAVAILABLE", "Dịch vụ AI không khả dụng trong môi trường hiện tại");
+      }
+
+      if (!safeId.safeParse(req.params.id).success)
+        return fail(res, 400, "VALIDATION_ERROR", "ID buổi học không hợp lệ");
+
+      const session = await db.session.findUnique({
+        where: { id: req.params.id },
+      });
+      if (!session)
+        return fail(res, 404, "NOT_FOUND", "Không tìm thấy buổi học");
+      if (session.teacherId !== res.locals.actor.id)
+        return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập buổi học");
+      if (!["ended", "reviewed"].includes(session.status))
+        return fail(
+          res,
+          409,
+          "SESSION_STATE_INVALID",
+          "Chỉ có thể dự thảo nhận định sau khi buổi học đã kết thúc",
+        );
+
+      const parsed = AIClaimsDraftInput.safeParse(req.body ?? {});
+      if (!parsed.success)
+        return fail(res, 400, "VALIDATION_ERROR", "Dữ liệu yêu cầu dự thảo không hợp lệ");
+
+      const targetStudentId = parsed.data.studentId ?? session.primaryStudentId;
+
+      const member = await db.roomMember.findUnique({
+        where: {
+          sessionId_studentId: {
+            sessionId: session.id,
+            studentId: targetStudentId,
+          },
+        },
+        include: { studentIdRef: true },
+      });
+      if (!member)
+        return fail(res, 403, "PERMISSION_DENIED", "Học sinh không thuộc buổi học");
+      if (!member.consent)
+        return fail(res, 403, "PERMISSION_DENIED", "Học sinh chưa có sự đồng ý (consent) để sử dụng AI");
+
+      const routeKey = `/sessions/${session.id}/ai/claims-draft`;
+
+      // Preflight replay check
+      const prior = await lookupReplay(req, res, routeKey);
+      if (prior === null) return;
+      if (prior) {
+        const ids = prior.resourceId ? prior.resourceId.split(",").filter(Boolean) : [];
+        const claims = ids.length
+          ? await db.claim.findMany({ where: { id: { in: ids } } })
+          : [];
+        return res.status(200).json({
+          claims: claims.map((c) => ({
+            id: c.id,
+            studentId: c.studentId,
+            text: c.text,
+            evidenceIds: c.evidenceIds,
+            status: c.status,
+            revision: c.revision,
+          })),
+          summary: "Nhận định dự thảo đã được tạo trước đó",
+        });
+      }
+
+      // Check circuit
+      const circuit = getCircuitStatus();
+      if (circuit.circuitOpen) {
+        return fail(
+          res,
+          503,
+          "AI_UNAVAILABLE",
+          "Dịch vụ AI tạm gián đoạn; vui lòng tạo nhận định thủ công từ minh chứng",
+        );
+      }
+
+      // Gather active observation evidences for the student (excluding teaching aids and AI suggestions)
+      const rawObservations = await db.evidence.findMany({
+        where: {
+          sessionId: session.id,
+          studentId: targetStudentId,
+          status: "active",
+          isObservation: true,
+          kind: { not: "GoiYGiangDay" },
+          sourceType: { not: "ai_suggestion" },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      // Filter out stale observations using current G2 source version resolution
+      const nonStaleObservations: typeof rawObservations = [];
+      for (const obs of rawObservations) {
+        const curVer = await resolveCurrentSourceVersion(
+          obs.sourceType,
+          obs.sourceId,
+          session.id,
+          db,
+          targetStudentId,
+        );
+        if (obs.sourceVersion !== null && curVer !== obs.sourceVersion) {
+          // Stale observation, ignore
+          continue;
+        }
+        nonStaleObservations.push(obs);
+      }
+
+      // 0-observation guard (SRS AI 004: if no source observations, do NOT fabricate competence claims)
+      if (nonStaleObservations.length === 0) {
+        return res.status(200).json({
+          claims: [],
+          summary: "Chưa có minh chứng quan sát thực tế để tạo nhận định năng lực",
+        });
+      }
+
+      // Snapshot pre-SDK observation versions for race detection
+      const preSnapshotObsMap = new Map(
+        nonStaleObservations.map((o) => [
+          o.id,
+          {
+            id: o.id,
+            version: o.version,
+            sourceVersion: o.sourceVersion,
+            sourceType: o.sourceType,
+            sourceId: o.sourceId,
+          },
+        ]),
+      );
+
+      const idempotencyKey = req.get("Idempotency-Key") || "";
+      const lockKey = `${res.locals.actor.id}:${routeKey}:${idempotencyKey}`;
+
+      if (idempotencyKey) {
+        const inFlight = inFlightRequests.get(lockKey);
+        if (inFlight) {
+          await inFlight.catch(() => {});
+          const postReplay = await lookupReplay(req, res, routeKey);
+          if (postReplay === null) return;
+          if (postReplay) {
+            const ids = postReplay.resourceId ? postReplay.resourceId.split(",").filter(Boolean) : [];
+            const claims = ids.length
+              ? await db.claim.findMany({ where: { id: { in: ids } } })
+              : [];
+            return res.status(200).json({
+              claims: claims.map((c) => ({
+                id: c.id,
+                studentId: c.studentId,
+                text: c.text,
+                evidenceIds: c.evidenceIds,
+                status: c.status,
+                revision: c.revision,
+              })),
+              summary: "Nhận định dự thảo đã được tạo trước đó",
+            });
+          }
+        }
+      }
+
+      const barrier = idempotencyKey ? createInFlightBarrier(lockKey) : null;
+      try {
+        // Query all student names in workspace for comprehensive context minimization
+        const allStudents = await db.student.findMany({
+          where: { teacherId: res.locals.actor.id },
+          select: { name: true },
+        });
+        const studentNames = allStudents.map((s) => s.name.trim()).filter((n) => n.length > 1);
+
+        const cleanSubject = sanitizeContext(member.studentIdRef.subject || "", studentNames);
+        const cleanGrade = sanitizeContext(member.studentIdRef.grade || "", studentNames);
+        const cleanGoal = sanitizeContext(member.studentIdRef.goal || "", studentNames);
+        const cleanExtraPrompt = sanitizeContext(parsed.data.prompt || "", studentNames);
+
+        // Dispatch to AI adapter OUTSIDE transaction lock
+        let aiDrafts;
+        try {
+          aiDrafts = await adapter.generateClaimDrafts({
+            student: {
+              id: member.studentId,
+              subject: cleanSubject,
+              grade: cleanGrade,
+              goal: cleanGoal,
+            },
+            observations: nonStaleObservations.map((o) => ({
+              id: o.id,
+              studentId: o.studentId,
+              title: sanitizeContext(o.title, studentNames),
+              detail: sanitizeContext(o.detail, studentNames),
+              support: o.support,
+              kind: o.kind,
+              sourceType: o.sourceType,
+              sourceVersion: o.sourceVersion,
+            })),
+            extraPrompt: cleanExtraPrompt,
+            studentNames,
+          });
+        } catch (err: unknown) {
+          const errorMsg =
+            err instanceof Error ? err.message : "Dịch vụ AI không khả dụng";
+          return fail(
+            res,
+            503,
+            "AI_UNAVAILABLE",
+            errorMsg.startsWith("AI_")
+              ? errorMsg
+              : "Gemini tạm không khả dụng; giáo viên có thể tạo nhận định thủ công",
+          );
+        }
+
+        // Revalidate and persist UNDER SESSION LOCK
+        const result = await createOnce(req, res, routeKey, async (tx) => {
+          await lockSession(tx, session.id);
+
+          const current = await tx.session.findUniqueOrThrow({
+            where: { id: session.id },
+          });
+          if (!["ended", "reviewed"].includes(current.status))
+            throw new SessionConflict(
+              "SESSION_STATE_INVALID",
+              "Trạng thái buổi học đã thay đổi trong khi chờ AI",
+            );
+
+          // Recheck member consent under session lock
+          const currentMember = await tx.roomMember.findUnique({
+            where: {
+              sessionId_studentId: {
+                sessionId: session.id,
+                studentId: targetStudentId,
+              },
+            },
+          });
+          if (!currentMember || !currentMember.consent) {
+            throw new SessionConflict(
+              "PERMISSION_DENIED",
+              "Học sinh đã thu hồi sự đồng ý sử dụng AI",
+            );
+          }
+
+          // Query live observation evidence in DB under lock to verify intactness
+          const liveObs = await tx.evidence.findMany({
+            where: {
+              sessionId: session.id,
+              studentId: targetStudentId,
+              status: "active",
+              isObservation: true,
+              kind: { not: "GoiYGiangDay" },
+              sourceType: { not: "ai_suggestion" },
+            },
+          });
+          const liveObsMap = new Map(liveObs.map((o) => [o.id, o]));
+
+          // Compare referenced observations against pre-SDK snapshot for any edit/delete/regrade race
+          for (const candidate of aiDrafts.claims) {
+            for (const refId of candidate.evidenceIds) {
+              const snapshot = preSnapshotObsMap.get(refId);
+              const live = liveObsMap.get(refId);
+              if (!snapshot || !live) {
+                // If referenced evidence was deleted or missing from snapshot
+                continue;
+              }
+              const curLiveSourceVer = await resolveCurrentSourceVersion(
+                live.sourceType,
+                live.sourceId,
+                session.id,
+                tx,
+                targetStudentId,
+              );
+              if (
+                live.version !== snapshot.version ||
+                live.sourceVersion !== snapshot.sourceVersion ||
+                curLiveSourceVer !== snapshot.sourceVersion
+              ) {
+                throw new SessionConflict(
+                  "VERSION_CONFLICT",
+                  "Minh chứng quan sát đã bị thay đổi trong quá trình xử lý AI",
+                );
+              }
+            }
+          }
+
+          // Strictly filter candidate claims: REJECT whole candidate if ANY ref is invalid/duplicate/stale/peer
+          const validCandidates: typeof aiDrafts.claims = [];
+          for (const candidate of aiDrafts.claims) {
+            if (!candidate.text || candidate.text.trim().length < 5) continue;
+            if (!candidate.evidenceIds || candidate.evidenceIds.length === 0) continue;
+
+            // Check for duplicate evidence IDs in candidate
+            const uniqueIds = new Set(candidate.evidenceIds);
+            if (uniqueIds.size !== candidate.evidenceIds.length) {
+              // Discard whole candidate if duplicate references exist
+              continue;
+            }
+
+            // Check if ALL ids belong to live valid observations belonging to the student
+            const allValid = candidate.evidenceIds.every((id) => liveObsMap.has(id));
+            if (!allValid) {
+              // Discard whole candidate with ANY hallucinated/peer/unknown ref
+              continue;
+            }
+
+            validCandidates.push(candidate);
+          }
+
+          const createdClaimIds: string[] = [];
+
+          // Reopen reviewed session ONLY if at least one valid claim will actually persist
+          if (current.status === "reviewed" && validCandidates.length > 0) {
+            const reopened = await tx.session.update({
+              where: { id: session.id },
+              data: { status: "ended", version: { increment: 1 } },
+            });
+            await appendOutboxEvent(tx, {
+              sessionId: session.id,
+              type: "review.reopened",
+              label: "Mở lại duyệt do tạo nhận định dự thảo từ AI",
+              actorId: res.locals.actor.id,
+              visibility: { scope: "teacher" },
+              resourceId: session.id,
+              version: reopened.version,
+            });
+            await tx.auditLog.create({
+              data: {
+                workspaceId: res.locals.actor.workspaceId,
+                actorId: res.locals.actor.id,
+                actorRole: "teacher",
+                action: "review.reopened",
+                targetType: "session",
+                targetId: session.id,
+                sessionId: session.id,
+                requestId: res.locals.requestId,
+                metadata: {
+                  previousStatus: "reviewed",
+                  nextStatus: "ended",
+                  reasonCode: "ai_claims_drafted",
+                },
+              },
+            });
+          }
+
+          for (const candidate of validCandidates) {
+            const created = await tx.claim.create({
+              data: {
+                sessionId: session.id,
+                studentId: targetStudentId,
+                text: candidate.text,
+                evidenceIds: candidate.evidenceIds,
+                status: "pending", // Sourced pending claims only
+                revision: 1,
+              },
+            });
+            createdClaimIds.push(created.id);
+
+            await tx.auditLog.create({
+              data: {
+                workspaceId: res.locals.actor.workspaceId,
+                actorId: res.locals.actor.id,
+                actorRole: "teacher",
+                action: "claim.draft_created",
+                targetType: "claim",
+                targetId: created.id,
+                sessionId: session.id,
+                requestId: res.locals.requestId,
+                metadata: {
+                  source: "ai_draft",
+                  provider: aiDrafts.provider,
+                  model: aiDrafts.model,
+                  evidenceCount: candidate.evidenceIds.length,
+                },
+              },
+            });
+          }
+
+          // Record AIRequest audit
+          await tx.aIRequest.create({
+            data: {
+              sessionId: session.id,
+              studentId: targetStudentId,
+              kind: "claim_draft",
+              prompt: aiDrafts.promptUsed,
+              promptVersion: aiDrafts.promptVersion,
+              responseText: JSON.stringify(validCandidates),
+              contextSummary: aiDrafts.contextSummary,
+              provider: aiDrafts.provider,
+              model: aiDrafts.model,
+              modelVersion: aiDrafts.modelVersion,
+              status: "ready",
+              actorId: res.locals.actor.id,
+            },
+          });
+
+          return createdClaimIds.join(",");
+        });
+
+        if (!result) return;
+        const ids = result.resourceId ? result.resourceId.split(",").filter(Boolean) : [];
+        const claims = ids.length
+          ? await db.claim.findMany({ where: { id: { in: ids } } })
+          : [];
+
+        triggerOutboxPublish(session.id);
+
+        return res.status(201).json({
+          claims: claims.map((c) => ({
+            id: c.id,
+            studentId: c.studentId,
+            text: c.text,
+            evidenceIds: c.evidenceIds,
+            status: c.status,
+            revision: c.revision,
+          })),
+          summary: aiDrafts.summary,
+        });
+      } finally {
+        barrier?.release();
+      }
+    }),
+  );
+
+  // 4. Backward-Compatible Lesson Plan Suggestions (POST /sessions/:id/ai/plan-suggestions)
   r.post(
     "/sessions/:id/ai/plan-suggestions",
     asyncRoute(async (req, res) => {
-      if (process.env.ENABLE_AI !== "true")
+      if (!isAIEnabled()) {
         return fail(res, 503, "AI_UNAVAILABLE", "AI chưa được bật");
-      const key = process.env.GEMINI_API_KEY,
-        model = process.env.GEMINI_MODEL;
-      if (!key || !model)
-        return fail(res, 503, "AI_UNAVAILABLE", "Gemini chưa được cấu hình");
+      }
+      const adapter = getAIAdapter();
+      if (!adapter) {
+        return fail(res, 503, "AI_UNAVAILABLE", "Dịch vụ AI không khả dụng trong môi trường hiện tại");
+      }
+
       const parsed = z
-        .strictObject({ studentId: z.uuid() })
+        .strictObject({ studentId: z.string().uuid() })
         .safeParse(req.body);
-      if (!parsed.success || !z.uuid().safeParse(req.params.id).success)
+      if (!parsed.success || !safeId.safeParse(req.params.id).success)
         return fail(res, 400, "VALIDATION_ERROR", "Yêu cầu không hợp lệ");
+
       const session = await db.session.findUnique({
         where: { id: req.params.id },
       });
@@ -59,6 +957,7 @@ export function aiRouter(config: AppConfig) {
           "SESSION_STATE_INVALID",
           "Không thể đề xuất cho buổi này",
         );
+
       const member = await db.roomMember.findUnique({
         where: {
           sessionId_studentId: {
@@ -75,6 +974,34 @@ export function aiRouter(config: AppConfig) {
           "PERMISSION_DENIED",
           "Học sinh không thuộc buổi học",
         );
+      if (!member.consent)
+        return fail(
+          res,
+          403,
+          "PERMISSION_DENIED",
+          "Học sinh chưa có sự đồng ý (consent) để sử dụng hỗ trợ AI",
+        );
+
+      const routeKey = `/sessions/${session.id}/ai/plan-suggestions`;
+
+      // Preflight replay check
+      const prior = await lookupReplay(req, res, routeKey);
+      if (prior === null) return;
+      if (prior) {
+        const existing = await db.aIRequest.findUniqueOrThrow({
+          where: { id: prior.resourceId },
+        });
+        return res.status(200).json({
+          suggestion: {
+            id: existing.id,
+            text: existing.responseText,
+            status: existing.status,
+            sources: [],
+          },
+        });
+      }
+
+      // Query past approved claims for student with historical consent
       const claims = await db.claim.findMany({
         where: {
           studentId: parsed.data.studentId,
@@ -97,9 +1024,11 @@ export function aiRouter(config: AppConfig) {
           status: true,
         },
       });
+
       const eligible = (
         await filterEligibleApprovedClaims(claims, res.locals.actor.id)
       ).slice(0, 4);
+
       if (!eligible.length)
         return fail(
           res,
@@ -107,66 +1036,163 @@ export function aiRouter(config: AppConfig) {
           "VALIDATION_ERROR",
           "Chưa có lịch sử đã duyệt và đồng ý sử dụng cho AI",
         );
-      const observations = await db.evidence.findMany({
-        where: {
-          id: { in: eligible.flatMap((claim) => claim.evidenceIds) },
-          status: "active",
-          isObservation: true,
-          kind: { not: "GoiYGiangDay" },
-          sourceType: { not: "ai_suggestion" },
-          sessionIdRef: { teacherId: res.locals.actor.id },
-        },
-        select: { id: true, sessionId: true, studentId: true },
-      });
-      const studentNames = (
-        await db.student.findMany({
+
+      // Snapshot eligible claims to detect races while awaiting model
+      const preSnapshotClaims = eligible.map((c) => ({
+        id: c.id,
+        revision: c.revision,
+        evidenceIds: c.evidenceIds,
+      }));
+
+      const idempotencyKey = req.get("Idempotency-Key") || "";
+      const lockKey = `${res.locals.actor.id}:${routeKey}:${idempotencyKey}`;
+
+      if (idempotencyKey) {
+        const inFlight = inFlightRequests.get(lockKey);
+        if (inFlight) {
+          await inFlight.catch(() => {});
+          const postReplay = await lookupReplay(req, res, routeKey);
+          if (postReplay === null) return;
+          if (postReplay) {
+            const existing = await db.aIRequest.findUniqueOrThrow({
+              where: { id: postReplay.resourceId },
+            });
+            return res.status(200).json({
+              suggestion: {
+                id: existing.id,
+                text: existing.responseText,
+                status: existing.status,
+                sources: [],
+              },
+            });
+          }
+        }
+      }
+
+      const barrier = idempotencyKey ? createInFlightBarrier(lockKey) : null;
+      try {
+        // Query student personal names for context minimization
+        const allStudents = await db.student.findMany({
           where: { teacherId: res.locals.actor.id },
           select: { name: true },
-        })
-      ).map((student) => student.name);
-      const prompt = [
-        "Đề xuất một hoạt động ngắn cho giáo viên. Không đưa tên riêng, thông tin cá nhân hoặc kết luận mới. Trả lời ngắn bằng tiếng Việt.",
-        `Môn: ${minimize(member.studentIdRef.subject, studentNames)}; lớp: ${minimize(member.studentIdRef.grade, studentNames)}.`,
-        ...eligible.map(
-          (c) => `Nhận định đã duyệt: ${minimize(c.text, studentNames)}`,
-        ),
-      ].join("\n");
-      try {
-        const result = await new GoogleGenAI({
-          apiKey: key,
-        }).models.generateContent({
-          model,
-          contents: prompt,
-          config: {
-            abortSignal: AbortSignal.timeout(12_000),
-            maxOutputTokens: 400,
-            temperature: 0.3,
-          },
         });
-        const text = result.text?.trim();
-        if (!text)
+        const studentNames = allStudents.map((s) => s.name.trim()).filter((n) => n.length > 1);
+
+        const cleanSubject = sanitizeContext(member.studentIdRef.subject || "", studentNames);
+        const cleanGrade = sanitizeContext(member.studentIdRef.grade || "", studentNames);
+        const cleanGoal = sanitizeContext(member.studentIdRef.goal || "", studentNames);
+        const cleanClaims = eligible.map((c) => sanitizeContext(c.text, studentNames));
+
+        // Dispatch to AI adapter outside lock
+        let aiResult;
+        try {
+          aiResult = await adapter.generatePlanSuggestion({
+            studentId: member.studentId,
+            subject: cleanSubject,
+            grade: cleanGrade,
+            goal: cleanGoal,
+            eligibleClaims: cleanClaims,
+            studentNames,
+          });
+        } catch (err: unknown) {
+          const errorMsg =
+            err instanceof Error ? err.message : "Dịch vụ AI không khả dụng";
           return fail(
             res,
             503,
             "AI_UNAVAILABLE",
-            "Gemini không trả gợi ý; có thể thử lại",
+            errorMsg.startsWith("AI_")
+              ? errorMsg
+              : "Gemini tạm không khả dụng; có thể chuẩn bị giáo án thủ công",
           );
-        const request = await db.aIRequest.create({
-          data: {
-            sessionId: session.id,
-            studentId: parsed.data.studentId,
-            kind: "plan_suggestion",
-            prompt,
-            promptVersion: "plan-v1",
-            responseText: text.slice(0, 4000),
-            contextSummary: "Lịch sử đã duyệt và có consent",
-            provider: "gemini",
-            model,
-            modelVersion: result.modelVersion || model,
-            status: "ready",
-            actorId: res.locals.actor.id,
-          },
+        }
+
+        // Revalidate and persist UNDER SESSION LOCK
+        const result = await createOnce(req, res, routeKey, async (tx) => {
+          await lockSession(tx, session.id);
+
+          const currentSession = await tx.session.findUniqueOrThrow({
+            where: { id: session.id },
+          });
+          if (!["draft", "scheduled"].includes(currentSession.status)) {
+            throw new SessionConflict(
+              "SESSION_STATE_INVALID",
+              "Trạng thái buổi học đã thay đổi trong khi chờ AI",
+            );
+          }
+
+          const currentMember = await tx.roomMember.findUnique({
+            where: {
+              sessionId_studentId: {
+                sessionId: session.id,
+                studentId: parsed.data.studentId,
+              },
+            },
+          });
+          if (!currentMember || !currentMember.consent) {
+            throw new SessionConflict(
+              "PERMISSION_DENIED",
+              "Học sinh đã thu hồi sự đồng ý sử dụng AI",
+            );
+          }
+
+          // Recheck that eligible claims have not been revised or unapproved
+          const liveClaims = await tx.claim.findMany({
+            where: {
+              id: { in: preSnapshotClaims.map((c) => c.id) },
+              status: "approved",
+            },
+          });
+          const liveClaimMap = new Map(liveClaims.map((c) => [c.id, c]));
+
+          for (const snap of preSnapshotClaims) {
+            const live = liveClaimMap.get(snap.id);
+            if (!live || live.revision !== snap.revision) {
+              throw new SessionConflict(
+                "VERSION_CONFLICT",
+                "Nhận định năng lực dùng làm căn cứ đã bị thay đổi trong khi chờ AI",
+              );
+            }
+          }
+
+          const request = await tx.aIRequest.create({
+            data: {
+              sessionId: session.id,
+              studentId: parsed.data.studentId,
+              kind: "plan_suggestion",
+              prompt: aiResult.promptUsed,
+              promptVersion: aiResult.promptVersion,
+              responseText: aiResult.text.slice(0, 4000),
+              contextSummary: aiResult.contextSummary,
+              provider: aiResult.provider,
+              model: aiResult.model,
+              modelVersion: aiResult.modelVersion,
+              status: "ready",
+              actorId: res.locals.actor.id,
+            },
+          });
+
+          return request.id;
         });
+
+        if (!result) return;
+        const request = await db.aIRequest.findUniqueOrThrow({
+          where: { id: result.resourceId },
+        });
+
+        // Re-read active observations for sources output
+        const observations = await db.evidence.findMany({
+          where: {
+            id: { in: eligible.flatMap((claim) => claim.evidenceIds) },
+            status: "active",
+            isObservation: true,
+            kind: { not: "GoiYGiangDay" },
+            sourceType: { not: "ai_suggestion" },
+            sessionIdRef: { teacherId: res.locals.actor.id },
+          },
+          select: { id: true, sessionId: true, studentId: true },
+        });
+
         return res.status(201).json({
           suggestion: {
             id: request.id,
@@ -186,39 +1212,48 @@ export function aiRouter(config: AppConfig) {
             })),
           },
         });
-      } catch {
-        return fail(
-          res,
-          503,
-          "AI_UNAVAILABLE",
-          "Gemini tạm không khả dụng; vẫn có thể soạn thủ công",
-        );
+      } finally {
+        barrier?.release();
       }
     }),
   );
-  r.patch(
-    "/ai-requests/:id",
+
+  // 5. Query In-Session AI Suggestions (GET /sessions/:id/ai/suggestions)
+  r.get(
+    "/sessions/:id/ai/suggestions",
     asyncRoute(async (req, res) => {
-      const input = z
-        .strictObject({ status: z.enum(["used", "ignored", "reported"]) })
-        .safeParse(req.body);
-      if (!input.success || !z.uuid().safeParse(req.params.id).success)
-        return fail(res, 400, "VALIDATION_ERROR", "Yêu cầu không hợp lệ");
-      const item = await db.aIRequest.findFirst({
+      if (!safeId.safeParse(req.params.id).success)
+        return fail(res, 400, "VALIDATION_ERROR", "ID buổi học không hợp lệ");
+
+      const session = await db.session.findUnique({
+        where: { id: req.params.id },
+      });
+      if (!session)
+        return fail(res, 404, "NOT_FOUND", "Không tìm thấy buổi học");
+      if (session.teacherId !== res.locals.actor.id)
+        return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập");
+
+      const items = await db.aIRequest.findMany({
         where: {
-          id: req.params.id,
-          sessionIdRef: { teacherId: res.locals.actor.id },
+          sessionId: session.id,
+          kind: { in: ["explain", "leading_question", "example", "difficulty", "suggestion"] },
         },
+        orderBy: { createdAt: "desc" },
+        take: 50,
       });
-      if (!item) return fail(res, 404, "NOT_FOUND", "Không tìm thấy gợi ý");
-      const changed = await db.aIRequest.updateMany({
-        where: { id: item.id, status: "ready" },
-        data: { status: input.data.status },
-      });
-      if (!changed.count)
-        return fail(res, 409, "VERSION_CONFLICT", "Gợi ý đã được xử lý");
-      return res.json({ id: item.id, status: input.data.status });
+
+      return res.json({ suggestions: items });
     }),
   );
+
+  // 6. Circuit & Provider Health Status Probe (GET /ai/circuit-status - AI 007)
+  r.get(
+    "/ai/circuit-status",
+    asyncRoute(async (_req, res) => {
+      const status = getCircuitStatus();
+      return res.json(status);
+    }),
+  );
+
   return r;
 }
