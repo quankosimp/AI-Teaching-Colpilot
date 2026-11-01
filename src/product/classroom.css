@@ -2063,3 +2063,70 @@ input[type="checkbox"] {
 [data-theme="dark"] .size-btn, body.dark .size-btn { background: var(--ui-surface); border-color: var(--ui-line); color: var(--ui-subtle); }
 [data-theme="dark"] .size-btn.active, body.dark .size-btn.active { background: var(--ui-brand-soft); border-color: var(--ui-brand); color: var(--ui-brand); }
 
+
+/* Online room and lobby share the product controls and theme tokens. */
+.online-room {
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: clamp(16px, 3vw, 32px);
+  overflow-wrap: anywhere;
+}
+.online-room__header h1 { margin: 20px 0 8px; }
+.online-room__header p, .online-room > p { color: var(--ui-subtle, #59657a); }
+.online-room > section {
+  min-width: 0;
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid var(--ui-border, #e1e4ee);
+  border-radius: 12px;
+}
+.online-room form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin: 12px 0; }
+.online-room form input,
+.online-room form select { flex: 1 1 180px; max-width: 100%; }
+.online-room button:not([class]) {
+  min-height: 40px; padding: 8px 14px; margin: 3px;
+  border: 1px solid var(--ui-border, #d9dceb); border-radius: 9px;
+  background: var(--ui-surface, #fff); color: inherit; font-weight: 600;
+}
+.online-room button:not([class]):hover:not(:disabled) { border-color: #7564d6; }
+.online-room :focus-visible { outline: 3px solid #8b7be8; outline-offset: 2px; }
+.online-room [role="alert"] { padding: 12px; border-radius: 8px; color: #a52d46; background: #fff0f2; }
+@media (max-width: 650px) {
+  .online-room { margin: 12px; }
+  .online-room > section { padding: 14px; }
+  .online-room button { min-height: 44px; }
+}
+[data-theme="dark"] .online-room [role="alert"],
+body.dark .online-room [role="alert"] { color: #ffb8c5; background: #4b2531; }
+.online-room .button:disabled {
+  opacity: 1;
+  color: #596579;
+  background: #e9ebf1;
+  border-color: #cbd1dd;
+}
+[data-theme="dark"] .online-room .button:disabled,
+body.dark .online-room .button:disabled {
+  color: #b9c2d3;
+  background: #30394c;
+  border-color: #566176;
+}
+
+.online-lobby { max-width: 680px; margin: 24px auto; padding: clamp(16px, 3vw, 32px); }
+.online-lobby form { display: grid; gap: 16px; }
+.online-lobby form label:has([type="checkbox"]) { display: flex; align-items: center; gap: 10px; }
+.online-lobby form button { min-height: 44px; }
+@media (max-width: 650px) { .online-lobby { margin: 12px; } }
+.online-lobby > [role="alert"] {
+  padding: 12px 14px;
+  border: 1px solid #e6a7b3;
+  border-radius: 9px;
+  background: #fff0f2;
+  color: #8f2138;
+  font-size: 14px;
+  line-height: 1.5;
+}
+:is([data-theme="dark"], body.dark) .online-lobby > [role="alert"] {
+  border-color: #a45c6d;
+  background: #4b2531;
+  color: #ffced6;
+}
