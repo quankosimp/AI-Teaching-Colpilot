@@ -657,6 +657,8 @@ model AIRequest {
   model          String
   modelVersion   String
   status         AIStatus
+  editedText     String?    @db.Text
+  evidenceId     String?    @db.Uuid
   actorId        String
   createdAt      DateTime   @default(now())
   sessionIdRef   Session    @relation("AIRequest_sessionId", fields: [sessionId], references: [id], onDelete: Restrict)

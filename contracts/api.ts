@@ -253,6 +253,7 @@ export const API_ROUTES = {
   evidenceUpdate: ["PATCH", "/api/v1/evidence/:id"],
   aiSuggest: ["POST", "/api/v1/sessions/:id/ai/suggestions"],
   aiUpdate: ["PATCH", "/api/v1/ai-requests/:id"],
+  aiClaimsDraft: ["POST", "/api/v1/sessions/:id/ai/claims-draft"],
   claimsList: ["GET", "/api/v1/sessions/:id/claims"],
   claimDraft: ["POST", "/api/v1/sessions/:id/claims/draft"],
   claimReview: ["PATCH", "/api/v1/claims/:id/review"],
@@ -386,17 +387,18 @@ export const ReactionInput = z.strictObject({
   emoji: z.string().max(32),
   label: z.string().max(80),
 });
-export const AIRequestInput = z.strictObject({
-  studentId: Id,
-  activityId: Id,
-  kind: z.enum(["explain", "leading_question", "example", "difficulty"]),
-  prompt: z.string().max(4000),
-});
-export const AIStatusUpdate = z.strictObject({
-  status: z.enum(["used", "ignored", "reported"]),
-  editedText: z.string().optional(),
-  saveAsEvidence: z.boolean().optional(),
-});
+export {
+  TeachingRequestMode,
+  AIRequestInput,
+  AIStatusUpdate,
+  AIClaimsDraftInput,
+  AISuggestionItem,
+  AISuggestionResponse,
+  AIStatusUpdateResponse,
+  AIClaimCandidate,
+  AIClaimsDraftResponse,
+  AICircuitStatusResponse,
+} from "./ai.js";
 
 // Additive G1 v1 DTOs; mutations require Origin and optimistic version headers where specified.
 export const AuthMockInput = z.strictObject({
@@ -439,6 +441,8 @@ export const REPLAY_ROUTES = [
   "POST /api/v1/checks/:checkId/responses",
   "POST /api/v1/sessions/:id/submissions",
   "POST /api/v1/sessions/:id/evidence",
+  "POST /api/v1/sessions/:id/ai/suggestions",
+  "POST /api/v1/sessions/:id/ai/claims-draft",
   "POST /api/v1/sessions/:id/claims/draft",
   "POST /api/v1/sessions/:id/next-session",
 ] as const;

@@ -27,6 +27,7 @@ psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$task_root/tests/migr
 DATABASE_URL="$MIGRATION_TEST_DATABASE_URL" node "$task_root/node_modules/prisma/build/index.js" migrate deploy --schema "$task_tmp/schema.prisma"
 psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$task_root/tests/migrations/product/assert-historical-deleted-duplicate.sql"
 cp -r "$task_root/prisma/migrations/202611010007_annotation_shared_and_evidence_auto" "$task_tmp/migrations/"
+cp -r "$task_root/prisma/migrations/202611010008_ai_request_fields" "$task_tmp/migrations/"
 DATABASE_URL="$MIGRATION_TEST_DATABASE_URL" node "$task_root/node_modules/prisma/build/index.js" migrate deploy --schema "$task_tmp/schema.prisma"
 psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "
 DO \$\$ BEGIN
@@ -38,6 +39,9 @@ DO \$\$ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='EvidenceRevision' AND column_name='isAuto') THEN
     RAISE EXCEPTION 'isAuto column missing on EvidenceRevision';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='AIRequest' AND column_name='editedText') THEN
+    RAISE EXCEPTION 'editedText column missing on AIRequest';
   END IF;
 END \$\$;
 "
