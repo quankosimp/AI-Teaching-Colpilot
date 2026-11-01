@@ -792,6 +792,7 @@ export function teacherRouter(config: AppConfig) {
               text: input.text,
               authorId: res.locals.actor.id,
               studentId: input.studentId ?? null,
+              sharedWithClass: Boolean(input.sharedWithClass),
             },
           });
           if (input.studentId) {
@@ -808,6 +809,7 @@ export function teacherRouter(config: AppConfig) {
                 sourceId: annotation.id,
                 sourceVersion: 1,
                 isObservation: true,
+                isAuto: false,
                 createdBy: res.locals.actor.id,
               },
             });

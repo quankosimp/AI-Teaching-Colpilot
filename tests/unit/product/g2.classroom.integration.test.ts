@@ -190,6 +190,71 @@ test(
       const room = await (await call("/room/state", g1.accessToken)).json();
       assert.equal(room.session.sharedGoal, "public");
       assert.equal(room.session.goal, undefined);
+      assert.deepEqual(room.capabilities, {
+        boardWrite: true,
+        upload: true,
+        check: true,
+        chat: true,
+      });
+      assert.deepEqual(room.annotations, []);
+
+      // Toggle member canWrite: boardWrite changes, other flags remain true
+      await db.roomMember.update({
+        where: { id: g1.memberId },
+        data: { canWrite: false },
+      });
+      const roomNoWrite = await (
+        await call("/room/state", g1.accessToken)
+      ).json();
+      assert.deepEqual(roomNoWrite.capabilities, {
+        boardWrite: false,
+        upload: true,
+        check: true,
+        chat: true,
+      });
+
+      // Member tool overrides: chat turned off for member
+      await db.roomMember.update({
+        where: { id: g1.memberId },
+        data: { canWrite: true, toolOverrides: { chat: false } },
+      });
+      const roomNoChat = await (
+        await call("/room/state", g1.accessToken)
+      ).json();
+      assert.deepEqual(roomNoChat.capabilities, {
+        boardWrite: true,
+        upload: true,
+        check: true,
+        chat: false,
+      });
+
+      // Malformed tools on session: default deny
+      await db.session.update({
+        where: { id },
+        data: { tools: { invalid: "broken" } as never },
+      });
+      const roomMalformed = await (
+        await call("/room/state", g1.accessToken)
+      ).json();
+      assert.deepEqual(roomMalformed.capabilities, {
+        boardWrite: false,
+        upload: false,
+        check: false,
+        chat: false,
+      });
+
+      // Restore session and member settings
+      await db.session.update({
+        where: { id },
+        data: {
+          tools: { board: true, upload: true, check: true, chat: true },
+        },
+      });
+      await db.roomMember.update({
+        where: { id: g1.memberId },
+        data: { canWrite: true, toolOverrides: {} },
+      });
+
       const orderedRace = async (
         first: () => Promise<Response>,
         second: () => Promise<Response>,
@@ -731,6 +796,18 @@ test(
         await db.evidenceRevision.count({
           where: { evidenceId: extraEvidence.id },
         }),
+        0,
+      );
+      const extraEvidenceRow = await db.evidence.findUniqueOrThrow({
+        where: { id: extraEvidence.id },
+      });
+      assert.equal(extraEvidenceRow.detail, "Observed work");
+      assert.equal(extraEvidenceRow.support, "DocLap");
+      assert.equal(extraEvidenceRow.isAuto, false);
+      assert.equal(
+        await db.evidenceRevision.count({
+          where: { evidenceId: graded.evidence.id },
+        }),
         1,
       );
 
@@ -784,7 +861,12 @@ test(
           description: "",
           source: "test",
           MaterialVersion_materialId_items: {
-            create: { version: 1, uploadStatus: "ready", pages: [] },
+            create: {
+              version: 1,
+              uploadStatus: "ready",
+              pages: [],
+              storageKey: "race-material-key",
+            },
           },
         },
       });
@@ -832,9 +914,74 @@ test(
         `/sessions/${id}/annotations`,
         a,
         "POST",
-        { ...annotationBody, studentId: undefined, text: "Common annotation" },
+        {
+          ...annotationBody,
+          studentId: undefined,
+          sharedWithClass: true,
+          text: "Common annotation",
+        },
       );
       assert.equal(sharedAnnotation.status, 201);
+
+      // Student 1 annotation
+      const annot1Resp = await call(`/sessions/${id}/annotations`, a, "POST", {
+        ...annotationBody,
+        studentId: g1.studentId,
+        sharedWithClass: false,
+        text: "Student 1 annotation",
+      });
+      assert.equal(annot1Resp.status, 201);
+
+      // Historical unattributed private note (studentId is null, sharedWithClass is false)
+      await db.annotation.create({
+        data: {
+          sessionId: id,
+          activityId,
+          materialId: material.id,
+          materialVersion: 1,
+          page: 0,
+          x: 40,
+          y: 40,
+          text: "Historical unattributed annotation",
+          authorId: "legacy-teacher",
+          studentId: null,
+          sharedWithClass: false,
+        },
+      });
+
+      // Student 1 projection check: sees Student 1 annotation + Common annotation only
+      const roomStudent1 = await (
+        await call("/room/state", g1.accessToken)
+      ).json();
+      const s1Texts = roomStudent1.annotations
+        .map((x: { text: string }) => x.text)
+        .sort();
+      assert.deepEqual(s1Texts, [
+        "Common annotation",
+        "Student 1 annotation",
+      ]);
+      // Verify safe marks only: id, page, x, y, text
+      for (const annot of roomStudent1.annotations) {
+        assert.deepEqual(Object.keys(annot).sort(), [
+          "id",
+          "page",
+          "text",
+          "x",
+          "y",
+        ]);
+      }
+
+      // Student 2 projection check: sees First annotation + Common annotation only
+      const roomStudent2 = await (
+        await call("/room/state", g2.accessToken)
+      ).json();
+      const s2Texts = roomStudent2.annotations
+        .map((x: { text: string }) => x.text)
+        .sort();
+      assert.deepEqual(s2Texts, [
+        "Common annotation",
+        "First annotation",
+      ]);
       const commonId = (await sharedAnnotation.json()).annotation.id;
       const commonClaimSource = await call(
         `/sessions/${id}/evidence`,
@@ -1094,6 +1241,17 @@ test(
         await call(`/room/state?sessionId=${id}`, a)
       ).json();
       assert.equal(afterFirstCorrection.session.status, "ended");
+      const curEv = await db.evidence.findUnique({
+        where: { id: extraEvidence.id },
+      });
+      const patchEv = await call(
+        `/evidence/${extraEvidence.id}`,
+        a,
+        "PATCH",
+        { status: "corrected", reason: "revalidated after grade" },
+        { "If-Match-Version": String(curEv?.version) },
+      );
+      assert.equal(patchEv.status, 200);
       for (const claimId of [relabeledClaim.id, relabeledClaim2.id]) {
         const row = afterFirstCorrection.claims.find(
           (c: { id: string }) => c.id === claimId,
@@ -1285,6 +1443,18 @@ test(
       assert.equal(
         await db.evidenceRevision.count({
           where: { evidenceId: extraCheck.id },
+        }),
+        0,
+      );
+      const extraCheckRow = await db.evidence.findUniqueOrThrow({
+        where: { id: extraCheck.id },
+      });
+      assert.equal(extraCheckRow.detail, "Observed");
+      assert.equal(extraCheckRow.support, "DocLap");
+      assert.equal(extraCheckRow.isAuto, false);
+      assert.equal(
+        await db.evidenceRevision.count({
+          where: { evidenceId: checkEvidence.id },
         }),
         1,
       );

@@ -460,6 +460,7 @@ model BoardAttempt {
 
 model Annotation {
   studentId       String?  @db.Uuid
+  sharedWithClass Boolean  @default(false)
   id              String   @id @default(uuid()) @db.Uuid
   sessionId       String   @db.Uuid
   activityId      String   @db.Uuid
@@ -568,6 +569,7 @@ model Evidence {
   sourceVersion                     Int?
   submissionId                      String?            @db.Uuid
   isObservation                     Boolean            @default(true)
+  isAuto                            Boolean            @default(false)
   status                            EvidenceStatus     @default(active)
   version                           Int                @default(1)
   createdBy                         String             @db.Uuid
@@ -593,6 +595,7 @@ model EvidenceRevision {
   sourceType    SourceType
   sourceId      String?
   sourceVersion Int?
+  isAuto        Boolean        @default(false)
   status        EvidenceStatus
   changedBy     String         @db.Uuid
   reason        String?

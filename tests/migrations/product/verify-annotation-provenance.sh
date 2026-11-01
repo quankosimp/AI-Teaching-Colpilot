@@ -20,3 +20,24 @@ psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$task_root/tests/migr
 cp -r "$task_root/prisma/migrations/202611010005_duplicate_source_claims" "$task_tmp/migrations/"
 DATABASE_URL="$MIGRATION_TEST_DATABASE_URL" node "$task_root/node_modules/prisma/build/index.js" migrate deploy --schema "$task_tmp/schema.prisma"
 psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$task_root/tests/migrations/product/assert-duplicate-sources.sql"
+psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$task_root/tests/migrations/product/historical-deleted-duplicate.sql"
+cp -r "$task_root/prisma/migrations/202611010006_historical_duplicate_sources" "$task_tmp/migrations/"
+DATABASE_URL="$MIGRATION_TEST_DATABASE_URL" node "$task_root/node_modules/prisma/build/index.js" migrate deploy --schema "$task_tmp/schema.prisma"
+psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$task_root/tests/migrations/product/assert-historical-deleted-duplicate.sql"
+DATABASE_URL="$MIGRATION_TEST_DATABASE_URL" node "$task_root/node_modules/prisma/build/index.js" migrate deploy --schema "$task_tmp/schema.prisma"
+psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$task_root/tests/migrations/product/assert-historical-deleted-duplicate.sql"
+cp -r "$task_root/prisma/migrations/202611010007_annotation_shared_and_evidence_auto" "$task_tmp/migrations/"
+DATABASE_URL="$MIGRATION_TEST_DATABASE_URL" node "$task_root/node_modules/prisma/build/index.js" migrate deploy --schema "$task_tmp/schema.prisma"
+psql "$MIGRATION_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+DO \$\$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Annotation' AND column_name='sharedWithClass') THEN
+    RAISE EXCEPTION 'sharedWithClass column missing on Annotation';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Evidence' AND column_name='isAuto') THEN
+    RAISE EXCEPTION 'isAuto column missing on Evidence';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='EvidenceRevision' AND column_name='isAuto') THEN
+    RAISE EXCEPTION 'isAuto column missing on EvidenceRevision';
+  END IF;
+END \$\$;
+"

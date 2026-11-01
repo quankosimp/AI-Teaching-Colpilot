@@ -52,6 +52,23 @@ export const StudentSubmission = z.strictObject({
   score: z.string().nullable().optional(),
   createdAt: Timestamp,
 });
+export const StudentCapabilities = z.strictObject({
+  boardWrite: z.boolean().default(false),
+  upload: z.boolean().default(false),
+  check: z.boolean().default(false),
+  chat: z.boolean().default(false),
+});
+export type StudentCapabilities = z.infer<typeof StudentCapabilities>;
+
+export const StudentAnnotationMark = z.strictObject({
+  id: Id,
+  page: z.number().int().nonnegative(),
+  x: z.number(),
+  y: z.number(),
+  text: z.string(),
+});
+export type StudentAnnotationMark = z.infer<typeof StudentAnnotationMark>;
+
 export const StudentRoomViewModel = z.strictObject({
   session: z.strictObject({
     id: Id,
@@ -64,7 +81,7 @@ export const StudentRoomViewModel = z.strictObject({
     materialPage: z.number().int().nonnegative(),
     tools: Tools,
   }),
-  capabilities: z.strictObject({ boardWrite: z.boolean() }).optional(),
+  capabilities: StudentCapabilities.optional(),
   activities: z.array(StudentActivity),
   currentMaterial: z
     .strictObject({
@@ -75,6 +92,7 @@ export const StudentRoomViewModel = z.strictObject({
       page: z.number().int().nonnegative(),
     })
     .nullable(),
+  annotations: z.array(StudentAnnotationMark).default([]),
   commonBoard: StudentBoard.nullable(),
   sharedBoard: StudentBoard.nullable(),
   ownBoard: StudentBoard.nullable(),

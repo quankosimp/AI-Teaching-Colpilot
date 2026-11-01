@@ -182,9 +182,10 @@ async function checkStudentToolAccess(
     );
     return null;
   }
-  const sessionTools = Tools.safeParse(session.tools).success
-    ? Tools.parse(session.tools)
-    : { board: true, upload: true, check: true, chat: true };
+  const parsedTools = Tools.safeParse(session.tools);
+  const sessionTools = parsedTools.success
+    ? parsedTools.data
+    : { board: false, upload: false, check: false, chat: false };
   const overrides =
     Tools.partial().safeParse(member.toolOverrides ?? {}).data ?? {};
   const toolEnabled =
@@ -242,10 +243,21 @@ async function lockLiveAccess(
       tx.roomMember.findUnique({ where: { id: actor.memberId } }),
       tx.studentRoomSession.findUnique({ where: { id: actor.grantId } }),
     ]);
-    const tools = Tools.safeParse(session.tools).data;
+    const tools = Tools.safeParse(session.tools).data ?? {
+      board: false,
+      upload: false,
+      check: false,
+      chat: false,
+    };
     const overrides = Tools.partial().safeParse(
       member?.toolOverrides ?? {},
     ).data;
+    const toolAllowed =
+      tool === "reaction"
+        ? true
+        : overrides?.[tool] !== undefined
+          ? overrides[tool]
+          : tools[tool];
     if (
       !member ||
       member.sessionId !== sessionId ||
@@ -255,8 +267,7 @@ async function lockLiveAccess(
       grant.revokedAt ||
       grant.expiresAt <= new Date() ||
       (tool === "board" && !member.canWrite) ||
-      (tool !== "reaction" &&
-        (tools?.[tool] === false || overrides?.[tool] === false))
+      !toolAllowed
     )
       throw new SessionConflict(
         "PERMISSION_DENIED",
@@ -1712,7 +1723,7 @@ export function classroomRouter(config: AppConfig) {
       }
 
       // Student actor projection
-      const [session, member] = await Promise.all([
+      const [session, member, grant] = await Promise.all([
         db.session.findUnique({
           where: { id: actor.sessionId },
           include: {
@@ -1732,6 +1743,7 @@ export function classroomRouter(config: AppConfig) {
           },
         }),
         db.roomMember.findUnique({ where: { id: actor.memberId } }),
+        db.studentRoomSession.findUnique({ where: { id: actor.grantId } }),
       ]);
       if (!session || !member)
         return fail(res, 404, "NOT_FOUND", "Không tìm thấy phòng học");
@@ -1920,9 +1932,71 @@ export function classroomRouter(config: AppConfig) {
         }),
       );
 
-      const sessionTools = Tools.safeParse(session.tools).success
-        ? Tools.parse(session.tools)
-        : { board: true, upload: true, check: true, chat: true };
+      const grantValid = Boolean(
+        grant &&
+          !grant.revokedAt &&
+          new Date(grant.expiresAt) > new Date(),
+      );
+
+      const parsedTools = Tools.safeParse(session.tools);
+      const sessionTools = parsedTools.success
+        ? parsedTools.data
+        : { board: false, upload: false, check: false, chat: false };
+
+      const memberOverridesParsed = Tools.partial().safeParse(
+        member.toolOverrides ?? {},
+      );
+      const memberOverrides = memberOverridesParsed.success
+        ? memberOverridesParsed.data
+        : {};
+
+      const isLiveJoinedGranted =
+        session.status === "live" &&
+        member.state === "joined" &&
+        grantValid;
+
+      const toolEffective = (
+        toolKey: "board" | "upload" | "check" | "chat",
+      ) => {
+        if (!isLiveJoinedGranted) return false;
+        if (memberOverrides[toolKey] !== undefined) {
+          return Boolean(memberOverrides[toolKey]);
+        }
+        return Boolean(sessionTools[toolKey]);
+      };
+
+      const capabilities = {
+        boardWrite: toolEffective("board") && member.canWrite,
+        upload: toolEffective("upload"),
+        check: toolEffective("check"),
+        chat: toolEffective("chat"),
+      };
+
+      const annotations =
+        currentMaterial && activeActId
+          ? (
+              await db.annotation.findMany({
+                where: {
+                  sessionId: session.id,
+                  activityId: activeActId,
+                  materialId: currentMaterial.id,
+                  materialVersion: currentMaterial.version,
+                  page: session.materialPage,
+                  OR: [
+                    { studentId: actor.studentId },
+                    { sharedWithClass: true },
+                  ],
+                },
+                orderBy: { createdAt: "asc" },
+              })
+            ).map((a) => ({
+              id: a.id,
+              page: a.page,
+              x: a.x,
+              y: a.y,
+              text: a.text,
+            }))
+          : [];
 
       const rawView = {
         session: {
@@ -1936,15 +2010,7 @@ export function classroomRouter(config: AppConfig) {
           materialPage: session.materialPage,
           tools: sessionTools,
         },
-        capabilities: {
-          boardWrite:
-            session.status === "live" &&
-            member.state === "joined" &&
-            member.canWrite &&
-            sessionTools.board &&
-            Tools.partial().safeParse(member.toolOverrides ?? {}).data
-              ?.board !== false,
-        },
+        capabilities,
         activities: session.Activity_sessionId_items.map((a) => ({
           id: a.id,
           title:
@@ -1964,6 +2030,7 @@ export function classroomRouter(config: AppConfig) {
           type: a.type,
         })),
         currentMaterial,
+        annotations,
         commonBoard,
         sharedBoard,
         ownBoard,
@@ -2175,10 +2242,17 @@ export function classroomRouter(config: AppConfig) {
             const grant = await tx.studentRoomSession.findUnique({
               where: { id: actor.grantId },
             });
-            const tools = Tools.safeParse(currentSession.tools).data;
+            const tools = Tools.safeParse(currentSession.tools).data ?? {
+              board: false,
+              upload: false,
+              check: false,
+              chat: false,
+            };
             const overrides = Tools.partial().safeParse(
               member?.toolOverrides ?? {},
             ).data;
+            const boardEnabled =
+              overrides?.board !== undefined ? overrides.board : tools.board;
             if (
               !grant ||
               grant.revokedAt ||
@@ -2186,8 +2260,7 @@ export function classroomRouter(config: AppConfig) {
               !member ||
               member.state !== "joined" ||
               !member.canWrite ||
-              tools?.board === false ||
-              overrides?.board === false
+              !boardEnabled
             )
               throw new BoardCommandError(
                 403,
@@ -2494,6 +2567,7 @@ export function classroomRouter(config: AppConfig) {
               sourceId: attempt.id,
               sourceVersion: 1,
               isObservation: true,
+              isAuto: false,
               createdBy: actor.id,
             },
           });
@@ -2852,12 +2926,13 @@ export function classroomRouter(config: AppConfig) {
               status: { not: "deleted" },
             },
           });
+          const autoRow = linked.find((r) => r.isAuto);
           if (
-            linked.length &&
+            autoRow &&
             currentResponse.support === parsed.data.support &&
             currentResponse.feedback === parsed.data.feedback
           )
-            return { updatedResponse: currentResponse, evidence: linked[0] };
+            return { updatedResponse: currentResponse, evidence: autoRow };
           const updated = await tx.checkResponse.update({
             where: { id: responseRow.id },
             data: {
@@ -2892,6 +2967,7 @@ export function classroomRouter(config: AppConfig) {
                 sourceId: responseRow.id,
                 sourceVersion: updated.version,
                 isObservation: true,
+                isAuto: true,
                 createdBy: res.locals.actor.id,
               },
             }));
@@ -3381,9 +3457,10 @@ export function classroomRouter(config: AppConfig) {
               ],
             },
           });
+          const autoRow = linked.find((r) => r.isAuto);
           const score = parsed.data.score ?? currentSubmission.score;
           if (
-            linked.length &&
+            autoRow &&
             currentSubmission.status === "reviewed" &&
             currentSubmission.finalFeedback === parsed.data.feedback &&
             currentSubmission.support === parsed.data.support &&
@@ -3391,7 +3468,7 @@ export function classroomRouter(config: AppConfig) {
           )
             return {
               updatedSubmission: currentSubmission,
-              evidence: linked[0],
+              evidence: autoRow,
             };
           const updated = await tx.submission.update({
             where: { id: submission.id },
@@ -3430,6 +3507,7 @@ export function classroomRouter(config: AppConfig) {
                 submissionId: submission.id,
                 sourceVersion: updated.version,
                 isObservation: true,
+                isAuto: true,
                 createdBy: res.locals.actor.id,
               },
             }));
@@ -3518,7 +3596,7 @@ export function classroomRouter(config: AppConfig) {
           );
         const tools = Tools.safeParse(session.tools).success
           ? Tools.parse(session.tools)
-          : { board: true, upload: true, check: true, chat: true };
+          : { board: false, upload: false, check: false, chat: false };
         if (!tools.chat)
           return fail(
             res,

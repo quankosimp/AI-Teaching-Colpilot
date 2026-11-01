@@ -316,6 +316,7 @@ export function reviewRouter(config: AppConfig) {
               submissionId: sourceType === "submission" ? sourceId : null,
               sourceVersion,
               isObservation,
+              isAuto: false,
               status: "active",
               version: 1,
               createdBy: res.locals.actor.id,
@@ -403,12 +404,23 @@ export function reviewRouter(config: AppConfig) {
           : parsed.data.status === "corrected"
             ? "active"
             : (parsed.data.status ?? evidence.status);
+      const currentSourceVer =
+        evidence.sourceType === "note"
+          ? evidence.sourceVersion
+          : await resolveCurrentSourceVersion(
+              evidence.sourceType,
+              evidence.sourceId ?? evidence.submissionId,
+              evidence.sessionId,
+            );
       if (
+        parsed.data.status !== "corrected" &&
         (parsed.data.detail === undefined ||
           parsed.data.detail === evidence.detail) &&
         (parsed.data.support === undefined ||
           parsed.data.support === evidence.support) &&
-        nextStatus === evidence.status
+        nextStatus === evidence.status &&
+        (currentSourceVer === null ||
+          currentSourceVer === evidence.sourceVersion)
       )
         return res.json({ evidence });
       const reasonCode =
@@ -416,6 +428,16 @@ export function reviewRouter(config: AppConfig) {
 
       const result = await db.$transaction(async (tx) => {
         await lockSession(tx, evidence.sessionId);
+        const resolvedVer =
+          evidence.sourceType === "note"
+            ? evidence.sourceVersion
+            : await resolveCurrentSourceVersion(
+                evidence.sourceType,
+                evidence.sourceId ?? evidence.submissionId,
+                evidence.sessionId,
+                tx,
+                evidence.studentId,
+              );
         const changed = await tx.evidence.updateMany({
           where: { id: evidence.id, version: expected },
           data: {
@@ -424,6 +446,9 @@ export function reviewRouter(config: AppConfig) {
               : {}),
             ...(parsed.data.support !== undefined
               ? { support: parsed.data.support }
+              : {}),
+            ...(resolvedVer && resolvedVer > 0
+              ? { sourceVersion: resolvedVer }
               : {}),
             status: nextStatus,
             version: { increment: 1 },

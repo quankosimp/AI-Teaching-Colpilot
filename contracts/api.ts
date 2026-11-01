@@ -64,16 +64,28 @@ export const ActivityInput = z.strictObject({
   sourceEvidenceIds: z.array(Id),
   sourceClaimRefs: z.array(ClaimRef),
 });
-export const AnnotationInput = z.strictObject({
-  activityId: Id,
-  materialId: Id,
-  materialVersion: z.number().int().positive(),
-  page: z.number().int().nonnegative(),
-  x: z.number().min(0).max(100),
-  y: z.number().min(0).max(100),
-  text: z.string().trim().min(1),
-  studentId: Id.optional(),
-});
+export const AnnotationInput = z
+  .strictObject({
+    activityId: Id,
+    materialId: Id,
+    materialVersion: z.number().int().positive(),
+    page: z.number().int().nonnegative(),
+    x: z.number().min(0).max(100),
+    y: z.number().min(0).max(100),
+    text: z.string().trim().min(1),
+    studentId: Id.optional().nullable(),
+    sharedWithClass: z.boolean().default(false),
+  })
+  .superRefine((data, ctx) => {
+    if (data.sharedWithClass && data.studentId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Không thể chia sẻ toàn lớp chú thích dành riêng cho một học sinh",
+        path: ["sharedWithClass"],
+      });
+    }
+  });
 export const ObservationInput = z
   .strictObject({
     studentId: Id,

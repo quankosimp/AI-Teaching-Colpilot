@@ -17,7 +17,9 @@ export async function reviseSourceEvidence(
   },
 ) {
   const rows = input.rows.filter((row) => row.status !== "deleted");
-  for (const row of rows) {
+  const autoRows = rows.filter((row) => row.isAuto);
+
+  for (const row of autoRows) {
     await tx.evidenceRevision.create({
       data: {
         evidenceId: row.id,
@@ -30,6 +32,7 @@ export async function reviseSourceEvidence(
         sourceType: row.sourceType,
         sourceId: row.sourceId,
         sourceVersion: row.sourceVersion,
+        isAuto: true,
         status: row.status,
         changedBy: input.actorId,
         reason: "source_corrected",
@@ -58,6 +61,9 @@ export async function reviseSourceEvidence(
       },
     });
   }
+
+  // ALL dependent claims across both auto and manual source observations
+  // must be invalidated when the source changes, while preserving manual observation detail/support.
   const claims = rows.length
     ? await tx.claim.findMany({
         where: {
@@ -89,9 +95,17 @@ export async function reviseSourceEvidence(
     });
   }
   if (claims.length && input.sessionStatus === "reviewed") {
+    const existingSession = await tx.session.findUnique({
+      where: { id: input.sessionId },
+      select: { endedAt: true },
+    });
     const session = await tx.session.update({
       where: { id: input.sessionId },
-      data: { status: "ended", version: { increment: 1 } },
+      data: {
+        status: "ended",
+        endedAt: existingSession?.endedAt ?? new Date(),
+        version: { increment: 1 },
+      },
     });
     await appendOutboxEvent(tx, {
       sessionId: input.sessionId,
@@ -116,7 +130,7 @@ export async function reviseSourceEvidence(
       },
     });
   }
-  return rows.length
-    ? tx.evidence.findUniqueOrThrow({ where: { id: rows[0].id } })
+  return autoRows.length
+    ? tx.evidence.findUniqueOrThrow({ where: { id: autoRows[0].id } })
     : null;
 }

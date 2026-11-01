@@ -1,0 +1,9 @@
+UPDATE "Session" SET status='reviewed', "endedAt"=now() WHERE id='44444444-4444-4444-8444-444444444444';
+-- E1 soft deleted, E2 active approved with the same check source
+INSERT INTO "Evidence" (id,"sessionId","studentId",kind,title,detail,support,"sourceType","sourceId","sourceVersion","status","createdBy","updatedAt") VALUES
+('51515151-5151-4151-8151-515151515151','44444444-4444-4444-8444-444444444444','33333333-3333-4333-8333-333333333333','KiemTraDocLap','old E1 auto','detail','DocLap','check_response','91919191-9191-4191-8191-919191919191',1,'deleted','11111111-1111-4111-8111-111111111111',now()),
+('52525252-5252-4252-8252-525252525252','44444444-4444-4444-8444-444444444444','33333333-3333-4333-8333-333333333333','KiemTraDocLap','old E2 manual','Observed work','DocLap','check_response','91919191-9191-4191-8191-919191919191',1,'active','11111111-1111-4111-8111-111111111111',now()),
+('53535353-5353-4353-8353-535353535353','44444444-4444-4444-8444-444444444444','33333333-3333-4333-8333-333333333333','KiemTraDocLap','independent non-duplicate','detail','DocLap','check_response','92929292-9292-4292-8292-929292929292',1,'active','11111111-1111-4111-8111-111111111111',now());
+INSERT INTO "Claim" (id,"sessionId","studentId",text,"evidenceIds",status,"updatedAt") VALUES
+('54545454-5454-4454-8454-545454545454','44444444-4444-4444-8444-444444444444','33333333-3333-4333-8333-333333333333','historical deleted duplicate claim',ARRAY['52525252-5252-4252-8252-525252525252'],'approved',now()),
+('55555555-5555-4555-8555-555555555555','44444444-4444-4444-8444-444444444444','33333333-3333-4333-8333-333333333333','independent non-duplicate claim',ARRAY['53535353-5353-4353-8353-535353535353'],'approved',now());
