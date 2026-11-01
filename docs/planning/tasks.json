@@ -1009,7 +1009,7 @@
       ],
       "executor": "3e42fb29-024b-4172-9925-38c290f8f5d5",
       "title": "Complete mandatory classroom frontend actions and capability wiring",
-      "status": "in_review",
+      "status": "done",
       "srs_ids": [],
       "gate": "G2",
       "depends_on": [
@@ -1020,7 +1020,7 @@
       "evidence": [
         "docs/planning/evidence/g2-integrated-55c05e1.json"
       ],
-      "local_gate": "Integrated browser execution passed; scoped UI recheck pending; G3/G4 cross-cutting requirements remain open"
+      "local_gate": "Local frontend wiring accepted at55c05e1 after browser execution and independent bounded review; G3/G4/global acceptance separate"
     }
   ],
   "active_executors": {

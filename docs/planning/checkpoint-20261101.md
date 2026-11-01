@@ -1,6 +1,6 @@
 # Repository checkpoint — 2026-11-01
 
-Latest integrated source: **55c05e1**. Backend **0742241** and frontend **da0637f** are pushed; supervisor now combines them with UI/QA. Docker local: http://127.0.0.1:4170. HTTP/socket: **76 pass /0 fail /6 legacy placeholders skipped**; strengthened final browser and historical migration checks passed. G2 remains in_review, real providers/HTTPS blocked. [Exact evidence](evidence/g2-integrated-55c05e1.json). The table below preserves the earlier publication snapshot.
+Latest integrated source: **55c05e1**. Backend **0742241** and frontend **da0637f** are pushed; supervisor now combines them with UI/QA. Docker local: http://127.0.0.1:4170. HTTP/socket: **76 pass /0 fail /6 legacy placeholders skipped**; strengthened final browser and historical migration checks passed. G2 classroom/tools/manual-review milestone is accepted locally after scoped independent review; real providers/HTTPS, final NFR and60-P0 acceptance remain open. [Exact evidence](evidence/g2-integrated-55c05e1.json). The table below preserves the earlier publication snapshot.
 
 Checkpoint được commit trên các nhánh riêng theo yêu cầu người dùng. G2 chưa được nghiệm thu.
 

@@ -1,0 +1,137 @@
+Prisma schema loaded from ../../../tmp/tmp.G24eXxlEBA/schema.prisma
+Datasource "db": PostgreSQL database "copilot_supervisor_migration_20261101", schema "public" at "127.0.0.1:55432"
+
+4 migrations found in prisma/migrations
+
+Applying migration `202610310001_initial`
+Applying migration `202610310002_check_support_default`
+Applying migration `202610310003_upload_intents`
+Applying migration `202610310004_g2_classroom`
+
+┌─────────────────────────────────────────────────────────┐
+│  Update available 6.19.3 -> 8.0.0-rc.29                 │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+The following migration(s) have been applied:
+
+migrations/
+  └─ 202610310001_initial/
+    └─ migration.sql
+  └─ 202610310002_check_support_default/
+    └─ migration.sql
+  └─ 202610310003_upload_intents/
+    └─ migration.sql
+  └─ 202610310004_g2_classroom/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+INSERT 0 1
+INSERT 0 2
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 2
+INSERT 0 3
+INSERT 0 1
+Prisma schema loaded from ../../../tmp/tmp.G24eXxlEBA/schema.prisma
+Datasource "db": PostgreSQL database "copilot_supervisor_migration_20261101", schema "public" at "127.0.0.1:55432"
+
+5 migrations found in prisma/migrations
+
+Applying migration `202611010001_annotation_owner`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 202611010001_annotation_owner/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+INSERT 0 1
+INSERT 0 1
+Prisma schema loaded from ../../../tmp/tmp.G24eXxlEBA/schema.prisma
+Datasource "db": PostgreSQL database "copilot_supervisor_migration_20261101", schema "public" at "127.0.0.1:55432"
+
+8 migrations found in prisma/migrations
+
+Applying migration `202611010002_annotation_provenance`
+Applying migration `202611010003_check_response_version`
+Applying migration `202611010004_ambiguous_annotation_claims`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 202611010002_annotation_provenance/
+    └─ migration.sql
+  └─ 202611010003_check_response_version/
+    └─ migration.sql
+  └─ 202611010004_ambiguous_annotation_claims/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+DO
+UPDATE 1
+INSERT 0 2
+INSERT 0 1
+Prisma schema loaded from ../../../tmp/tmp.G24eXxlEBA/schema.prisma
+Datasource "db": PostgreSQL database "copilot_supervisor_migration_20261101", schema "public" at "127.0.0.1:55432"
+
+9 migrations found in prisma/migrations
+
+Applying migration `202611010005_duplicate_source_claims`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 202611010005_duplicate_source_claims/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+DO
+UPDATE 1
+INSERT 0 3
+INSERT 0 2
+Prisma schema loaded from ../../../tmp/tmp.G24eXxlEBA/schema.prisma
+Datasource "db": PostgreSQL database "copilot_supervisor_migration_20261101", schema "public" at "127.0.0.1:55432"
+
+10 migrations found in prisma/migrations
+
+Applying migration `202611010006_historical_duplicate_sources`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 202611010006_historical_duplicate_sources/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+DO
+Prisma schema loaded from ../../../tmp/tmp.G24eXxlEBA/schema.prisma
+Datasource "db": PostgreSQL database "copilot_supervisor_migration_20261101", schema "public" at "127.0.0.1:55432"
+
+10 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+DO
+Prisma schema loaded from ../../../tmp/tmp.G24eXxlEBA/schema.prisma
+Datasource "db": PostgreSQL database "copilot_supervisor_migration_20261101", schema "public" at "127.0.0.1:55432"
+
+11 migrations found in prisma/migrations
+
+Applying migration `202611010007_annotation_shared_and_evidence_auto`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 202611010007_annotation_shared_and_evidence_auto/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+DO

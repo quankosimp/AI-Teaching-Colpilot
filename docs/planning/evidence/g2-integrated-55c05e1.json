@@ -13,7 +13,12 @@
   "supervisorVerified": {
     "runtime": "Node22.23.4 on host; Node22 Docker images",
     "static": "strict frozen pnpm install, Prisma generate, frontend/server typecheck, frontend/server build and planning traceability passed",
-    "httpSocketSuite": {"passed": 76, "failed": 0, "skipped": 6, "artifact": "g2-integrated-http.tap"},
+    "httpSocketSuite": {
+      "passed": 76,
+      "failed": 0,
+      "skipped": 6,
+      "artifact": "g2-integrated-http.tap"
+    },
     "skips": "Six legacy G1 harness placeholders remain skipped (one video/provider, five covered by concrete G2 tests); they are not six successful scenarios or a declaration that those G2 APIs are absent.",
     "browser": "g2-capabilities.cjs passed on final source with three isolated contexts, PDF canvas rendered-page checks, private/shared boards, tool permissions, quickcheck review, dock notes, chat, invite TTL/revoke, refresh and end receipt",
     "responsive": "Teacher/student at360,375,768,1440 in light/dark;16 committed screenshots, no document overflow;1440px desktop dock is beside stage",
@@ -22,8 +27,22 @@
   },
   "testDelta": "Only frontend, CSS and browser assertions changed from41e84a1 to55c05e1. Backend and HTTP test sources are identical; the76-test run is attributed to41e84a1, while final browser and typecheck/build are attributed to55c05e1.",
   "visualFindingResolved": "Auto-detected PDFs were decoded but rendered through the image JSX branch. Source55 uses the actual PDF state, blocks annotation until rendered-page completion and places a real canvas on the shared stage.",
-  "independentReview": "CG2-01 backend0742241 and frontendda0637f default-deny/privacy boundaries passed bounded read-only QA review. Supervisor55 UI/PDF patch separately awaiting bounded recheck.",
-  "decision": "Integrated local candidate verified; G2 remains in_review, global P0 not accepted",
-  "remaining": ["Zoom media adapter and real device evidence", "Full AI adapter/dock/pending-claim flows and real Gemini evidence", "Final NFR/a11y/operations acceptance", "Global60-P0 release acceptance"],
-  "realProviders": "BLOCKED: no VPS/domain/Google OAuth/Zoom/Gemini credentials; no mock result is real-provider proof"
+  "independentReview": "Bounded independent read-only reviews passed for backend0742241/frontendda0637f and final supervisor55 UI/PDF changes; no independent rerun of the full runtime suites was claimed.",
+  "decision": "Supervisor accepts G2 local classroom/tools/manual-review milestone; global requirements and provider-real acceptance remain open",
+  "remaining": [
+    "Zoom media adapter and real device evidence",
+    "Full AI adapter/dock/pending-claim flows and real Gemini evidence",
+    "Final NFR/a11y/operations acceptance",
+    "Global60-P0 release acceptance"
+  ],
+  "realProviders": "BLOCKED: no VPS/domain/Google OAuth/Zoom/Gemini credentials; no mock result is real-provider proof",
+  "artifacts": [
+    "g2-integrated-http.tap",
+    "g2-integrated-migration.txt",
+    "g2-integrated-doctor.txt",
+    "g2-final-browser.txt",
+    "g2-final-screenshots.json",
+    "g2-independent-review-0742241.md",
+    "g2-independent-review-55c05e1.md"
+  ]
 }
