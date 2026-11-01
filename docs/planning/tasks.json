@@ -419,32 +419,32 @@
       "id": "UI-04",
       "owner": "UI",
       "title": "Classroom/media and separate realtime/video status",
-      "status": "running",
+      "status": "in_review",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": "f4a55a9",
+      "commit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
       "evidence": [
-        "Fixture presentation checks reported by UI worker; integrated wiring still pending."
+        "docs/planning/evidence/g2-integrated-55c05e1.json"
       ]
     },
     {
       "id": "UI-05",
       "owner": "UI",
       "title": "Board/annotation/check/submission/support presentation",
-      "status": "running",
+      "status": "in_review",
       "srs_ids": [],
       "gate": "cross-cutting",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Conforms to approved contracts and relevant SRS criteria; independent review and exact-commit evidence required.",
-      "commit": "f4a55a9",
+      "commit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
       "evidence": [
-        "Fixture presentation checks reported by UI worker; integrated wiring still pending."
+        "docs/planning/evidence/g2-integrated-55c05e1.json"
       ]
     },
     {
@@ -590,7 +590,7 @@
       "id": "PRODUCT-05",
       "owner": "PRODUCT",
       "title": "Classroom lifecycle",
-      "status": "running",
+      "status": "in_review",
       "srs_ids": [
         "LIVE 001",
         "LIVE 002",
@@ -607,14 +607,16 @@
         "ARCH-05"
       ],
       "acceptance": "Idempotent start/end, persistent shared view/current activity/completion, dock by student, student writes stop at ended.",
-      "commit": null,
-      "evidence": []
+      "commit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
+      "evidence": [
+        "docs/planning/evidence/g2-integrated-55c05e1.json"
+      ]
     },
     {
       "id": "PRODUCT-06",
       "owner": "PRODUCT",
       "title": "Admission and server permissions",
-      "status": "running",
+      "status": "in_review",
       "srs_ids": [
         "ROOM 001",
         "ROOM 002",
@@ -631,14 +633,16 @@
         "ARCH-05"
       ],
       "acceptance": "CSPRNG hashed invite/TTL/rotation/revoke, consent/admit/reject, per-command authorization and role-filtered guest projections.",
-      "commit": null,
-      "evidence": []
+      "commit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
+      "evidence": [
+        "docs/planning/evidence/g2-integrated-55c05e1.json"
+      ]
     },
     {
       "id": "PRODUCT-07",
       "owner": "PRODUCT",
       "title": "Ordered realtime and recovery",
-      "status": "running",
+      "status": "in_review",
       "srs_ids": [
         "ROOM 005",
         "LIVE 006"
@@ -652,14 +656,16 @@
         "ARCH-05"
       ],
       "acceptance": "Transactional ordered outbox, dedupe/replay/last-event cursor, independent media/realtime recovery; bounded queue 50 commands, 1 MiB, TTL 5 minutes.",
-      "commit": null,
-      "evidence": []
+      "commit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
+      "evidence": [
+        "docs/planning/evidence/g2-integrated-55c05e1.json"
+      ]
     },
     {
       "id": "PRODUCT-08",
       "owner": "PRODUCT",
       "title": "Learning tools",
-      "status": "running",
+      "status": "in_review",
       "srs_ids": [
         "TOOL 001",
         "TOOL 002",
@@ -676,14 +682,16 @@
         "ARCH-05"
       ],
       "acceptance": "Author-aware live board and private drafts/snapshots, unique quick check response, retry-safe text/image/PDF submissions, four support levels.",
-      "commit": null,
-      "evidence": []
+      "commit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
+      "evidence": [
+        "docs/planning/evidence/g2-integrated-55c05e1.json"
+      ]
     },
     {
       "id": "PRODUCT-09",
       "owner": "PRODUCT",
       "title": "Evidence and human review",
-      "status": "running",
+      "status": "in_review",
       "srs_ids": [
         "EVD 001",
         "EVD 002",
@@ -703,14 +711,16 @@
         "ARCH-05"
       ],
       "acceptance": "Versioned immutable sources and evidence corrections/audit, per-student filtering/stable pagination, claim revisions/approval provenance, explicit review reopen, zero-claim completion.",
-      "commit": null,
-      "evidence": []
+      "commit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
+      "evidence": [
+        "docs/planning/evidence/g2-integrated-55c05e1.json"
+      ]
     },
     {
       "id": "PRODUCT-10",
       "owner": "PRODUCT",
       "title": "Gemini server adapter",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "AI 001",
         "AI 002",
@@ -730,13 +740,14 @@
       ],
       "acceptance": "Real Gemini configured on server; minimized consent-filtered context, suggestion lifecycle and model/prompt version, sourced pending claims, timeout/retry without blocking teaching.",
       "commit": null,
-      "evidence": []
+      "evidence": [],
+      "executor": "a86e230b-65d4-4b62-920e-f9dda0df117f"
     },
     {
       "id": "PRODUCT-11",
       "owner": "PRODUCT",
       "title": "Zoom media adapter",
-      "status": "planned",
+      "status": "running",
       "srs_ids": [
         "VID 001",
         "VID 002",
@@ -754,7 +765,8 @@
       ],
       "acceptance": "Authorized JWT signer, persistent Toolkit container, join/leave/mic/camera/share/participants/speaker, local/CI mock and real-device HTTPS evidence.",
       "commit": null,
-      "evidence": []
+      "evidence": [],
+      "executor": "3e42fb29-024b-4172-9925-38c290f8f5d5"
     },
     {
       "id": "PRODUCT-12",
@@ -997,18 +1009,18 @@
       ],
       "executor": "3e42fb29-024b-4172-9925-38c290f8f5d5",
       "title": "Complete mandatory classroom frontend actions and capability wiring",
-      "status": "running",
+      "status": "in_review",
       "srs_ids": [],
       "gate": "G2",
       "depends_on": [
         "ARCH-06"
       ],
       "acceptance": "Actual teacher/student stage, material/page/annotations, completion, tool toggles, permitted boards, selected-student support dock, check results, chat and invite lifecycle wired to server APIs; three independent browser contexts verify actions, persistence and privacy.",
-      "commit": "2555198ae0dbef790a24aa65899e8a9dc3a40451",
+      "commit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
       "evidence": [
-        "docs/planning/checkpoint-20261101.md"
+        "docs/planning/evidence/g2-integrated-55c05e1.json"
       ],
-      "local_gate": "WIP publication checkpoint only; browser/SRS acceptance pending"
+      "local_gate": "Integrated browser execution passed; scoped UI recheck pending; G3/G4 cross-cutting requirements remain open"
     }
   ],
   "active_executors": {

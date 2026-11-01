@@ -1,0 +1,70 @@
+{
+  "sourceCommit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
+  "environment": "Local-Docker Chrome",
+  "screenshots": [
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-student-1440-dark.png",
+      "sha256": "c67de460531bd97131390665340c96bb7bf7e0d63b6a878e1ab39001847cfd48"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-student-1440-light.png",
+      "sha256": "37438cae64d01203c55ac0982bb343af2eb0ac1dc3d4dbb457012f14f86e8e30"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-student-360-dark.png",
+      "sha256": "dd5b3ffbe641fdbce71f932bd3eafe1ca24ea192fe1528cfd413f50fb011f18a"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-student-360-light.png",
+      "sha256": "02ce643da7bb919f671901d365545636675e8493b6173a7ab4ded31ec4d7149f"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-student-375-dark.png",
+      "sha256": "534477b2105c174a0fa01126891ff5099415933ecd22b48b5480920c4fb4dd36"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-student-375-light.png",
+      "sha256": "549c6edd80540f295e10975db5918936296f66c60e4dd727edf8cd14f2f26e9e"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-student-768-dark.png",
+      "sha256": "4bf390999194d0331775cbec0a0008636404a018377db54eb2b00bd27c11c8c2"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-student-768-light.png",
+      "sha256": "eafc7880f14a9264a10288eca96a9fd7c60e8ff5de5cc257b027c04fdf90ca49"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-teacher-1440-dark.png",
+      "sha256": "c631fc9ded236e9b020792006328fa84dce9083bd376f07ff58a9654cee3a7d2"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-teacher-1440-light.png",
+      "sha256": "36874bb85c230795b6a9b7856df72d53cdd3c0fb8c373e6461586f04f0802d06"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-teacher-360-dark.png",
+      "sha256": "ae504c75d583d4007e3c08e58db13ca9f92449cf34678ccd5746d88e495fd6d3"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-teacher-360-light.png",
+      "sha256": "841ee3aae5d7256df23b9c76b230c0552e80520f0df6959916f5f27f025c571c"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-teacher-375-dark.png",
+      "sha256": "6739e86e69bca169d82cd6de37938d913de25b090ea8e52285515a10629ff1f5"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-teacher-375-light.png",
+      "sha256": "0a1d332e33df5118543df7d57552be0fc23904c8385eb330242dd6ff0b777251"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-teacher-768-dark.png",
+      "sha256": "e1342f96ddabaad5cf0f5881ce725185a3a7764f68e5f57c2038992de05b8492"
+    },
+    {
+      "artifact": "docs/planning/evidence/g2-final-screenshots/final-teacher-768-light.png",
+      "sha256": "70f9b2490e80bdba3f7281be088f18688b6d11c285bdaba7bf9c3624b31c0bf8"
+    }
+  ]
+}

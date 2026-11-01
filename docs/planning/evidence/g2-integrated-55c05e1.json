@@ -1,0 +1,29 @@
+{
+  "sourceCommit": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
+  "httpSuiteSourceCommit": "41e84a1f8bf5eac1ff4dd2f33f3d5d6715d1a1af",
+  "backendCommit": "0742241b99836261bca709c3a24a109768932931",
+  "frontendCommit": "da0637f550ef80a07bbe6b80d6ef69ecd5a54d85",
+  "uiCommit": "f55ef71976b8edb648034b5bd5065c9a528ac27d",
+  "qaCommit": "1501d80d4c10471f65b53bab82037d33762479e5",
+  "contractVersion": "v1",
+  "environment": "Local-Docker / HTTP+Socket.IO / Chrome",
+  "gateway": "http://127.0.0.1:4170",
+  "apiImage": "sha256:b35fa9285a9e402ac25bbc53d5678b6d051ac098aa42b4244fd12416a8d15986",
+  "gatewayImage": "sha256:378f79e2ba24340cad3d43141009e0d6488647d6fac6d2712674fb8bae9237c2",
+  "supervisorVerified": {
+    "runtime": "Node22.23.4 on host; Node22 Docker images",
+    "static": "strict frozen pnpm install, Prisma generate, frontend/server typecheck, frontend/server build and planning traceability passed",
+    "httpSocketSuite": {"passed": 76, "failed": 0, "skipped": 6, "artifact": "g2-integrated-http.tap"},
+    "skips": "Six legacy G1 harness placeholders remain skipped (one video/provider, five covered by concrete G2 tests); they are not six successful scenarios or a declaration that those G2 APIs are absent.",
+    "browser": "g2-capabilities.cjs passed on final source with three isolated contexts, PDF canvas rendered-page checks, private/shared boards, tool permissions, quickcheck review, dock notes, chat, invite TTL/revoke, refresh and end receipt",
+    "responsive": "Teacher/student at360,375,768,1440 in light/dark;16 committed screenshots, no document overflow;1440px desktop dock is beside stage",
+    "historicalMigrations": "Staged fresh database copilot_supervisor_migration_20261101 passed annotation provenance, duplicate groups including deleted evidence, immutable audit/revision/reopen checks and final schema checks; no existing database reset",
+    "doctor": "Actual Docker doctor passed gateway/storage health, signed upload/finalization/download byte equality, cross-teacher403 and anonymous access403 on the actual object"
+  },
+  "testDelta": "Only frontend, CSS and browser assertions changed from41e84a1 to55c05e1. Backend and HTTP test sources are identical; the76-test run is attributed to41e84a1, while final browser and typecheck/build are attributed to55c05e1.",
+  "visualFindingResolved": "Auto-detected PDFs were decoded but rendered through the image JSX branch. Source55 uses the actual PDF state, blocks annotation until rendered-page completion and places a real canvas on the shared stage.",
+  "independentReview": "CG2-01 backend0742241 and frontendda0637f default-deny/privacy boundaries passed bounded read-only QA review. Supervisor55 UI/PDF patch separately awaiting bounded recheck.",
+  "decision": "Integrated local candidate verified; G2 remains in_review, global P0 not accepted",
+  "remaining": ["Zoom media adapter and real device evidence", "Full AI adapter/dock/pending-claim flows and real Gemini evidence", "Final NFR/a11y/operations acceptance", "Global60-P0 release acceptance"],
+  "realProviders": "BLOCKED: no VPS/domain/Google OAuth/Zoom/Gemini credentials; no mock result is real-provider proof"
+}

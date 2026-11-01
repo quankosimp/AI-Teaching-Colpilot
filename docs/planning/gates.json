@@ -16,8 +16,11 @@
       "reason": "No Google OAuth credentials/HTTPS target"
     },
     "G2": {
-      "state": "running",
-      "owner": "PRODUCT"
+      "state": "in_review",
+      "owner": "PRODUCT",
+      "candidate": "55c05e1ee4372f55b25dbc7a8ee8b94619c7a9d0",
+      "evidence": "evidence/g2-integrated-55c05e1.json",
+      "scope": "Integrated local classroom/tools/manual-review candidate; global requirements and provider-real acceptance remain open"
     },
     "G3-real": {
       "state": "blocked",
