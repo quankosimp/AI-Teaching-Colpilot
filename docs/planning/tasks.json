@@ -985,9 +985,9 @@
   ],
   "active_executors": {
     "PRODUCT": {
-      "agentId": "dffe62c1-4068-45a7-b7b1-26ef1653714e",
-      "provider": "antigravity-1/gemini-4-argon-high",
-      "reason": "Preferred Codex worker hit usage quota after committing G1 fixes; replacement verified runtime, ownership unchanged."
+      "agentId": "80137a9b-b32c-49d4-b8f4-1e18aa7acc74",
+      "provider": "codex-alt/gpt-6.1-terra",
+      "reason": "Antigravity recovery writer hit a 34-hour quota limit. Original Codex reset time has elapsed; fresh configured coding worker launched on the same preserved G2 worktree. Awaiting runtime confirmation; no concurrent Product writer."
     },
     "QA": {
       "agentId": "f21a5ec6-49fc-4369-9041-75d2f8a23e11",
