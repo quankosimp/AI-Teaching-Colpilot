@@ -28,5 +28,8 @@ fi
 echo "==> Ensuring private bucket '${BUCKET}' exists..."
 mc mb --ignore-existing "local/${BUCKET}"
 
-echo "==> MinIO private bucket '${BUCKET}' initialized successfully."
-echo "==> MinIO CORS is enabled server-side via MINIO_API_CORS_ALLOW_ORIGIN."
+echo "==> Enforcing strict private access policy (mc anonymous set none)..."
+mc anonymous set none "local/${BUCKET}"
+
+echo "==> MinIO private bucket '${BUCKET}' initialized successfully with private-only policy."
+echo "==> MinIO CORS is enabled server-side for local origins (http://127.0.0.1:4170, http://localhost:4170)."

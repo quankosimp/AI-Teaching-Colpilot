@@ -29,7 +29,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-copilotlocal}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-copilot_local_only}
-      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_API_CORS_ALLOW_ORIGIN:-"http://127.0.0.1:4170,http://localhost:4170,*"}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_API_CORS_ALLOW_ORIGIN:-"http://127.0.0.1:4170,http://localhost:4170"}
     ports:
       - "127.0.0.1:${MINIO_BROWSER_PORT:-59002}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-59003}:9001"

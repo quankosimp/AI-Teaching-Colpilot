@@ -6,10 +6,13 @@
 .git/
 .gitignore
 
-# Environment files with secrets (keep .env.example)
-.env
-.env.*
-!.env.example
+# Environment files with secrets (keep examples only)
+**/.env
+**/.env.*
+**/*.env
+**/*.env.*
+!**/.env.example
+!**/local.env.example
 
 # Local dependencies
 node_modules/
