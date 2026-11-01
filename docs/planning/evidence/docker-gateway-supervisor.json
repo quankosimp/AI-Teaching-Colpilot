@@ -1,0 +1,21 @@
+{
+  "environment": "Local-Docker",
+  "packagingCandidate": "b766fc061ea95ff6157eee30040484a57ac1bbfc",
+  "runtimeHook": "e1c1c9d63187f054d7e0df0564ce3d6b4deeb5cf",
+  "gateway": "http://127.0.0.1:4170",
+  "storage": "http://127.0.0.1:59002",
+  "checks": [
+    {"check": "API liveness through gateway", "result": "passed", "status": 200},
+    {"check": "Dependency readiness", "result": "passed", "detail": "Database/storage ready; realtime not_configured; overall degraded with unconfigured AI/video, probe not_run"},
+    {"check": "Two local teacher logins", "result": "passed"},
+    {"check": "Allowed-origin preflight and PUT response CORS", "result": "passed"},
+    {"check": "Outside-origin preflight does not allow outside origin or wildcard", "result": "passed"},
+    {"check": "Presigned PUT/finalization of synthetic PNG", "result": "passed"},
+    {"check": "Owner read-url and download match uploaded bytes", "result": "passed"},
+    {"check": "Other teacher requests same read-url route", "result": "passed", "status": 403},
+    {"check": "Anonymous GET of actual existing verified object with query removed", "result": "passed", "detail": "401/403 required; 404 not accepted"},
+    {"check": "Logout of both probe sessions", "result": "passed", "status": 204}
+  ],
+  "decision": "Functional gateway/private file probe passed independently; packaging doctor and independent remediation audit remain open",
+  "providers": "No real provider/HTTPS acceptance; no raw tokens or signed URLs retained"
+}

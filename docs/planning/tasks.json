@@ -995,8 +995,9 @@
       "last_event": "Stream interrupted after G2 scaffold commit 0d9674b; worktree clean, prepared tests preserved; no runtime G2 pass inferred."
     },
     "REVIEW": {
-      "agentId": "7353d326-2054-405b-8669-fa3f963ba765",
-      "provider": "antigravity-1/gemini-4-argon-high",
+      "agentId": "400fec47-e03f-47d7-b817-7b24ffaf7ca3",
+      "provider": "antigravity-2/claude-opus-5-5-high",
+      "reason": "Previous reviewer hit a 34-hour quota limit; configured independent Review profile launched for Docker remediation audit.",
       "independentFromWriter": true
     },
     "PRODUCT-OPS": {
