@@ -1,3 +1,4 @@
+import { publicSubmission } from "../submissionProjection.js";
 import { lockSession, SessionConflict } from "../sessionLock.js";
 import { Router, type Request, type Response } from "express";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -1009,14 +1010,18 @@ export function classroomRouter(config: AppConfig) {
           );
           return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập");
         }
-        const existingOverrides =
-          Tools.partial().safeParse(member.toolOverrides ?? {}).data ?? {};
-        const nextOverrides = parsed.data.toolOverrides
-          ? { ...existingOverrides, ...parsed.data.toolOverrides }
-          : undefined;
         const now = new Date();
         const updated = await db.$transaction(async (tx) => {
           await lockSession(tx, member.sessionId);
+          const freshMember = await tx.roomMember.findUniqueOrThrow({
+            where: { id: member.id },
+          });
+          const existingOverrides =
+            Tools.partial().safeParse(freshMember.toolOverrides ?? {}).data ??
+            {};
+          const nextOverrides = parsed.data.toolOverrides
+            ? { ...existingOverrides, ...parsed.data.toolOverrides }
+            : undefined;
           if (parsed.data.leave) {
             await tx.studentRoomSession.updateMany({
               where: {
@@ -1689,7 +1694,7 @@ export function classroomRouter(config: AppConfig) {
           boards,
           attempts,
           checks,
-          submissions,
+          submissions: submissions.map(publicSubmission),
           annotations,
           messages,
           reactions,
@@ -1932,8 +1937,18 @@ export function classroomRouter(config: AppConfig) {
         },
         activities: session.Activity_sessionId_items.map((a) => ({
           id: a.id,
-          title: a.title,
-          description: a.description,
+          title:
+            a.title.startsWith("Củng cố: ") &&
+            Array.isArray(a.sourceClaimRefs) &&
+            a.sourceClaimRefs.length
+              ? `Hoạt động củng cố ${a.order + 1}`
+              : a.title,
+          description:
+            a.title.startsWith("Củng cố: ") &&
+            Array.isArray(a.sourceClaimRefs) &&
+            a.sourceClaimRefs.length
+              ? "Hoạt động luyện tập tiếp nối."
+              : a.description,
           duration: a.duration,
           order: a.order,
           type: a.type,
@@ -2242,13 +2257,9 @@ export function classroomRouter(config: AppConfig) {
               }
             }
           } else if (cmd.operation === "clearOwnStrokes") {
-            if (actor.role === "teacher" && target.ownerId === "common") {
-              nextStrokes = [];
-            } else {
-              nextStrokes = currentStrokes.filter(
-                (s) => s.authorId !== authorKey,
-              );
-            }
+            nextStrokes = currentStrokes.filter(
+              (s) => s.authorId !== authorKey,
+            );
           } else if (cmd.operation === "setNote") {
             const filtered = currentNotes.filter(
               (n) => n.authorId !== authorKey,
@@ -2818,7 +2829,23 @@ export function classroomRouter(config: AppConfig) {
         return fail(res, 403, "PERMISSION_DENIED", "Không có quyền truy cập");
       const { updatedResponse, evidence } = await db.$transaction(
         async (tx) => {
-          await lockSession(tx, responseRow.sessionId);
+          const lockedSession = await lockSession(tx, responseRow.sessionId);
+          const currentResponse = await tx.checkResponse.findUniqueOrThrow({
+            where: { id: responseRow.id },
+          });
+          const existing = await tx.evidence.findFirst({
+            where: {
+              sourceType: "check_response",
+              sourceId: responseRow.id,
+              sessionId: responseRow.sessionId,
+            },
+          });
+          if (
+            existing &&
+            currentResponse.support === parsed.data.support &&
+            currentResponse.feedback === parsed.data.feedback
+          )
+            return { updatedResponse: currentResponse, evidence: existing };
           const updated = await tx.checkResponse.update({
             where: { id: responseRow.id },
             data: {
@@ -2833,6 +2860,84 @@ export function classroomRouter(config: AppConfig) {
               sessionId: responseRow.sessionId,
             },
           });
+          if (existingEv) {
+            await tx.evidenceRevision.create({
+              data: {
+                evidenceId: existingEv.id,
+                version: existingEv.version,
+                detail: existingEv.detail,
+                support: existingEv.support,
+                studentId: existingEv.studentId,
+                sessionId: existingEv.sessionId,
+                activityId: existingEv.activityId,
+                sourceType: existingEv.sourceType,
+                sourceId: existingEv.sourceId,
+                sourceVersion: existingEv.sourceVersion,
+                status: existingEv.status,
+                changedBy: res.locals.actor.id,
+                reason: "check_review_updated",
+              },
+            });
+            const dependents = await tx.claim.findMany({
+              where: {
+                sessionId: responseRow.sessionId,
+                evidenceIds: { has: existingEv.id },
+                status: "approved",
+              },
+            });
+            for (const cl of dependents) {
+              await tx.claimRevision.create({
+                data: {
+                  claimId: cl.id,
+                  revision: cl.revision,
+                  text: cl.text,
+                  evidenceIds: cl.evidenceIds,
+                  status: cl.status,
+                  actorId: res.locals.actor.id,
+                  reason: "source_corrected",
+                },
+              });
+              await tx.claim.update({
+                where: { id: cl.id },
+                data: {
+                  status: "pending",
+                  staleReason: "source_corrected",
+                  revision: { increment: 1 },
+                },
+              });
+            }
+            if (dependents.length && lockedSession.status === "reviewed") {
+              const reopened = await tx.session.update({
+                where: { id: responseRow.sessionId },
+                data: { status: "ended", version: { increment: 1 } },
+              });
+              await appendOutboxEvent(tx, {
+                sessionId: responseRow.sessionId,
+                type: "review.reopened",
+                label: "Mở lại duyệt sau khi sửa đánh giá",
+                actorId: res.locals.actor.id,
+                visibility: { scope: "teacher" },
+                resourceId: responseRow.sessionId,
+                version: reopened.version,
+              });
+            }
+            await tx.auditLog.create({
+              data: {
+                workspaceId: res.locals.actor.workspaceId,
+                actorId: res.locals.actor.id,
+                actorRole: "teacher",
+                action: "evidence.corrected",
+                targetType: "evidence",
+                targetId: existingEv.id,
+                sessionId: responseRow.sessionId,
+                requestId: res.locals.requestId,
+                metadata: {
+                  reasonCode: "source_corrected",
+                  version: existingEv.version + 1,
+                },
+              },
+            });
+          }
           const ev = existingEv
             ? await tx.evidence.update({
                 where: { id: existingEv.id },
@@ -3000,9 +3105,11 @@ export function classroomRouter(config: AppConfig) {
       if (prior === null) return;
       if (prior) {
         return res.status(201).json({
-          submission: await db.submission.findUniqueOrThrow({
-            where: { id: prior.resourceId },
-          }),
+          submission: publicSubmission(
+            await db.submission.findUniqueOrThrow({
+              where: { id: prior.resourceId },
+            }),
+          ),
         });
       }
 
@@ -3192,9 +3299,11 @@ export function classroomRouter(config: AppConfig) {
           await client.removeObject(bucket, upload.storageKey).catch(() => {});
         triggerOutboxPublish(session.id);
         return res.status(201).json({
-          submission: await db.submission.findUniqueOrThrow({
-            where: { id: result.resourceId },
-          }),
+          submission: publicSubmission(
+            await db.submission.findUniqueOrThrow({
+              where: { id: result.resourceId },
+            }),
+          ),
         });
       } catch (error) {
         if (error instanceof Error && error.message === "Upload already used")
@@ -3317,7 +3426,7 @@ export function classroomRouter(config: AppConfig) {
 
       const { updatedSubmission, evidence } = await db.$transaction(
         async (tx) => {
-          await lockSession(tx, submission.sessionId);
+          const lockedSession = await lockSession(tx, submission.sessionId);
           const currentSubmission = await tx.submission.findUniqueOrThrow({
             where: { id: submission.id },
           });
@@ -3405,11 +3514,33 @@ export function classroomRouter(config: AppConfig) {
             }
             if (
               dependentClaims.length > 0 &&
-              submission.sessionIdRef.status === "reviewed"
+              lockedSession.status === "reviewed"
             ) {
-              await tx.session.update({
+              const reopened = await tx.session.update({
                 where: { id: submission.sessionId },
                 data: { status: "ended", version: { increment: 1 } },
+              });
+              await appendOutboxEvent(tx, {
+                sessionId: submission.sessionId,
+                type: "review.reopened",
+                label: "Mở lại duyệt sau khi chấm lại",
+                actorId: res.locals.actor.id,
+                visibility: { scope: "teacher" },
+                resourceId: submission.sessionId,
+                version: reopened.version,
+              });
+              await tx.auditLog.create({
+                data: {
+                  workspaceId: res.locals.actor.workspaceId,
+                  actorId: res.locals.actor.id,
+                  actorRole: "teacher",
+                  action: "review.reopened",
+                  targetType: "session",
+                  targetId: submission.sessionId,
+                  sessionId: submission.sessionId,
+                  requestId: res.locals.requestId,
+                  metadata: { reasonCode: "source_corrected" },
+                },
               });
             }
           } else {
@@ -3469,7 +3600,10 @@ export function classroomRouter(config: AppConfig) {
         },
       );
       triggerOutboxPublish(submission.sessionId);
-      return res.json({ submission: updatedSubmission, evidence });
+      return res.json({
+        submission: publicSubmission(updatedSubmission),
+        evidence,
+      });
     }),
   );
 

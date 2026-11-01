@@ -4,6 +4,10 @@ import { once } from "node:events";
 import { createHash } from "node:crypto";
 import { SignJWT, decodeJwt } from "jose";
 import { io } from "socket.io-client";
+import {
+  appendOutboxEvent,
+  triggerOutboxPublish,
+} from "../../../server/realtime";
 import { createApp } from "../../../server/app";
 import { db, loadConfig } from "../../../server/context";
 
@@ -208,6 +212,125 @@ test(
         await holder;
         return Promise.all([one, two]);
       };
+      const teacherIdForTest = (await (await call("/auth/me", a)).json())
+        .teacher.id;
+      const siblingResponse = await call("/sessions", a, "POST", {
+        studentIds: [g2.studentId],
+        title: "Independent room",
+        goal: "",
+        sharedGoal: "",
+        date: "2026-11-01",
+        time: "19:00",
+        duration: 60,
+        tools: { board: true, upload: true, check: true, chat: true },
+      });
+      assert.equal(siblingResponse.status, 201);
+      const siblingId = (await siblingResponse.json()).session.id;
+      const captured: number[] = [];
+      teacherSocket.on("classroom.event", (event: { seq: number }) =>
+        captured.push(event.seq),
+      );
+      const injected = await db.$transaction(async (tx) => {
+        const first = await appendOutboxEvent(tx, {
+          sessionId: id,
+          type: "board.updated",
+          label: "blocked",
+          actorId: teacherIdForTest,
+          visibility: { scope: "public" },
+        });
+        const second = await appendOutboxEvent(tx, {
+          sessionId: id,
+          type: "board.updated",
+          label: "after",
+          actorId: teacherIdForTest,
+          visibility: { scope: "public" },
+        });
+        await tx.sessionEventOutbox.update({
+          where: { id: first.id },
+          data: { payload: { resourceId: 42 } },
+        });
+        const independent = await appendOutboxEvent(tx, {
+          sessionId: siblingId,
+          type: "board.updated",
+          label: "independent",
+          actorId: teacherIdForTest,
+          visibility: { scope: "public" },
+        });
+        return { first, second, independent };
+      });
+      triggerOutboxPublish(id);
+      for (let n = 0; n < 40; n++) {
+        const row = await db.sessionEventOutbox.findUniqueOrThrow({
+          where: { id: injected.first.id },
+        });
+        if (row.publicationAttempts > 0) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      assert.equal(
+        (
+          await db.sessionEventOutbox.findUniqueOrThrow({
+            where: { id: injected.second.id },
+          })
+        ).publishedAt,
+        null,
+      );
+      for (let n = 0; n < 40; n++) {
+        if (
+          (
+            await db.sessionEventOutbox.findUniqueOrThrow({
+              where: { id: injected.independent.id },
+            })
+          ).publishedAt
+        )
+          break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      assert.ok(
+        (
+          await db.sessionEventOutbox.findUniqueOrThrow({
+            where: { id: injected.independent.id },
+          })
+        ).publishedAt,
+      );
+      await db.sessionEventOutbox.update({
+        where: { id: injected.first.id },
+        data: { payload: {} },
+      });
+      triggerOutboxPublish(id);
+      for (let n = 0; n < 60; n++) {
+        if (
+          (
+            await db.sessionEventOutbox.findUniqueOrThrow({
+              where: { id: injected.second.id },
+            })
+          ).publishedAt
+        )
+          break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      assert.ok(
+        (
+          await db.sessionEventOutbox.findUniqueOrThrow({
+            where: { id: injected.second.id },
+          })
+        ).publishedAt,
+      );
+      await new Promise((r) => setTimeout(r, 100));
+      const sequence = captured.filter(
+        (seq) => seq === injected.first.seq || seq === injected.second.seq,
+      );
+      assert.deepEqual(sequence, [injected.first.seq, injected.second.seq]);
+      teacherSocket.emit("classroom.reconnect", {
+        sessionId: id,
+        lastEventSeq: injected.first.seq - 1,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      assert.deepEqual(
+        captured.filter(
+          (seq) => seq === injected.first.seq || seq === injected.second.seq,
+        ),
+        sequence,
+      );
       const stroke = {
         id: crypto.randomUUID(),
         authorId: g1.studentId,
@@ -314,6 +437,26 @@ test(
           .length,
         1,
       );
+      assert.equal(
+        (
+          await call(`/sessions/${id}/boards/common`, a, "PUT", {
+            operation: "clearOwnStrokes",
+          })
+        ).status,
+        200,
+      );
+      const afterClear = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      const remaining = afterClear.boards.find(
+        (row: { ownerId: string }) => row.ownerId === "common",
+      );
+      assert.ok(
+        remaining.strokes.some((row: { id: string }) => row.id === one.id),
+      );
+      assert.ok(
+        !remaining.strokes.some((row: { id: string }) => row.id === two.id),
+      );
       const decoded = decodeJwt(g2.accessToken);
       const shortToken = await new SignJWT({
         sid: decoded.sid,
@@ -367,6 +510,26 @@ test(
       );
       assert.equal(closed.status, 200);
       assert.equal(lateAnswer.status, 409);
+      const [toggle1, toggle2] = await Promise.all([
+        call(`/sessions/${id}/members/${g2.memberId}`, a, "PATCH", {
+          toolOverrides: { chat: false },
+        }),
+        call(`/sessions/${id}/members/${g2.memberId}`, a, "PATCH", {
+          toolOverrides: { upload: false },
+        }),
+      ]);
+      assert.equal(toggle1.status, 200);
+      assert.equal(toggle2.status, 200);
+      const memberAfter = await db.roomMember.findUniqueOrThrow({
+        where: { id: g2.memberId },
+      });
+      assert.deepEqual(memberAfter.toolOverrides, {
+        chat: false,
+        upload: false,
+      });
+      await call(`/sessions/${id}/members/${g2.memberId}`, a, "PATCH", {
+        toolOverrides: { chat: true, upload: true },
+      });
       const bytes = Buffer.from("%PDF-1.4\nprivate submission\n%%EOF\n");
       const intentResponse = await call(
         `/sessions/${id}/submissions/upload-intent`,
@@ -418,6 +581,7 @@ test(
       const submitted = await send();
       assert.equal(submitted.status, 201);
       const submission = (await submitted.json()).submission;
+      assert.equal(submission.storageKey, undefined);
       const retry = await send();
       assert.equal(retry.status, 201);
       assert.equal((await retry.json()).submission.id, submission.id);
@@ -437,6 +601,227 @@ test(
           await (await fetch((await signed.json()).readUrl)).arrayBuffer(),
         ).toString(),
         bytes.toString(),
+      );
+      const badSource = await call(`/sessions/${id}/evidence`, a, "POST", {
+        studentId: g2.studentId,
+        kind: "BaiLam",
+        title: "Wrong student",
+        detail: "invalid",
+        support: "DocLap",
+        source: { type: "submission", id: submission.id, version: 1 },
+      });
+      assert.equal(badSource.status, 409);
+      const badVersion = await call(`/sessions/${id}/evidence`, a, "POST", {
+        studentId: g1.studentId,
+        kind: "BaiLam",
+        title: "Wrong version",
+        detail: "invalid",
+        support: "DocLap",
+        source: { type: "submission", id: submission.id, version: 999 },
+      });
+      assert.equal(badVersion.status, 409);
+      const grade = await call(
+        `/submissions/${submission.id}/grade`,
+        a,
+        "PATCH",
+        { feedback: "First grade", support: "DocLap" },
+      );
+      assert.equal(grade.status, 200);
+      const graded = await grade.json();
+      assert.equal(graded.submission.storageKey, undefined);
+      const draftSource = await call(
+        `/sessions/${id}/claims/draft`,
+        a,
+        "POST",
+        {
+          studentId: g1.studentId,
+          text: "Source claim",
+          evidenceIds: [graded.evidence.id],
+        },
+      );
+      assert.equal(draftSource.status, 201);
+      const sourceClaim = (await draftSource.json()).claim;
+      const [sourceApproval, regrade] = await orderedRace(
+        () =>
+          call(`/claims/${sourceClaim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: sourceClaim.revision,
+            evidenceIds: [graded.evidence.id],
+          }),
+        () =>
+          call(`/submissions/${submission.id}/grade`, a, "PATCH", {
+            feedback: "Regraded",
+            support: "CoGoiY",
+          }),
+      );
+      assert.equal(sourceApproval.status, 200);
+      assert.equal(regrade.status, 200);
+      let sourceRoom = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      let sourceCurrent = sourceRoom.claims.find(
+        (c: { id: string }) => c.id === sourceClaim.id,
+      );
+      assert.equal(sourceCurrent.status, "pending");
+      assert.equal(
+        sourceRoom.submissions.find(
+          (x: { id: string }) => x.id === submission.id,
+        ).storageKey,
+        undefined,
+      );
+      const [sourceApproval2, relabel] = await orderedRace(
+        () =>
+          call(`/claims/${sourceClaim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: sourceCurrent.revision,
+            evidenceIds: [graded.evidence.id],
+          }),
+        () =>
+          call(`/submissions/${submission.id}/relabel`, a, "PATCH", {
+            studentId: g2.studentId,
+            sessionId: id,
+            activityId,
+          }),
+      );
+      assert.equal(sourceApproval2.status, 200);
+      assert.equal(relabel.status, 200);
+      assert.equal((await relabel.json()).submission.storageKey, undefined);
+      sourceRoom = await (await call(`/room/state?sessionId=${id}`, a)).json();
+      sourceCurrent = sourceRoom.claims.find(
+        (c: { id: string }) => c.id === sourceClaim.id,
+      );
+      assert.equal(sourceCurrent.status, "pending");
+      assert.equal(
+        (
+          await call(`/claims/${sourceClaim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: sourceCurrent.revision,
+            evidenceIds: [graded.evidence.id],
+          })
+        ).status,
+        400,
+      );
+      const material = await db.material.create({
+        data: {
+          teacherId,
+          title: "Race material",
+          subject: "Math",
+          grade: "9",
+          topic: "Race",
+          level: "CoBan",
+          kind: "PDF",
+          description: "",
+          source: "test",
+          MaterialVersion_materialId_items: {
+            create: { version: 1, uploadStatus: "ready", pages: [] },
+          },
+        },
+      });
+      await db.activity.update({
+        where: { id: activityId },
+        data: { materialId: material.id, materialVersion: 1 },
+      });
+      const annotationBody = {
+        activityId,
+        materialId: material.id,
+        materialVersion: 1,
+        page: 0,
+        x: 10,
+        y: 20,
+        text: "First annotation",
+        studentId: g2.studentId,
+      };
+      const firstAnnotation = await call(
+        `/sessions/${id}/annotations`,
+        a,
+        "POST",
+        annotationBody,
+      );
+      assert.equal(firstAnnotation.status, 201);
+      const firstAnnotationData = await firstAnnotation.json();
+      const wrongAnnotation = await call(
+        `/sessions/${id}/evidence`,
+        a,
+        "POST",
+        {
+          studentId: g1.studentId,
+          kind: "ChuThichDe",
+          title: "wrong",
+          detail: "wrong",
+          support: "DocLap",
+          source: {
+            type: "annotation",
+            id: firstAnnotationData.annotation.id,
+            version: 1,
+          },
+        },
+      );
+      assert.equal(wrongAnnotation.status, 409);
+      const sharedAnnotation = await call(
+        `/sessions/${id}/annotations`,
+        a,
+        "POST",
+        { ...annotationBody, studentId: undefined, text: "Common annotation" },
+      );
+      assert.equal(sharedAnnotation.status, 201);
+      const commonId = (await sharedAnnotation.json()).annotation.id;
+      const commonClaimSource = await call(
+        `/sessions/${id}/evidence`,
+        a,
+        "POST",
+        {
+          studentId: g2.studentId,
+          kind: "ChuThichDe",
+          title: "wrong",
+          detail: "wrong",
+          support: "DocLap",
+          source: { type: "annotation", id: commonId, version: 1 },
+        },
+      );
+      assert.equal(commonClaimSource.status, 409);
+      const annotationState = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      const annotationEvidence = annotationState.evidence.find(
+        (e: { kind: string; detail: string }) =>
+          e.kind === "ChuThichDe" && e.detail === "First annotation",
+      );
+      assert.ok(annotationEvidence);
+      const annotationClaimResponse = await call(
+        `/sessions/${id}/claims/draft`,
+        a,
+        "POST",
+        {
+          studentId: g2.studentId,
+          text: "Annotation claim",
+          evidenceIds: [annotationEvidence.id],
+        },
+      );
+      assert.equal(annotationClaimResponse.status, 201);
+      const annotationClaim = (await annotationClaimResponse.json()).claim;
+      const [annotationApproval, anotherAnnotation] = await orderedRace(
+        () =>
+          call(`/claims/${annotationClaim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: annotationClaim.revision,
+            evidenceIds: [annotationEvidence.id],
+          }),
+        () =>
+          call(`/sessions/${id}/annotations`, a, "POST", {
+            ...annotationBody,
+            text: "Second annotation",
+          }),
+      );
+      assert.equal(annotationApproval.status, 200);
+      assert.equal(anotherAnnotation.status, 201);
+      const annotationRoom = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      assert.equal(
+        annotationRoom.claims.find(
+          (c: { id: string }) => c.id === annotationClaim.id,
+        ).status,
+        "approved",
       );
       const invites = (await (await call(`/sessions/${id}/invites`, a)).json())
         .invites;
@@ -528,6 +913,167 @@ test(
       assert.equal(
         (await call(`/sessions/${id}/start`, a, "POST", {})).status,
         409,
+      );
+      const invalidatedSource = (
+        await (await call(`/room/state?sessionId=${id}`, a)).json()
+      ).claims.find((c: { id: string }) => c.id === sourceClaim.id);
+      assert.equal(
+        (
+          await call(`/claims/${sourceClaim.id}/review`, a, "PATCH", {
+            action: "reject",
+            revision: invalidatedSource.revision,
+          })
+        ).status,
+        200,
+      );
+      const relabeledDraft = await call(
+        `/sessions/${id}/claims/draft`,
+        a,
+        "POST",
+        {
+          studentId: g2.studentId,
+          text: "Relabeled source claim",
+          evidenceIds: [graded.evidence.id],
+        },
+      );
+      assert.equal(relabeledDraft.status, 201);
+      const relabeledClaim = (await relabeledDraft.json()).claim;
+      assert.equal(
+        (
+          await call(`/claims/${relabeledClaim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: relabeledClaim.revision,
+            evidenceIds: [graded.evidence.id],
+          })
+        ).status,
+        200,
+      );
+      const beforeRaceEnd = (
+        await db.session.findUniqueOrThrow({ where: { id } })
+      ).endedAt;
+      const [finishRace, gradeRace] = await orderedRace(
+        () => call(`/sessions/${id}/complete-review`, a, "POST", {}),
+        () =>
+          call(`/submissions/${submission.id}/grade`, a, "PATCH", {
+            feedback: "Grade after completion",
+            support: "DuocHuongDan",
+          }),
+      );
+      assert.equal(finishRace.status, 200);
+      assert.equal(gradeRace.status, 200);
+      const afterGradeRace = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      const reopenedClaim = afterGradeRace.claims.find(
+        (c: { id: string }) => c.id === relabeledClaim.id,
+      );
+      assert.equal(afterGradeRace.session.status, "ended");
+      assert.equal(reopenedClaim.status, "pending");
+      assert.equal(
+        new Date(afterGradeRace.session.endedAt).getTime(),
+        beforeRaceEnd!.getTime(),
+      );
+      assert.equal(
+        (
+          await call(`/claims/${relabeledClaim.id}/review`, a, "PATCH", {
+            action: "reject",
+            revision: reopenedClaim.revision,
+          })
+        ).status,
+        200,
+      );
+      const checkResponse = await db.checkResponse.findUniqueOrThrow({
+        where: {
+          checkId_studentId: { checkId: check.id, studentId: g2.studentId },
+        },
+      });
+      const reviewedCheck = await call(
+        `/checks/${check.id}/responses/${checkResponse.id}/review`,
+        a,
+        "POST",
+        { feedback: "First feedback", support: "DocLap" },
+      );
+      assert.equal(reviewedCheck.status, 200);
+      const checkEvidence = (await reviewedCheck.json()).evidence;
+      const repeatedCheck = await call(
+        `/checks/${check.id}/responses/${checkResponse.id}/review`,
+        a,
+        "POST",
+        { feedback: "First feedback", support: "DocLap" },
+      );
+      assert.equal(repeatedCheck.status, 200);
+      assert.equal(
+        (await repeatedCheck.json()).evidence.version,
+        checkEvidence.version,
+      );
+      assert.equal(
+        await db.evidenceRevision.count({
+          where: { evidenceId: checkEvidence.id },
+        }),
+        0,
+      );
+      const checkClaimResult = await call(
+        `/sessions/${id}/claims/draft`,
+        a,
+        "POST",
+        {
+          studentId: g2.studentId,
+          text: "Check claim",
+          evidenceIds: [checkEvidence.id],
+        },
+      );
+      assert.equal(checkClaimResult.status, 201);
+      const checkClaim = (await checkClaimResult.json()).claim;
+      assert.equal(
+        (
+          await call(`/claims/${checkClaim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: checkClaim.revision,
+            evidenceIds: [checkEvidence.id],
+          })
+        ).status,
+        200,
+      );
+      const oldEnd = (await db.session.findUniqueOrThrow({ where: { id } }))
+        .endedAt;
+      const [finishCheck, changeCheck] = await orderedRace(
+        () => call(`/sessions/${id}/complete-review`, a, "POST", {}),
+        () =>
+          call(
+            `/checks/${check.id}/responses/${checkResponse.id}/review`,
+            a,
+            "POST",
+            { feedback: "Changed feedback", support: "CoGoiY" },
+          ),
+      );
+      assert.equal(finishCheck.status, 200);
+      assert.equal(changeCheck.status, 200);
+      const checkAfter = await (
+        await call(`/room/state?sessionId=${id}`, a)
+      ).json();
+      const changedClaim = checkAfter.claims.find(
+        (c: { id: string }) => c.id === checkClaim.id,
+      );
+      assert.equal(checkAfter.session.status, "ended");
+      assert.equal(changedClaim.status, "pending");
+      assert.equal(
+        new Date(checkAfter.session.endedAt).getTime(),
+        oldEnd!.getTime(),
+      );
+      assert.equal(
+        await db.evidenceRevision.count({
+          where: { evidenceId: checkEvidence.id },
+        }),
+        1,
+      );
+      assert.equal(
+        (
+          await call(`/claims/${checkClaim.id}/review`, a, "PATCH", {
+            action: "reject",
+            revision: changedClaim.revision,
+          })
+        ).status,
+        200,
       );
       const evidenceResponse = await call(
         `/sessions/${id}/evidence`,
@@ -667,6 +1213,80 @@ test(
           )
         ),
       );
+      const privateEvidence = await call(
+        `/sessions/${id}/evidence`,
+        a,
+        "POST",
+        {
+          studentId: g1.studentId,
+          kind: "GhiChu",
+          title: "private observation",
+          detail: "PRIVATE-ONLY-STUDENT-A",
+          support: "DocLap",
+        },
+      );
+      assert.equal(privateEvidence.status, 201);
+      const privateId = (await privateEvidence.json()).evidence.id;
+      const privateDraft = await call(
+        `/sessions/${id}/claims/draft`,
+        a,
+        "POST",
+        {
+          studentId: g1.studentId,
+          text: "PRIVATE-ONLY-STUDENT-A",
+          evidenceIds: [privateId],
+        },
+      );
+      assert.equal(privateDraft.status, 201);
+      const privateClaim = (await privateDraft.json()).claim;
+      assert.equal(
+        (
+          await call(`/claims/${privateClaim.id}/review`, a, "PATCH", {
+            action: "approve",
+            revision: privateClaim.revision,
+            evidenceIds: [privateId],
+          })
+        ).status,
+        200,
+      );
+      const next = await call(`/sessions/${id}/next-session`, a, "POST", {});
+      assert.equal(next.status, 201);
+      const nextId = (await next.json()).session.id;
+      const nextActivity = await db.activity.findFirstOrThrow({
+        where: { sessionId: nextId, teacherNotes: "PRIVATE-ONLY-STUDENT-A" },
+      });
+      assert.ok(!nextActivity.title.includes("PRIVATE-ONLY-STUDENT-A"));
+      await db.activity.update({
+        where: { id: nextActivity.id },
+        data: {
+          title: "Củng cố: PRIVATE-ONLY-STUDENT-A",
+          description: "PRIVATE-ONLY-STUDENT-A",
+        },
+      });
+      const nextInvite = await call(`/sessions/${nextId}/invites`, a, "POST", {
+        studentId: g2.studentId,
+      });
+      const nextToken = (await nextInvite.json()).rawToken;
+      const nextGrant = await join(nextToken, "Student B");
+      assert.equal(
+        (
+          await call(
+            `/sessions/${nextId}/members/${nextGrant.memberId}/admit`,
+            a,
+            "POST",
+            { approved: true },
+          )
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await call(`/sessions/${nextId}/start`, a, "POST", {})).status,
+        200,
+      );
+      const bProjection = await (
+        await call("/room/state", nextGrant.accessToken)
+      ).text();
+      assert.ok(!bProjection.includes("PRIVATE-ONLY-STUDENT-A"));
       assert.equal(privateEvents, 0);
       assert.ok(teacherSocket.connected);
     } finally {

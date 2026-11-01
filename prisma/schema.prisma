@@ -459,6 +459,7 @@ model BoardAttempt {
 }
 
 model Annotation {
+  studentId       String?  @db.Uuid
   id              String   @id @default(uuid()) @db.Uuid
   sessionId       String   @db.Uuid
   activityId      String   @db.Uuid

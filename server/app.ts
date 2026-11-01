@@ -24,14 +24,18 @@ export function createApp(config?: AppConfig) {
     app.use(cookieParser(Buffer.from(config.jwtSecret).toString("base64")));
     app.use("/api/v1", originGuard(config));
     app.get("/api/v1/health", async (_req, res) => {
-      const [database, objectStorage] = await Promise.allSettled([
-        db.$queryRaw`SELECT 1`,
-        (async () => {
-          const { client, bucket } = storage();
-          if (!(await client.bucketExists(bucket)))
-            throw new Error("Bucket unavailable");
-        })(),
-      ]);
+      const [database, objectStorage, realtimeFailures] =
+        await Promise.allSettled([
+          db.$queryRaw`SELECT 1`,
+          (async () => {
+            const { client, bucket } = storage();
+            if (!(await client.bucketExists(bucket)))
+              throw new Error("Bucket unavailable");
+          })(),
+          db.sessionEventOutbox.count({
+            where: { publishedAt: null, publicationAttempts: { gt: 0 } },
+          }),
+        ]);
       const ready =
         database.status === "fulfilled" && objectStorage.status === "fulfilled";
       res.status(ready ? 200 : 503).json({
@@ -41,6 +45,10 @@ export function createApp(config?: AppConfig) {
           storage:
             objectStorage.status === "fulfilled" ? "ready" : "unavailable",
           realtime: realtimeReady ? "ready" : "not_configured",
+          realtimePendingFailures:
+            realtimeFailures.status === "fulfilled"
+              ? realtimeFailures.value
+              : null,
           ai: {
             enabled: process.env.ENABLE_AI === "true",
             configured: !!(

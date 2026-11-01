@@ -60,8 +60,14 @@ export function OnlineBoard({
   const [drawing, setDrawing] = useState(false);
   const [noteText, setNoteText] = useState(board?.text ?? "");
 
+  const noteDirty = useRef(false);
+  const previousBoardId = useRef<string | null>(null);
   useEffect(() => {
-    setNoteText(board?.text ?? "");
+    const nextId = board?.id ?? null;
+    if (previousBoardId.current && nextId && previousBoardId.current !== nextId)
+      noteDirty.current = false;
+    if (!noteDirty.current) setNoteText(board?.text ?? "");
+    if (nextId) previousBoardId.current = nextId;
   }, [board?.id, board?.revision, board?.text]);
 
   const toCoords = (e: PointerEvent<SVGSVGElement>) => {
@@ -342,7 +348,10 @@ export function OnlineBoard({
           <input
             value={noteText}
             disabled={!canWrite || busy}
-            onChange={(e) => setNoteText(e.target.value)}
+            onChange={(e) => {
+              noteDirty.current = true;
+              setNoteText(e.target.value);
+            }}
             placeholder="Nhập bước biến đổi hoặc ghi chú bảng..."
           />
         </label>

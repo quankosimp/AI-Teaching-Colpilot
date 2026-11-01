@@ -355,9 +355,15 @@ export function LiveRoom({
           payload,
         });
         if (result.accepted) {
-          setError("Đã giữ thao tác để gửi lại khi kết nối.");
+          setError(
+            `Đã giữ ${result.queuedCount} thao tác để gửi lại khi kết nối.`,
+          );
           return;
         }
+        setError(
+          "Hàng đợi đã đầy hoặc thao tác quá lớn; nội dung vẫn còn trong ô nhập.",
+        );
+        return;
       }
       setError(e instanceof Error ? e.message : "Không thể hoàn thành");
     }
