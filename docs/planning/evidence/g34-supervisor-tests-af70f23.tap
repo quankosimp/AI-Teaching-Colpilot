@@ -1,0 +1,526 @@
+TAP version 13
+# Subtest: G0-CONTRACT: StudentRoomViewModel rejects unrecognized and teacher-private fields
+ok 1 - G0-CONTRACT: StudentRoomViewModel rejects unrecognized and teacher-private fields
+  ---
+  duration_ms: 8.460846
+  type: 'test'
+  ...
+# Subtest: G0-CONTRACT: Student room projection strictly prevents claims and cross-student data leak
+ok 2 - G0-CONTRACT: Student room projection strictly prevents claims and cross-student data leak
+  ---
+  duration_ms: 1.097712
+  type: 'test'
+  ...
+# Subtest: G0-CONTRACT: Invite summaries, audit metadata and idempotency caches reject raw secrets
+ok 3 - G0-CONTRACT: Invite summaries, audit metadata and idempotency caches reject raw secrets
+  ---
+  duration_ms: 1.725378
+  type: 'test'
+  ...
+# Subtest: G0-CONTRACT: Session lifecycle enforces valid state transitions and rejects reopening live tools
+ok 4 - G0-CONTRACT: Session lifecycle enforces valid state transitions and rejects reopening live tools
+  ---
+  duration_ms: 0.749728
+  type: 'test'
+  ...
+# Subtest: G0-CONTRACT: Claim approval requires current, active observations and rejects non-observation aids
+ok 5 - G0-CONTRACT: Claim approval requires current, active observations and rejects non-observation aids
+  ---
+  duration_ms: 2.284271
+  type: 'test'
+  ...
+# Subtest: G0-CONTRACT: Realtime envelopes enforce monotonic sequencing and strict audience projection
+ok 6 - G0-CONTRACT: Realtime envelopes enforce monotonic sequencing and strict audience projection
+  ---
+  duration_ms: 0.919137
+  type: 'test'
+  ...
+# Subtest: G0-CONTRACT: Audit MF01..03 refinements (upload cap, AI consistency, student submission and board ownership)
+ok 7 - G0-CONTRACT: Audit MF01..03 refinements (upload cap, AI consistency, student submission and board ownership)
+  ---
+  duration_ms: 1.721473
+  type: 'test'
+  ...
+# Subtest: T-AUTH-004-POS: Local teacher mock login issues JWT access token and refresh cookie (dev/test mock only - NOT Google OAuth AUTH 001)
+ok 8 - T-AUTH-004-POS: Local teacher mock login issues JWT access token and refresh cookie (dev/test mock only - NOT Google OAuth AUTH 001)
+  ---
+  duration_ms: 33.367885
+  type: 'test'
+  ...
+# Subtest: T-AUTH-003-POS: Teacher logout revokes session and disables token refresh
+ok 9 - T-AUTH-003-POS: Teacher logout revokes session and disables token refresh
+  ---
+  duration_ms: 22.569714
+  type: 'test'
+  ...
+# Subtest: T-AUTH-003-SESSION-SCOPING: Logout isolates own session and respects other teacher's cookie (AUTH 003 session scoping / MF-G1-03 rule)
+ok 10 - T-AUTH-003-SESSION-SCOPING: Logout isolates own session and respects other teacher's cookie (AUTH 003 session scoping / MF-G1-03 rule)
+  ---
+  duration_ms: 43.761144
+  type: 'test'
+  ...
+# Subtest: T-AUTH-002-NEG: Multi-tenant boundary enforces 403 Forbidden on accessing another teacher's resource
+ok 11 - T-AUTH-002-NEG: Multi-tenant boundary enforces 403 Forbidden on accessing another teacher's resource
+  ---
+  duration_ms: 33.183329
+  type: 'test'
+  ...
+# Subtest: T-STU-001-POS: Student CRUD, profile update, archive and restoration lifecycle with versioning
+ok 12 - T-STU-001-POS: Student CRUD, profile update, archive and restoration lifecycle with versioning
+  ---
+  duration_ms: 48.487367
+  type: 'test'
+  ...
+# Subtest: T-STU-001-NEG: Archived student cannot be scheduled into a new session
+ok 13 - T-STU-001-NEG: Archived student cannot be scheduled into a new session
+  ---
+  duration_ms: 26.565878
+  type: 'test'
+  ...
+# Subtest: T-STU-005-POS & NEG: Student history only returns approved claims with intact, active observation evidence (excludes empty, deleted, corrected, or AI-only evidence) (MF-G1-01 / D04)
+ok 14 - T-STU-005-POS & NEG: Student history only returns approved claims with intact, active observation evidence (excludes empty, deleted, corrected, or AI-only evidence) (MF-G1-01 / D04)
+  ---
+  duration_ms: 96.082285
+  type: 'test'
+  ...
+# Subtest: T-PLAN-001-POS & NEG: Session creation validates student count (accepts 1..5, rejects 0 or >5) and enforces idempotency
+ok 15 - T-PLAN-001-POS & NEG: Session creation validates student count (accepts 1..5, rejects 0 or >5) and enforces idempotency
+  ---
+  duration_ms: 99.956583
+  type: 'test'
+  ...
+# Subtest: T-PLAN-002-POS: User-entered activity duration (75m > 60m session) and description persistence (MF-G1-02)
+ok 16 - T-PLAN-002-POS: User-entered activity duration (75m > 60m session) and description persistence (MF-G1-02)
+  ---
+  duration_ms: 53.362759
+  type: 'test'
+  ...
+# Subtest: T-PLAN-003-NEG: Activity source validation rejects flat borrowing across activities and non-observation aids (MF-G1-01)
+ok 17 - T-PLAN-003-NEG: Activity source validation rejects flat borrowing across activities and non-observation aids (MF-G1-01)
+  ---
+  duration_ms: 55.167291
+  type: 'test'
+  ...
+# Subtest: T-MAT-001-POS: Material upload intent generates presigned PUT, requires real binary upload, and verifies signature
+ok 18 - T-MAT-001-POS: Material upload intent generates presigned PUT, requires real binary upload, and verifies signature
+  ---
+  duration_ms: 46.021613
+  type: 'test'
+  ...
+# Subtest: T-MAT-001-NEG: Upload intent rejects files exceeding 10 MiB, invalid MIME, and rejects direct storageKey injection
+ok 19 - T-MAT-001-NEG: Upload intent rejects files exceeding 10 MiB, invalid MIME, and rejects direct storageKey injection
+  ---
+  duration_ms: 19.958691
+  type: 'test'
+  ...
+# Subtest: T-MAT-002-POS & NEG: Presigned read URL issuance and cross-teacher read protection
+ok 20 - T-MAT-002-POS & NEG: Presigned read URL issuance and cross-teacher read protection
+  ---
+  duration_ms: 55.384026
+  type: 'test'
+  ...
+# Subtest: T-MAT-004-NEG: Failed upload verification cleans up MinIO objects and duplicate upload reuse returns 409 Conflict (MF-G1-03)
+ok 21 - T-MAT-004-NEG: Failed upload verification cleans up MinIO objects and duplicate upload reuse returns 409 Conflict (MF-G1-03)
+  ---
+  duration_ms: 80.980596
+  type: 'test'
+  ...
+# Subtest: T-ROOM-001-BLOCKED: Room lifecycle, crypto invite token hash generation and student lobby admission
+ok 22 - T-ROOM-001-BLOCKED: Room lifecycle, crypto invite token hash generation and student lobby admission # SKIP BLOCKED: G2 feature (pending live room / admission implementation)
+  ---
+  duration_ms: 0.136093
+  type: 'test'
+  ...
+# Subtest: T-VID-001-BLOCKED: Zoom Video SDK session token issuance and live credentials
+ok 23 - T-VID-001-BLOCKED: Zoom Video SDK session token issuance and live credentials # SKIP BLOCKED: G2/G3 feature (pending Zoom credentials & live video wiring)
+  ---
+  duration_ms: 0.061615
+  type: 'test'
+  ...
+# Subtest: T-LIVE-001-BLOCKED: Socket.IO live tool events and student write permissions
+ok 24 - T-LIVE-001-BLOCKED: Socket.IO live tool events and student write permissions # SKIP BLOCKED: G2 feature (pending live Socket.IO connection)
+  ---
+  duration_ms: 0.042449
+  type: 'test'
+  ...
+# Subtest: T-REV-001-BLOCKED: Claims review lifecycle, evidence edit invalidation and post-session review completion
+ok 25 - T-REV-001-BLOCKED: Claims review lifecycle, evidence edit invalidation and post-session review completion # SKIP BLOCKED: G2 feature (pending in-session review commands)
+  ---
+  duration_ms: 0.040628
+  type: 'test'
+  ...
+# Subtest: T-ROOM-001-POS: [ROOM 001] Teacher generates student invite link with TTL; returns hashed token reference; rotation revokes previous token
+ok 26 - T-ROOM-001-POS: [ROOM 001] Teacher generates student invite link with TTL; returns hashed token reference; rotation revokes previous token
+  ---
+  duration_ms: 153.802588
+  type: 'test'
+  ...
+# Subtest: T-ROOM-001-NEG: [ROOM 001] Expired or rotated/revoked invite token cannot access room; token hash never leaked in logs
+ok 27 - T-ROOM-001-NEG: [ROOM 001] Expired or rotated/revoked invite token cannot access room; token hash never leaked in logs
+  ---
+  duration_ms: 4.541429
+  type: 'test'
+  ...
+# Subtest: T-ROOM-002-POS: [ROOM 002] Student opens valid invite link, submits name and consent, enters room lobby in waiting state
+ok 28 - T-ROOM-002-POS: [ROOM 002] Student opens valid invite link, submits name and consent, enters room lobby in waiting state
+  ---
+  duration_ms: 78.474728
+  type: 'test'
+  ...
+# Subtest: T-ROOM-002-NEG: [ROOM 002] Expired, revoked, or mismatched session invite returns error without leaking class name or peer identities
+ok 29 - T-ROOM-002-NEG: [ROOM 002] Expired, revoked, or mismatched session invite returns error without leaking class name or peer identities
+  ---
+  duration_ms: 76.095146
+  type: 'test'
+  ...
+# Subtest: T-ROOM-003-POS: [ROOM 003] Teacher admits waiting student; admitted student transitions to joined state and receives tool permissions and video token
+ok 30 - T-ROOM-003-POS: [ROOM 003] Teacher admits waiting student; admitted student transitions to joined state and receives tool permissions and video token
+  ---
+  duration_ms: 121.991898
+  type: 'test'
+  ...
+# Subtest: T-ROOM-003-NEG: [ROOM 003] Denied student or student remaining in waiting state cannot receive video token or execute tool write operations
+ok 31 - T-ROOM-003-NEG: [ROOM 003] Denied student or student remaining in waiting state cannot receive video token or execute tool write operations
+  ---
+  duration_ms: 91.251899
+  type: 'test'
+  ...
+# Subtest: T-ROOM-004-POS & NEG: [ROOM 004] Teacher toggles tool permissions per session or member; backend rejects disabled tool actions
+ok 32 - T-ROOM-004-POS & NEG: [ROOM 004] Teacher toggles tool permissions per session or member; backend rejects disabled tool actions
+  ---
+  duration_ms: 178.373413
+  type: 'test'
+  ...
+# Subtest: T-ROOM-005-POS: [ROOM 005] Room state synchronized via monotonic sequence ordering; client reconnects with lastEventSeq to catch up missing events
+ok 33 - T-ROOM-005-POS: [ROOM 005] Room state synchronized via monotonic sequence ordering; client reconnects with lastEventSeq to catch up missing events
+  ---
+  duration_ms: 462.443107
+  type: 'test'
+  ...
+# Subtest: T-ROOM-005-NEG: [ROOM 005] Duplicate events with previously processed sequence numbers are discarded idempotently without duplicate side effects
+ok 34 - T-ROOM-005-NEG: [ROOM 005] Duplicate events with previously processed sequence numbers are discarded idempotently without duplicate side effects
+  ---
+  duration_ms: 130.12922
+  type: 'test'
+  ...
+# Subtest: T-ROOM-006-POS: [ROOM 006] Student receives public room updates and own participant state in StudentRoomViewModel
+ok 35 - T-ROOM-006-POS: [ROOM 006] Student receives public room updates and own participant state in StudentRoomViewModel
+  ---
+  duration_ms: 112.691683
+  type: 'test'
+  ...
+# Subtest: T-ROOM-006-NEG: [ROOM 006 / STU 004] Private event fanout and student projection strictly suppress teacher notes, peer submissions, and unapproved claims
+ok 36 - T-ROOM-006-NEG: [ROOM 006 / STU 004] Private event fanout and student projection strictly suppress teacher notes, peer submissions, and unapproved claims
+  ---
+  duration_ms: 510.5731
+  type: 'test'
+  ...
+# Subtest: T-LIVE-005-POS: [LIVE 005] Ending session stops accepting activities, transitions session status to ended, and routes teacher to review
+ok 37 - T-LIVE-005-POS: [LIVE 005] Ending session stops accepting activities, transitions session status to ended, and routes teacher to review
+  ---
+  duration_ms: 170.949674
+  type: 'test'
+  ...
+# Subtest: T-LIVE-005-NEG: [LIVE 005] Student writes and responses are rejected with 403/409 once session status is ended
+ok 38 - T-LIVE-005-NEG: [LIVE 005] Student writes and responses are rejected with 403/409 once session status is ended
+  ---
+  duration_ms: 145.146628
+  type: 'test'
+  ...
+# Subtest: T-LIVE-006-POS: [LIVE 006] Connection loss preserves in-progress state and attempts independent realtime reconnection
+ok 39 - T-LIVE-006-POS: [LIVE 006] Connection loss preserves in-progress state and attempts independent realtime reconnection
+  ---
+  duration_ms: 0.857728
+  type: 'test'
+  ...
+# Subtest: T-LIVE-006-NEG: [LIVE 006 / LIVE 005] Realtime reconnect queue enforces bounded limits (max 50 commands / 1 MiB / 5 min TTL); server drops stale commands after session end
+ok 40 - T-LIVE-006-NEG: [LIVE 006 / LIVE 005] Realtime reconnect queue enforces bounded limits (max 50 commands / 1 MiB / 5 min TTL); server drops stale commands after session end
+  ---
+  duration_ms: 123.783679
+  type: 'test'
+  ...
+# Subtest: T-TOOL-001-POS: [TOOL 001] Whiteboard syncs strokes with authorId between teacher and authorized students
+ok 41 - T-TOOL-001-POS: [TOOL 001] Whiteboard syncs strokes with authorId between teacher and authorized students
+  ---
+  duration_ms: 126.188494
+  type: 'test'
+  ...
+# Subtest: T-TOOL-001-NEG: [TOOL 001] Student undoOwnStroke only removes caller's strokes; undoing peer strokes or writes without write permission is rejected
+ok 42 - T-TOOL-001-NEG: [TOOL 001] Student undoOwnStroke only removes caller's strokes; undoing peer strokes or writes without write permission is rejected
+  ---
+  duration_ms: 129.045008
+  type: 'test'
+  ...
+# Subtest: T-TOOL-002-POS & NEG: [TOOL 002] Shared whiteboard mutations enforce ownerId === sharedBoardOwnerId; students only operate on assigned board
+ok 43 - T-TOOL-002-POS & NEG: [TOOL 002] Shared whiteboard mutations enforce ownerId === sharedBoardOwnerId; students only operate on assigned board
+  ---
+  duration_ms: 181.072137
+  type: 'test'
+  ...
+# Subtest: T-TOOL-004-POS & NEG: [TOOL 004] Quick check response submitted once during open window; duplicate responses rejected idempotently
+ok 44 - T-TOOL-004-POS & NEG: [TOOL 004] Quick check response submitted once during open window; duplicate responses rejected idempotently
+  ---
+  duration_ms: 177.005753
+  type: 'test'
+  ...
+# Subtest: T-TOOL-005-POS: [TOOL 005] Student uploads work (text/image/PDF) via presigned upload intent creating Submission and SessionEvent
+ok 45 - T-TOOL-005-POS: [TOOL 005] Student uploads work (text/image/PDF) via presigned upload intent creating Submission and SessionEvent
+  ---
+  duration_ms: 182.268735
+  type: 'test'
+  ...
+# Subtest: T-TOOL-005-NEG: [TOOL 005] Direct storageKey bypass rejected; failed upload retry does not duplicate records
+ok 46 - T-TOOL-005-NEG: [TOOL 005] Direct storageKey bypass rejected; failed upload retry does not duplicate records
+  ---
+  duration_ms: 178.74854
+  type: 'test'
+  ...
+# Subtest: T-EVD-003-POS & NEG: [EVD 003] Evidence correction creates versioned record and invalidates approved claims to pending; deletion audit preserved
+ok 47 - T-EVD-003-POS & NEG: [EVD 003] Evidence correction creates versioned record and invalidates approved claims to pending; deletion audit preserved
+  ---
+  duration_ms: 261.672525
+  type: 'test'
+  ...
+# Subtest: T-REV-002-POS & NEG: [REV 002] Cannot approve claim without evidence; editing approved claim creates pending revision
+ok 48 - T-REV-002-POS & NEG: [REV 002] Cannot approve claim without evidence; editing approved claim creates pending revision
+  ---
+  duration_ms: 163.892718
+  type: 'test'
+  ...
+# Subtest: T-REV-004-POS & NEG: [REV 004] Post-session review completion requires all claims resolved; zero-claim review requires explicit reviewNote
+ok 49 - T-REV-004-POS & NEG: [REV 004] Post-session review completion requires all claims resolved; zero-claim review requires explicit reviewNote
+  ---
+  duration_ms: 211.802817
+  type: 'test'
+  ...
+# Subtest: T-REV-006-RG2-01: [REV 006 / STU 004] Next-session activity title must use neutral public content and not leak Student A private claim to Student B
+ok 50 - T-REV-006-RG2-01: [REV 006 / STU 004] Next-session activity title must use neutral public content and not leak Student A private claim to Student B
+  ---
+  duration_ms: 200.582775
+  type: 'test'
+  ...
+# Subtest: T-REV-003-RG2-02: [REV 003 / EVD 003] Multi-evidence check_response cascade invalidates all dependent claims on change; preserves claims on identical no-op
+ok 51 - T-REV-003-RG2-02: [REV 003 / EVD 003] Multi-evidence check_response cascade invalidates all dependent claims on change; preserves claims on identical no-op
+  ---
+  duration_ms: 369.746298
+  type: 'test'
+  ...
+# Subtest: T-REV-003-RG2-02-SUBMISSION: [REV 003 / EVD 003] Multi-evidence submission cascade invalidates all dependent claims on score/feedback change; preserves on no-op
+ok 52 - T-REV-003-RG2-02-SUBMISSION: [REV 003 / EVD 003] Multi-evidence submission cascade invalidates all dependent claims on score/feedback change; preserves on no-op
+  ---
+  duration_ms: 304.764435
+  type: 'test'
+  ...
+# Subtest: T-REV-004-RG2-03: [REV 004] Concurrent quickcheck grading and session review completion must serialize under lock without leaving session in reviewed state with pending claims
+ok 53 - T-REV-004-RG2-03: [REV 004] Concurrent quickcheck grading and session review completion must serialize under lock without leaving session in reviewed state with pending claims
+  ---
+  duration_ms: 204.710577
+  type: 'test'
+  ...
+# Subtest: T-EVD-002-RG2-04: [EVD 002 / STU 004] Annotation evidence source must be strictly bound to student and cannot be used for a different student
+ok 54 - T-EVD-002-RG2-04: [EVD 002 / STU 004] Annotation evidence source must be strictly bound to student and cannot be used for a different student
+  ---
+  duration_ms: 240.729912
+  type: 'test'
+  ...
+# Subtest: T-ROOM-004-RG2-05: [ROOM 004] Concurrent member toolOverrides patch different fields without dropping changes
+ok 55 - T-ROOM-004-RG2-05: [ROOM 004] Concurrent member toolOverrides patch different fields without dropping changes
+  ---
+  duration_ms: 115.36462
+  type: 'test'
+  ...
+# Subtest: T-ROOM-005-RG2-06: [ROOM 005] Realtime outbox sequence ordering and catchup replay handle missing/late sequence gaps without dropping events
+ok 56 - T-ROOM-005-RG2-06: [ROOM 005] Realtime outbox sequence ordering and catchup replay handle missing/late sequence gaps without dropping events
+  ---
+  duration_ms: 435.515293
+  type: 'test'
+  ...
+# Subtest: G1-INTEGRATION: Liveness probe responds 200 OK and sanitizes headers
+ok 57 - G1-INTEGRATION: Liveness probe responds 200 OK and sanitizes headers
+  ---
+  duration_ms: 28.961448
+  type: 'test'
+  ...
+# Subtest: G1-AUTH004: Runtime production mock guard rejects demo auth in production mode
+ok 58 - G1-AUTH004: Runtime production mock guard rejects demo auth in production mode
+  ---
+  duration_ms: 33.18325
+  type: 'test'
+  ...
+# Subtest: G1-ROOM001-003: Session creation, crypto invite token hash generation and lobby admission
+ok 59 - G1-ROOM001-003: Session creation, crypto invite token hash generation and lobby admission # SKIP BLOCKED: Requires G2 Room & Socket.IO implementation (/api/v1/room)
+  ---
+  duration_ms: 0.156036
+  type: 'test'
+  ...
+# Subtest: G1-REV002-004: Evidence edit triggers cascade invalidation on approved claims and session status
+ok 60 - G1-REV002-004: Evidence edit triggers cascade invalidation on approved claims and session status # SKIP BLOCKED: Requires G2 Review & Claims implementation (/api/v1/claims)
+  ---
+  duration_ms: 0.075334
+  type: 'test'
+  ...
+# Subtest: new sessions receive one invite per member without reviving revoked links
+ok 61 - new sessions receive one invite per member without reviving revoked links
+  ---
+  duration_ms: 1.154772
+  type: 'test'
+  ...
+# Subtest: student actions require a live session, joined member and valid token
+ok 62 - student actions require a live session, joined member and valid token
+  ---
+  duration_ms: 0.402158
+  type: 'test'
+  ...
+# Subtest: recommendations use only approved claims belonging to the student
+ok 63 - recommendations use only approved claims belonging to the student
+  ---
+  duration_ms: 0.834994
+  type: 'test'
+  ...
+# Subtest: evidence changes invalidate only approved dependent claims and reopen their reviews; no-op preserves data
+ok 64 - evidence changes invalidate only approved dependent claims and reopen their reviews; no-op preserves data
+  ---
+  duration_ms: 1.186018
+  type: 'test'
+  ...
+# Subtest: review can finish with zero or rejected claims, but not pending claims
+ok 65 - review can finish with zero or rejected claims, but not pending claims
+  ---
+  duration_ms: 0.494093
+  type: 'test'
+  ...
+# Subtest: AI 001-007 comprehensive: 4 modes, context minimization, claim drafting races, idempotency coordination, circuit breaker, and plan suggestions
+ok 66 - AI 001-007 comprehensive: 4 modes, context minimization, claim drafting races, idempotency coordination, circuit breaker, and plan suggestions
+  ---
+  duration_ms: 909.581305
+  type: 'test'
+  ...
+# Subtest: mock mode cannot be enabled when NODE_ENV is production or staging
+ok 67 - mock mode cannot be enabled when NODE_ENV is production or staging
+  ---
+  duration_ms: 0.94229
+  type: 'test'
+  ...
+# Subtest: approval needs current observations belonging to the same teacher, student and session
+ok 68 - approval needs current observations belonging to the same teacher, student and session
+  ---
+  duration_ms: 5.937674
+  type: 'test'
+  ...
+# Subtest: lifecycle rejects reopening live tools
+ok 69 - lifecycle rejects reopening live tools
+  ---
+  duration_ms: 0.155127
+  type: 'test'
+  ...
+# Subtest: read projections and cached or audited metadata reject secret fields
+ok 70 - read projections and cached or audited metadata reject secret fields
+  ---
+  duration_ms: 1.760265
+  type: 'test'
+  ...
+# Subtest: student room rejects private fields and event fanout enforces recipient
+ok 71 - student room rejects private fields and event fanout enforces recipient
+  ---
+  duration_ms: 3.415427
+  type: 'test'
+  ...
+# Subtest: review completion and student writes respect session and membership gates
+ok 72 - review completion and student writes respect session and membership gates
+  ---
+  duration_ms: 1.08195
+  type: 'test'
+  ...
+# Subtest: member grant survives invite rotation but explicit revocation and missing command permission fail
+ok 73 - member grant survives invite rotation but explicit revocation and missing command permission fail
+  ---
+  duration_ms: 0.155983
+  type: 'test'
+  ...
+# Subtest: uploads enforce 10 MiB and AI aid kind matches a supplied source
+ok 74 - uploads enforce 10 MiB and AI aid kind matches a supplied source
+  ---
+  duration_ms: 1.161207
+  type: 'test'
+  ...
+# Subtest: own submission exposes feedback but rejects private AI suggestions
+ok 75 - own submission exposes feedback but rejects private AI suggestions
+  ---
+  duration_ms: 0.89973
+  type: 'test'
+  ...
+# Subtest: shared board must match the selected owner and actually be shared
+ok 76 - shared board must match the selected owner and actually be shared
+  ---
+  duration_ms: 0.714308
+  type: 'test'
+  ...
+# Subtest: student room capabilities and safe annotation mark projections
+ok 77 - student room capabilities and safe annotation mark projections
+  ---
+  duration_ms: 1.481666
+  type: 'test'
+  ...
+# Subtest: AnnotationInput strict validation on sharedWithClass and student attribution
+ok 78 - AnnotationInput strict validation on sharedWithClass and student attribution
+  ---
+  duration_ms: 0.99832
+  type: 'test'
+  ...
+# Subtest: local API isolates teachers, persists students and plans, rotates refresh and validates private uploads
+ok 79 - local API isolates teachers, persists students and plans, rotates refresh and validates private uploads
+  ---
+  duration_ms: 507.2211
+  type: 'test'
+  ...
+# Subtest: G1 review: source eligibility, logout isolation, upload cleanup and races
+ok 80 - G1 review: source eligibility, logout isolation, upload cleanup and races
+  ---
+  duration_ms: 448.766534
+  type: 'test'
+  ...
+# Subtest: classroom admission, socket isolation, board and end permissions
+ok 81 - classroom admission, socket isolation, board and end permissions
+  ---
+  duration_ms: 6512.035031
+  type: 'test'
+  ...
+# Subtest: liveness endpoint responds without reporting dependency readiness
+ok 82 - liveness endpoint responds without reporting dependency readiness
+  ---
+  duration_ms: 29.312134
+  type: 'test'
+  ...
+# Subtest: media cancels delayed creation and serializes old teardown before a new room joins
+ok 83 - media cancels delayed creation and serializes old teardown before a new room joins
+  ---
+  duration_ms: 3.531336
+  type: 'test'
+  ...
+# Subtest: an aborted provider error never notifies the unmounted room and does not block retry
+ok 84 - an aborted provider error never notifies the unmounted room and does not block retry
+  ---
+  duration_ms: 0.419674
+  type: 'test'
+  ...
+# Subtest: queue preserves rejected drafts and respects count, byte, expiry and ended limits
+ok 85 - queue preserves rejected drafts and respects count, byte, expiry and ended limits
+  ---
+  duration_ms: 5.449056
+  type: 'test'
+  ...
+# Subtest: only a teacher note may have a current source version without a resource ID
+ok 86 - only a teacher note may have a current source version without a resource ID
+  ---
+  duration_ms: 1.103313
+  type: 'test'
+  ...
+1..86
+# tests 86
+# suites 0
+# pass 80
+# fail 0
+# cancelled 0
+# skipped 6
+# todo 0
+# duration_ms 22381.330986

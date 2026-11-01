@@ -2,6 +2,16 @@
 
 ## Current
 
+- Integrated source `af70f23a8cd5987c60ea7dacee523e53168f5741` includes G3/G4 local workflows, frontend AI dock/review wiring and review corrections. Full supervisor regression: **80 passed / 0 failed / 6 explicit skips**. Classroom/media/AI Chrome suites passed on the isolated candidate; Docker4170 doctor and actual classroom/AI browser suites passed; running API source/compiled hashes match this commit.
+- Independent review of `a7f4876` found two concrete blockers (resource-backed source IDs incorrectly resolving to version1, and Toolkit closeSession used for ordinary teardown). Follow-up `af70f23` fixes both and historical-context advisory; independent targeted recheck is **Scoped PASS**. Reviewer executed3 named non-DB tests, read HTTP/browser regressions, and did not independently rerun real providers or the whole product.
+- Migration008 checksum is preserved;009/010 are additive. Fresh deploy and staged upgrade preserve legacy AI history. API source and compiled sourceVersion helper inside the rebuilt Docker container match supervisor hashes. No existing database was reset.
+- Existing backend/frontend/QA Gemini workers reported actual quota; their worktrees remain clean. Supervisor took over runtime integration; a separate read-only reviewer checked immutable commits. Provider-reported reset times are historical notifications, not fresh quota measurements.
+- Published source includes all six branches; final report/evidence commit is published separately. Backend26318dc/frontendfdb17d6 are retained as worker checkpoints; final corrections live on supervisor af70f23. UI/QA/Ops branches remain f55ef71/1501d80/29f97ca. Original SRS DOCX, generator and docs/.qa remain untouched/untracked.
+- G0/G1-local/G2 and bounded G3/G4 local milestones are accepted locally. G3/G4 local review/verification does **not** establish Google/Zoom/Gemini Real-HTTPS or global60-P0 acceptance. G5, full browser/NFR/a11y matrix, object-storage backup/restore and full release rollback rehearsal remain open.
+- Overview and SRS mind map: [implementation-report-20261101.md](implementation-report-20261101.md). Original priorities remain60 P0 and13 P1.
+
+### Superseded G3/G4 candidate history
+
 - Remediation candidatesG3 fdb17d6 and G4 backend26318dc remain NEEDS_FIXES. Supervisor reproduced incorrect SDK participant/error handling in fdb despite the bounded review PASS. Candidate263 rewrites the already-applied008 migration, confirmed by recovery DB checksum; additive009 and staged upgrade proof were requested. Evidence: evidence/g3-supervisor-review-fdb17d6.md and evidence/g4-supervisor-review-26318dc.md. These candidates are not integrated or deployed.
 
 - G3 candidate6c478ae and G4 backend candidate23e5fd7 are review checkpoints, not accepted completion. Supervisor and independent review found concrete implementation blockers; both writers are remediating on their separate branches. Accepted Docker4170 remains55c05e1. Evidence: evidence/g3-supervisor-review-6c478ae.md and evidence/g4-supervisor-review-23e5fd7.md.

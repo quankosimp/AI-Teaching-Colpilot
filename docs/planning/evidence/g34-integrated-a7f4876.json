@@ -1,0 +1,42 @@
+{
+  "sourceCommit": "a7f487617fb3fb2a10e0f4612a766276b8d35135",
+  "environment": {
+    "node": "22.23.4",
+    "database": "copilot_supervisor_ai_test_20261101",
+    "storage": "MinIO private test bucket",
+    "api": "http://127.0.0.1:3160",
+    "frontend": "http://127.0.0.1:3161",
+    "mode": "test"
+  },
+  "checks": {
+    "testRunner": {
+      "passed": 79,
+      "failed": 0,
+      "skipped": 6,
+      "log": "g34-supervisor-tests-a7f4876.tap"
+    },
+    "frontendTypes": true,
+    "serverTypes": true,
+    "frontendBuild": true,
+    "serverBuild": true,
+    "prismaGenerate": true,
+    "freshMigrationDeployThrough010": true,
+    "stagedUpgrade008ChecksumPreserved": true,
+    "legacyAIRecordPreserved": true,
+    "classroomBrowser": "passed",
+    "mediaBrowser": "local contract fixture/mock passed; no real Zoom",
+    "aiBrowser": "local fake adapter passed; no real Gemini"
+  },
+  "limits": [
+    "Six skipped cases remain explicit prerequisites/placeholders",
+    "No Google/Zoom/Gemini real provider execution",
+    "No public HTTPS target",
+    "Not global SRS or G5 acceptance",
+    "Review and Docker runtime evidence recorded separately"
+  ],
+  "verdict": "NEEDS_FIXES; superseded by af70f23",
+  "knownBlockers": [
+    "resource-backed source invalid IDs treated as version1",
+    "Toolkit closeSession used for ordinary teardown"
+  ]
+}

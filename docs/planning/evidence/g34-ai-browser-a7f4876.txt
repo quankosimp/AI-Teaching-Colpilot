@@ -1,0 +1,1 @@
+PASS: four local AI modes; edit/use/ignore/report; failed-request draft and retry key; aid is not observation; zero-source and pending sourced drafts; teacher/student isolation; mobile overflow. Gemini real: BLOCKED.

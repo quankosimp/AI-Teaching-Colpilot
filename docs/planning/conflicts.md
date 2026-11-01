@@ -18,3 +18,8 @@ Planning audit result: no remaining planning blockers after binding decisions. R
 | P0 chat permissions vs P1 chat scope | D09 | resolved-planning |
 | Generic RTM entry mistaken for executable coverage | Dedicated POS/NEG per P0; EVD004/PLAN/STU005/REV004-006/mocks/queue explicitly tested | resolved-planning |
 | Mock provider tests mistaken for real integration | D11 separate Real-HTTPS evidence | resolved-planning |
+
+| Worker quota interrupts integration | D19 supervisor takeover; clean worker checkpoints preserved | resolved-local |
+| SDK closeSession mistaken for local cleanup | D20 supported leaveSession + destroy and independent recheck af70f23 | resolved-local; real-provider evidence open |
+| Applied008 rewritten and retry drops plan sources | D21 additive009/010 and immutable source receipts | resolved-local |
+| Missing resource source treated as version1 | D22 shared resolver, history eligibility and approval/AI regressions | resolved-local |

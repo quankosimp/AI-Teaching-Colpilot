@@ -165,3 +165,45 @@ The required runtime coordination points have been integrated from Primary Produ
    - Bucket access policy is explicitly set to private (`mc anonymous set none`).
 4. **Automated Seeding Safety Guard**:
    - `deploy/entrypoint.sh` strictly forbids `AUTO_SEED` in `production`/`staging` and fails with non-zero exit code if local seeding encounters errors.
+
+## Local recovery checkpoint — 2026-11-01
+
+The integrated local runtime is source `af70f23`. AI is explicitly enabled in
+`deploy/local.env.example` for the local fake adapter; the UI labels its results.
+Without Gemini credentials no real model is called. Production/staging reject
+mock fallback. `MEDIA_PROVIDER` may select `zoom`; missing Zoom credentials return
+an unavailable response. Native Zoom Toolkit controls still need credentialed,
+real-device validation.
+
+Before this upgrade, the supervisor saved a private database dump under
+`verification/backups/g34-preupgrade/database.dump` and restored it into the new
+`copilot_g34_restore_probe_20261101` database without overwriting the demo.
+Restore succeeded; the probe contained 2 teachers,54 sessions and31 materials.
+These files are ignored by Git; do not publish database dumps or storage objects.
+
+Reproducible database backup (run from this directory's parent):
+
+```bash
+mkdir -p verification/backups
+chmod 700 verification/backups
+docker exec teaching-copilot-postgres pg_dump -U copilot -d copilot --format=custom > verification/backups/database.dump
+chmod 600 verification/backups/database.dump
+```
+
+Restore into a **new dedicated database**, then inspect it before any cutover:
+
+```bash
+docker exec teaching-copilot-postgres createdb -U copilot copilot_restore_probe_NEW
+docker exec -i teaching-copilot-postgres pg_restore -U copilot -d copilot_restore_probe_NEW --no-owner --exit-on-error < verification/backups/database.dump
+```
+
+Rollback image tags `teaching-copilot-local-api:rollback-55c05e1` and
+`teaching-copilot-local-gateway:rollback-55c05e1` were rebuilt from immutable
+source55c05e1 and inspected. The older running container's image metadata could
+not be exported, so it was not treated as a valid image backup. A rollback would
+use explicit Compose image overrides and `--no-build`; additive schema changes
+should be evaluated against the selected old application before cutover.
+The supervisor did **not** perform a live application rollback or restore object
+storage. The database exercise is only one part of G5 recovery acceptance;
+consistent database-plus-object-storage recovery, full rollback rehearsal and
+final provider/NFR evidence remain open.

@@ -239,7 +239,7 @@ const { chromium } = require("playwright-core");
     await sb.getByRole("button", { name: "Thêm nét vẽ" }).click();
     await p1.getByText("Nét vẽ chưa gửi vẫn được giữ lại.").waitFor();
     await a.setOffline(false);
-    await p1.getByText("đang kết nối", { exact: false }).waitFor();
+    await p1.getByText("Kết nối dữ liệu: đã kết nối", { exact: false }).waitFor();
     let replayed = false;
     for (let attempt = 0; attempt < 100; attempt++) {
       const state = await (

@@ -24,11 +24,11 @@
     },
     "G3-real": {
       "state": "blocked",
-      "reason": "Zoom credentials/HTTPS target absent; adapter implementation still pending"
+      "reason": "Zoom credentials/HTTPS target absent; native Toolkit implementation and local mock/contract tests do not verify real media or provider-enforced termination"
     },
     "G4-real": {
       "state": "blocked",
-      "reason": "Gemini credentials absent; classroom AI/review implementation still pending"
+      "reason": "Gemini credentials absent; local adapter and AI workflows implemented/tested but real provider call unverified"
     },
     "G5": {
       "state": "planned",
@@ -41,16 +41,18 @@
       "scope": "Isolated local Docker packaging/runtime; excludes G2 and real-provider/final-release acceptance"
     },
     "G3-local": {
-      "state": "in_review",
-      "candidate": "fdb17d605034b6867645dca541d929942a95d0a8",
-      "verdict": "NEEDS_FIXES",
-      "evidence": "evidence/g3-supervisor-review-fdb17d6.md"
+      "state": "accepted-local",
+      "candidate": "af70f23a8cd5987c60ea7dacee523e53168f5741",
+      "verdict": "Scoped review PASS; local tests passed; real provider blocked",
+      "evidence": "evidence/g34-integrated-af70f23.json",
+      "scope": "Local mock/contract/provider-boundary and UI workflow milestone only; excludes real provider, real-device behavior and full SRS acceptance"
     },
     "G4-local": {
-      "state": "in_review",
-      "candidate": "26318dcce1f9121a4534ed4778a7923c2092bf81",
-      "verdict": "NEEDS_FIXES",
-      "evidence": "evidence/g4-supervisor-review-26318dc.md"
+      "state": "accepted-local",
+      "candidate": "af70f23a8cd5987c60ea7dacee523e53168f5741",
+      "verdict": "Scoped review PASS; local tests passed; real provider blocked",
+      "evidence": "evidence/g34-integrated-af70f23.json",
+      "scope": "Local mock/contract/provider-boundary and UI workflow milestone only; excludes real provider, real-device behavior and full SRS acceptance"
     }
   }
 }

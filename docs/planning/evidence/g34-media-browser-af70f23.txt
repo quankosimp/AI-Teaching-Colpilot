@@ -1,0 +1,21 @@
+=== 1. UNIT & CONTRACT-SPY TESTS: Zoom Video SDK Adapter (SG3-01) ===
+  ✓ Native Toolkit controls configured; preview/join distinguished; typed roster, cancellation and cleanup verified with contract fixture (not a real Zoom connection)
+=== 2. UNIT TESTS: Mock Provider XSS & Timer Neutralization (SG3-03) ===
+  ✓ SG3-03: Mock provider XSS prevention and timer neutralization verified
+=== 3. BACKEND TESTS: Strict Mock Guard, Provider Validation, Post-transition Guards (SG3-04) ===
+  ✓ Token mint rejected when session is not live (409)
+  ✓ Invalid provider choice rejected with 400 VALIDATION_ERROR
+  ✓ Unconfigured Zoom returns truthful 503 MEDIA_UNAVAILABLE
+  ✓ Student video-token returned valid participant roleType (0)
+  ✓ After committed revoke: revoked student token request blocked (401/403)
+  ✓ After committed end: token request after session end returned 409 SESSION_STATE_INVALID
+  ✓ SG3-04: Strict mock guard, provider validation, and atomic post-transition guards verified
+=== 4. INTEGRATION BROWSER TEST: MediaHost Lifecycle, No Token Churn, Dynamic Header Status (SG3-02, SG3-05) ===
+  ✓ SG3-05: Dynamic header truthfully reflects media status 'Video: đã kết nối (giả lập)'
+  ✓ SG3-02: Zero token churn verified! Exactly 1 token request made despite view switches and polling.
+  ✓ SG3-02: Mute state preserved across view switches
+  ✓ SG3-05: Board draft strictly preserved and media stage completely cleaned up on session end
+
+=======================================================
+G3 LOCAL CONTRACT/MOCK CHECKS PASS; REAL ZOOM STILL BLOCKED
+=======================================================

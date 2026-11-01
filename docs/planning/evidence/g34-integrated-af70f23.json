@@ -1,0 +1,60 @@
+{
+  "sourceCommit": "af70f23a8cd5987c60ea7dacee523e53168f5741",
+  "environment": {
+    "node": "22.23.4 on host; Node22 Docker",
+    "database": "dedicated supervisor database and Docker demo",
+    "storage": "MinIO private",
+    "gateway": "http://127.0.0.1:4170",
+    "providerMode": "explicit local mock"
+  },
+  "verification": {
+    "regression": {
+      "passed": 80,
+      "failed": 0,
+      "skipped": 6,
+      "log": "g34-supervisor-tests-af70f23.tap",
+      "note": "QA blackbox used isolated HTTP3160; Product integration created ephemeral API with current source; final Docker verified separately"
+    },
+    "typechecks": "frontend/server passed",
+    "builds": "frontend/server/Docker passed",
+    "migrations": "fresh + staged;008 preserved;009/010 applied on Docker",
+    "review": "targeted independent Scoped PASS;3 named non-DB tests executed",
+    "dockerDoctor": "passed exit0",
+    "dockerBrowser": {
+      "classroom": "passed teacher+2 student contexts; viewport/theme matrix",
+      "ai": "passed four modes/lifecycle/draft/retry/privacy,360/1440px"
+    },
+    "mediaBrowser": "native Toolkit contract fixture + mock lifecycle passed on Vite3161; no real SDK connection",
+    "apiSourceHash": "d4699a1ea5013eebb577a53e0565ad10187975218e9b297ffa5e61d625720686",
+    "compiledSourceHash": "9d0984ffe5db06d86da2abfd707fb41532590a12ecc940e2b65c8b9f58ef352a"
+  },
+  "backup": {
+    "path": "verification/backups/g34-preupgrade (ignored/private)",
+    "databaseDumpSha256": "2b656c81b1fe2484a37ccfb47d613b604aab901e35ef9bf4287d69355756b800",
+    "restoredInto": "copilot_g34_restore_probe_20261101",
+    "restoredCounts": {
+      "Teacher": 2,
+      "Session": 54,
+      "Material": 31
+    },
+    "rollbackImages": "rebuilt from immutable55c05e1; inspect passed; actual app rollback not rehearsed",
+    "objectStorageRestore": "not rehearsed"
+  },
+  "health": {
+    "status": "degraded",
+    "database": "ready",
+    "storage": "ready",
+    "realtime": "ready",
+    "pendingRealtimeFailures": 0,
+    "aiEnabled": true,
+    "realAIConfigured": false,
+    "realVideoConfigured": false
+  },
+  "globalAcceptance": false,
+  "remaining": [
+    "Google OAuth/Zoom/Gemini credentialed Real-HTTPS evidence",
+    "provider-enforced media termination and real-device browser matrix",
+    "object storage backup/restore and full application rollback rehearsal",
+    "final NFR/a11y/browser matrix and per-P0 review; G5 remains open"
+  ]
+}
