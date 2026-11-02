@@ -468,7 +468,7 @@ const path = require("node:path");
     await teacherPage.getByText("Chưa có câu hỏi đang mở.").waitFor();
 
     // Switch Activity: Hoạt động 1 -> Hoạt động 2
-    await teacherPage.getByLabel("Hoạt động hiện tại").selectOption({ label: "Hoạt động 2: Thực hành" });
+    await teacherPage.getByRole("navigation", { name: "Lộ trình hoạt động" }).getByRole("button", { name: "Hoạt động 2: Thực hành", exact: true }).click();
     await teacherPage.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Bảng", exact: true }).click();
 
     // Changing teacher task modes preserves the same media session too.
@@ -502,12 +502,16 @@ const path = require("node:path");
     await teacherPage.getByText("🎙️ Bật mic").waitFor();
     await selfTile.locator('.mock-media__tile-status').filter({ hasText: "🔇 Mic tắt" }).waitFor();
 
+    // Stage switches hide the editor without destroying its local draft.
+    const preservedBoardDraft = teacherPage.getByPlaceholder("Nhập bước biến đổi hoặc ghi chú bảng...");
+    await preservedBoardDraft.fill("teacher-draft-survives-stage-tabs");
     // Switch view to document and back to board, verify mute state is preserved
     await teacherPage.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Học liệu", exact: true }).click();
     await teacherPage.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Bảng", exact: true }).click();
     await teacherPage.getByText("🎙️ Bật mic").waitFor();
     await selfTile.locator('.mock-media__tile-status').filter({ hasText: "🔇 Mic tắt" }).waitFor();
-    console.log("  ✓ SG3-02: Mute state preserved across view switches");
+    assert.equal(await preservedBoardDraft.inputValue(), "teacher-draft-survives-stage-tabs");
+    console.log("  ✓ SG3-02: Mute state and board draft preserved across view switches");
 
     // 4g. Test Draft Preservation & Media Cleanup on End Session (SG3-05)
     const boardInput = teacherPage.getByPlaceholder("Nhập bước biến đổi hoặc ghi chú bảng...");

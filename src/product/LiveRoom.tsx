@@ -59,6 +59,7 @@ type Room = {
     Activity_sessionId_items?: {
       id: string;
       title: string;
+      duration: number;
       materialId?: string | null;
       materialVersion?: number | null;
     }[];
@@ -309,6 +310,7 @@ export function LiveRoom({
   onExit,
   view = "teach",
   onViewChange,
+  onThemeToggle,
 }: {
   sessionId: string;
   grant?: Grant;
@@ -316,6 +318,7 @@ export function LiveRoom({
   onExit: () => void;
   view?: "teach" | "grading" | "summary";
   onViewChange?: (view: "teach" | "grading" | "summary") => void;
+  onThemeToggle?: () => void;
 }) {
   const [selectedStudent, setSelectedStudent] = useState("");
   const [inspectBoard, setInspectBoard] = useState(false);
@@ -527,6 +530,82 @@ export function LiveRoom({
   const uploadAllowed = grant
     ? s?.status === "live" && room?.capabilities?.upload === true
     : false;
+  const boardPanel = s && (
+    <section className="online-room__board" aria-label="Bảng học tập">
+      {unsentStroke && (
+        <div role="status">
+          Nét vẽ chưa gửi vẫn được giữ lại.{" "}
+          <button
+            disabled={!connected || s.status !== "live"}
+            onClick={() =>
+              void command(
+                `/sessions/${sessionId}/boards/${grant ? "own" : s?.sharedBoardOwnerId || "common"}`,
+                "PUT",
+                unsentStroke,
+                true,
+              ).then((ok) => {
+                if (ok) setUnsentStroke(null);
+              })
+            }
+          >
+            Gửi lại nét vẽ
+          </button>
+        </div>
+      )}
+      <OnlineBoard
+        title={
+          grant
+            ? "Bảng nháp của tôi"
+            : inspectBoard
+              ? `Xem bảng riêng: ${members.find((m) => m.studentId === selected)?.displayName || selected}`
+              : s?.sharedBoardOwnerId && s.sharedBoardOwnerId !== "common"
+                ? `Bảng trình bày: ${members.find((m) => m.studentId === s.sharedBoardOwnerId)?.displayName || s.sharedBoardOwnerId}`
+                : "Bảng chung"
+        }
+        board={board || null}
+        actorId={grant?.studentId || teacherId || ""}
+        canWrite={
+          s.status === "live" &&
+          !inspectBoard &&
+          (!grant || room?.capabilities?.boardWrite === true)
+        }
+        isOwnPrivateBoard={!!grant}
+        busy={!!unsentStroke}
+        onCommand={async (cmd) => {
+          const accepted = await command(
+            `/sessions/${sessionId}/boards/${grant ? "own" : s?.sharedBoardOwnerId || "common"}`,
+            "PUT",
+            cmd,
+            true,
+          );
+          if (!accepted && cmd.operation === "addStroke" && cmd.stroke)
+            setUnsentStroke({
+              operation: "addStroke",
+              stroke: cmd.stroke,
+            });
+        }}
+        onCaptureAttempt={
+          grant
+            ? async () => {
+                await command(
+                  `/sessions/${sessionId}/boards/own/attempts`,
+                  "POST",
+                  {},
+                );
+              }
+            : selected
+              ? async () => {
+                  await command(
+                    `/sessions/${sessionId}/boards/${selected}/attempts`,
+                    "POST",
+                    {},
+                  );
+                }
+              : undefined
+        }
+      />
+    </section>
+  );
   const RoomContainer = grant ? "main" : "section";
   return (
     <RoomContainer
@@ -546,6 +625,11 @@ export function LiveRoom({
             Đổi giao diện
           </button>
         )}
+        {!grant && onThemeToggle && (
+          <button type="button" onClick={onThemeToggle}>
+            Đổi giao diện
+          </button>
+        )}
         <h1>{s?.title || "Phòng chờ"}</h1>
         <p>
           Kết nối dữ liệu: {connected ? "đã kết nối" : "mất kết nối"} · Video:{" "}
@@ -557,19 +641,9 @@ export function LiveRoom({
               onClick={() =>
                 void command(`/sessions/${sessionId}/start`, "POST", {})
               }
-              disabled={s.status === "ended" || s.status === "reviewed"}
+              disabled={s.status !== "draft" && s.status !== "scheduled"}
             >
               Bắt đầu
-            </button>
-            <button
-              onClick={() =>
-                void command(`/sessions/${sessionId}/end`, "POST", {}).then(
-                  (saved) => saved && onViewChange?.("summary"),
-                )
-              }
-              disabled={s.status !== "live"}
-            >
-              Kết thúc
             </button>
           </div>
         )}
@@ -596,6 +670,36 @@ export function LiveRoom({
           ))}
         </nav>
       )}
+      {!grant && s && (
+        <footer
+          className="online-room__toolbar"
+          aria-label="Điều khiển buổi học"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              onViewChange?.("teach");
+              requestAnimationFrame(() =>
+                document
+                  .getElementById("classroom-chat")
+                  ?.scrollIntoView({ behavior: "smooth" }),
+              );
+            }}
+          >
+            Trò chuyện
+          </button>
+          <button
+            onClick={() =>
+              void command(`/sessions/${sessionId}/end`, "POST", {}).then(
+                (saved) => saved && onViewChange?.("summary"),
+              )
+            }
+            disabled={s.status !== "live"}
+          >
+            Kết thúc
+          </button>{" "}
+        </footer>
+      )}
       {error && <p role="alert">{error}</p>}
       {!room && !error && (
         <p role="status" aria-live="polite">
@@ -615,10 +719,7 @@ export function LiveRoom({
           <div
             className={`online-room__workspace${grant ? "" : " online-room__workspace--teacher"}`}
           >
-            <aside
-              className="online-room__participants"
-              aria-label="Video và lộ trình buổi học"
-            >
+            <div className="online-room__media-strip">
               <MediaHost
                 sessionId={sessionId}
                 isLive={s.status === "live"}
@@ -636,28 +737,67 @@ export function LiveRoom({
                 onError={handleMediaError}
                 onStatusChange={setMediaVideoStatus}
               />
+            </div>
+            <aside
+              className="online-room__participants"
+              aria-label="Lộ trình và học sinh"
+            >
               {!grant && s.Activity_sessionId_items && (
                 <section className="online-room__activity">
                   <h2>Hoạt động</h2>
-                  <select
-                    aria-label="Hoạt động hiện tại"
-                    value={s.currentActivityId || ""}
-                    onChange={(e) =>
-                      patchClassroom({
-                        currentActivityId: e.target.value || null,
-                      })
-                    }
-                  >
-                    <option value="">Chọn hoạt động</option>
-                    {s.Activity_sessionId_items.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.title}{" "}
-                        {s.completedActivityIds?.includes(a.id)
-                          ? " (Đã hoàn tất)"
-                          : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <nav aria-label="Lộ trình hoạt động">
+                    <ol className="online-room__roadmap">
+                      {s.Activity_sessionId_items.map((activity, index) => (
+                        <li key={activity.id}>
+                          <button
+                            type="button"
+                            aria-label={activity.title}
+                            aria-current={
+                              s.currentActivityId === activity.id
+                                ? "step"
+                                : undefined
+                            }
+                            onClick={() =>
+                              patchClassroom({ currentActivityId: activity.id })
+                            }
+                          >
+                            <span>{String(index + 1).padStart(2, "0")}</span>
+                            <span>
+                              <strong>{activity.title}</strong>
+                              <small>
+                                {activity.duration} phút
+                                {s.completedActivityIds?.includes(activity.id)
+                                  ? " · Đã hoàn tất"
+                                  : ""}
+                              </small>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ol>
+                  </nav>
+                  <details className="online-room__activity-picker">
+                    <summary>Chọn nhanh hoạt động</summary>
+                    <select
+                      aria-label="Hoạt động hiện tại"
+                      value={s.currentActivityId || ""}
+                      onChange={(e) =>
+                        patchClassroom({
+                          currentActivityId: e.target.value || null,
+                        })
+                      }
+                    >
+                      <option value="">Chọn hoạt động</option>
+                      {s.Activity_sessionId_items.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.title}{" "}
+                          {s.completedActivityIds?.includes(a.id)
+                            ? " (Đã hoàn tất)"
+                            : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </details>
                   <button
                     disabled={!s.currentActivityId}
                     onClick={() => {
@@ -858,40 +998,47 @@ export function LiveRoom({
                   ))}
                 </div>
               )}
-              {s.sharedView === "document" &&
-                (material ? (
-                  <MaterialViewer
-                    materialId={material.id}
-                    version={material.version}
-                    title={material.title}
-                    kind="auto"
-                    directReadUrl={material.readUrl}
-                    controlledPage={s.materialPage || 0}
-                    onPageChange={
-                      grant
-                        ? undefined
-                        : (page) => patchClassroom({ materialPage: page })
-                    }
-                    annotations={room?.annotations || []}
-                    sessionId={grant ? undefined : sessionId}
-                    activityId={s.currentActivityId || undefined}
-                    students={members.map((m) => ({
-                      id: m.studentId,
-                      name:
-                        m.displayName || m.studentIdRef?.name || m.studentId,
-                    }))}
-                    onSaved={
-                      grant
-                        ? undefined
-                        : () => {
-                            void load();
-                          }
-                    }
-                  />
-                ) : (
-                  <p>Hoạt động chưa có học liệu.</p>
-                ))}
-              {s.sharedView === "check" && (
+              {s.sharedView === "document" && (
+                <div
+                  style={{
+                    display: !grant && inspectBoard ? "none" : undefined,
+                  }}
+                >
+                  {material ? (
+                    <MaterialViewer
+                      materialId={material.id}
+                      version={material.version}
+                      title={material.title}
+                      kind="auto"
+                      directReadUrl={material.readUrl}
+                      controlledPage={s.materialPage || 0}
+                      onPageChange={
+                        grant
+                          ? undefined
+                          : (page) => patchClassroom({ materialPage: page })
+                      }
+                      annotations={room?.annotations || []}
+                      sessionId={grant ? undefined : sessionId}
+                      activityId={s.currentActivityId || undefined}
+                      students={members.map((m) => ({
+                        id: m.studentId,
+                        name:
+                          m.displayName || m.studentIdRef?.name || m.studentId,
+                      }))}
+                      onSaved={
+                        grant
+                          ? undefined
+                          : () => {
+                              void load();
+                            }
+                      }
+                    />
+                  ) : (
+                    <p>Hoạt động chưa có học liệu.</p>
+                  )}
+                </div>
+              )}
+              {s.sharedView === "check" && (grant || !inspectBoard) && (
                 <div>
                   <p>
                     {room?.activeQuickCheck?.question ||
@@ -937,82 +1084,27 @@ export function LiveRoom({
                     .
                   </p>
                 ))}
-            </div>
-            <section className="online-room__board" aria-label="Bảng học tập">
-              {unsentStroke && (
-                <div role="status">
-                  Nét vẽ chưa gửi vẫn được giữ lại.{" "}
-                  <button
-                    disabled={!connected || s.status !== "live"}
-                    onClick={() =>
-                      void command(
-                        `/sessions/${sessionId}/boards/${grant ? "own" : s?.sharedBoardOwnerId || "common"}`,
-                        "PUT",
-                        unsentStroke,
-                        true,
-                      ).then((ok) => {
-                        if (ok) setUnsentStroke(null);
-                      })
-                    }
-                  >
-                    Gửi lại nét vẽ
-                  </button>
+              {!grant && (
+                <div
+                  className="online-room__stage-board"
+                  style={{
+                    display:
+                      s.sharedView === "board" || inspectBoard
+                        ? undefined
+                        : "none",
+                  }}
+                >
+                  {inspectBoard && (
+                    <p role="status">
+                      Đang xem nháp riêng. Nội dung chia sẻ với lớp không thay
+                      đổi.
+                    </p>
+                  )}
+                  {boardPanel}
                 </div>
               )}
-              <OnlineBoard
-                title={
-                  grant
-                    ? "Bảng nháp của tôi"
-                    : inspectBoard
-                      ? `Xem bảng riêng: ${members.find((m) => m.studentId === selected)?.displayName || selected}`
-                      : s?.sharedBoardOwnerId &&
-                          s.sharedBoardOwnerId !== "common"
-                        ? `Bảng trình bày: ${members.find((m) => m.studentId === s.sharedBoardOwnerId)?.displayName || s.sharedBoardOwnerId}`
-                        : "Bảng chung"
-                }
-                board={board || null}
-                actorId={grant?.studentId || teacherId || ""}
-                canWrite={
-                  s.status === "live" &&
-                  !inspectBoard &&
-                  (!grant || room?.capabilities?.boardWrite === true)
-                }
-                isOwnPrivateBoard={!!grant}
-                busy={!!unsentStroke}
-                onCommand={async (cmd) => {
-                  const accepted = await command(
-                    `/sessions/${sessionId}/boards/${grant ? "own" : s?.sharedBoardOwnerId || "common"}`,
-                    "PUT",
-                    cmd,
-                    true,
-                  );
-                  if (!accepted && cmd.operation === "addStroke" && cmd.stroke)
-                    setUnsentStroke({
-                      operation: "addStroke",
-                      stroke: cmd.stroke,
-                    });
-                }}
-                onCaptureAttempt={
-                  grant
-                    ? async () => {
-                        await command(
-                          `/sessions/${sessionId}/boards/own/attempts`,
-                          "POST",
-                          {},
-                        );
-                      }
-                    : selected
-                      ? async () => {
-                          await command(
-                            `/sessions/${sessionId}/boards/${selected}/attempts`,
-                            "POST",
-                            {},
-                          );
-                        }
-                      : undefined
-                }
-              />
-            </section>
+            </div>
+            {grant && boardPanel}
             {!grant && (
               <aside
                 className="online-room__dock"
@@ -1298,7 +1390,11 @@ export function LiveRoom({
               ))}
             </section>
           )}
-          <section aria-label="Trò chuyện" className="online-room__chat">
+          <section
+            id="classroom-chat"
+            aria-label="Trò chuyện"
+            className="online-room__chat"
+          >
             <h2>Trò chuyện</h2>
             {(grant ? room?.roomMessages : room?.messages)?.map((m) => (
               <p key={m.id}>

@@ -138,6 +138,7 @@ const path = require("node:path");
     await t.locator(".online-room__views").getByRole("button", { name: "Chấm bài", exact: true }).click();
     await t.getByText("Chưa có bài nộp từ học sinh.").waitFor();
     await t.locator(".online-room__views").getByRole("button", { name: "Giảng dạy", exact: true }).click();
+    await t.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Bảng", exact: true }).click();
     const tb = t.getByTestId("online-board"),
       sb = p1.getByTestId("online-board");
     const roomInfo = await (
@@ -348,7 +349,7 @@ const path = require("node:path");
     await t.getByRole("button", { name: "Kết thúc", exact: true }).click();
     await t.getByText("public · Đã kết thúc").waitFor();
     await t.locator(".online-room__views").getByRole("button", { name: "Giảng dạy", exact: true }).click();
-    if (!(await tb.getByRole("button", { name: "Thêm nét vẽ" }).isDisabled()))
+    if (!(await tb.getByRole("button", { name: "Thêm nét vẽ", includeHidden: true }).isDisabled()))
       throw Error("teacher board enabled after end");
     await t.locator(".online-room__views").getByRole("button", { name: "Tổng kết & duyệt", exact: true }).click();
     await panel.getByRole("button", { name: "Hoàn tất duyệt" }).click();

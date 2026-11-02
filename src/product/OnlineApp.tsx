@@ -1866,6 +1866,7 @@ export default function OnlineApp() {
               <LiveRoom
                 sessionId={roomSession}
                 teacherId={teacher.id}
+                onThemeToggle={toggleTheme}
                 view={
                   page === "grading"
                     ? "grading"
