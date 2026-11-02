@@ -1,0 +1,1 @@
+PASS teacher + two isolated student contexts, stage/doc page sync, board private/share/presentation/undo, activity completion, tools allow/deny, quick checks/review, dock note 2 actions, chat, TTL/revoke, refresh/end receipt

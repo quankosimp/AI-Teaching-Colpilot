@@ -2,6 +2,8 @@
 
 ## Current
 
+- UI restoration source `c2face5` on `fix/restore-original-ui` restores the original management shell and full-width single-stage classroom using server data. Supervisor paired with one available Codex UI worker; management/classroom/review/local media/local AI browser suites passed, including draft/media persistence and mobile keyboard checks. Backend remains `af70f23`; G5/real-provider acceptance is unchanged. See [UI comparison and verification](ui-restoration-20261102.md). The previous integrated source report below records the pre-restoration UI baseline.
+
 - Integrated source `af70f23a8cd5987c60ea7dacee523e53168f5741` includes G3/G4 local workflows, frontend AI dock/review wiring and review corrections. Full supervisor regression: **80 passed / 0 failed / 6 explicit skips**. Classroom/media/AI Chrome suites passed on the isolated candidate; Docker4170 doctor and actual classroom/AI browser suites passed; running API source/compiled hashes match this commit.
 - Independent review of `a7f4876` found two concrete blockers (resource-backed source IDs incorrectly resolving to version1, and Toolkit closeSession used for ordinary teardown). Follow-up `af70f23` fixes both and historical-context advisory; independent targeted recheck is **Scoped PASS**. Reviewer executed3 named non-DB tests, read HTTP/browser regressions, and did not independently rerun real providers or the whole product.
 - Migration008 checksum is preserved;009/010 are additive. Fresh deploy and staged upgrade preserve legacy AI history. API source and compiled sourceVersion helper inside the rebuilt Docker container match supervisor hashes. No existing database was reset.
