@@ -83,6 +83,9 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:4170}
       DATABASE_URL: postgresql://${POSTGRES_USER:-copilot}:${POSTGRES_PASSWORD:-copilot_local_only}@postgres:5432/${POSTGRES_DB:-copilot}
       JWT_SECRET: ${JWT_SECRET:-local-only-change-before-any-shared-use-0123456789}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_REGION: ${MINIO_REGION:-us-east-1}
