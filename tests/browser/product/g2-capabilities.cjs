@@ -137,7 +137,7 @@ const path = require("node:path");
     // Teacher navigation and room load
     await t.goto(origin);
     await t.getByRole("button", { name: "Demo Hoàng Nam" }).click();
-    await t.getByRole("button", { name: "Soạn buổi học" }).click();
+    await t.getByRole("navigation", { name: "Điều hướng chính" }).getByRole("button", { name: "Soạn buổi học", exact: true }).click();
     await t.getByRole("button", { name: title }).click();
     await t.route("**/api/v1/room/state?*", async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -197,7 +197,9 @@ const path = require("node:path");
     await p1.reload();
     await p1.getByText("Bảng nháp của tôi").waitFor();
     await p1.getByText("Chưa có bài làm nào được nộp.").waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Chấm bài", exact: true }).click();
     await t.getByText("Chưa có bài nộp từ học sinh.").waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Giảng dạy", exact: true }).click();
 
     const tb = t.getByTestId("online-board"),
       sb = p1.getByTestId("online-board");
@@ -255,9 +257,11 @@ const path = require("node:path");
       throw Error("teacher controls lack accessible labels");
     const headerBox = await t.locator(".online-room__header").boundingBox(),
       boardBox = await t.locator(".online-room__board").boundingBox(),
-      reviewBox = await t.locator(".online-room__review").boundingBox();
-    if (!headerBox || !boardBox || !reviewBox || boardBox.y >= reviewBox.y)
-      throw Error("board must precede review");
+      participantsBox = await t.locator(".online-room__participants").boundingBox();
+    if (!headerBox || !boardBox || !participantsBox || headerBox.y >= boardBox.y)
+      throw Error("teaching workspace must follow the room header");
+    if (await t.locator(".online-room__review").isVisible())
+      throw Error("full review must stay outside the teaching view");
 
     await t.setViewportSize({ width: 1440, height: 900 });
     await t.screenshot({
@@ -337,7 +341,13 @@ const path = require("node:path");
           if (role === "teacher" && width === 1440) {
             const stageBox = await page.locator(".online-room__stage").boundingBox();
             const dockBox = await page.locator(".online-room__dock").boundingBox();
-            if (!stageBox || !dockBox || dockBox.x < stageBox.x + stageBox.width) throw Error("desktop dock must sit beside stage");
+            const railBox = await page.locator(".online-room__participants").boundingBox();
+            const boardBox = await page.locator(".online-room__workspace > .online-room__board").boundingBox();
+            if (!stageBox || !dockBox || !railBox || !boardBox ||
+                stageBox.x < railBox.x + railBox.width ||
+                dockBox.x < stageBox.x + stageBox.width ||
+                Math.abs(boardBox.x - stageBox.x) > 1 || stageBox.width < 320)
+              throw Error("desktop requires separate participant rail, readable stage/board and Copilot dock");
           }
           await page.screenshot({ path: path.join(artifacts, `final-${role}-${width}-${theme}.png`), fullPage: true });
         }
@@ -400,6 +410,7 @@ const path = require("node:path");
       throw Error("student chat did not re-enable");
 
     // Quick Check & Review with support level (TOOL 004, TOOL 007)
+    await stage.getByRole("button", { name: "Kiểm tra", exact: true }).click();
     await t.getByPlaceholder("Câu hỏi kiểm tra nhanh").fill("2 + 2?");
     await t.getByRole("button", { name: "Mở câu hỏi" }).click();
     await p1.getByRole("heading", { name: "2 + 2?" }).waitFor();
@@ -416,11 +427,12 @@ const path = require("node:path");
       .getByRole("heading", { name: "2 + 2?" })
       .waitFor({ state: "hidden" });
 
-    const checkGradeForm = activitySection.locator("form").filter({ hasText: "Student One: 4" });
+    const checksSection = t.locator(".online-room__checks");
+    const checkGradeForm = checksSection.locator("form").filter({ hasText: "Student One: 4" });
     await checkGradeForm.getByLabel("Nhận xét", { exact: false }).fill("Chính xác");
     await checkGradeForm.getByLabel("Mức hỗ trợ", { exact: false }).selectOption("DocLap");
     await checkGradeForm.getByRole("button", { name: "Chấm bài" }).click();
-    await activitySection.getByText("Chính xác (Độc lập)", { exact: false }).waitFor();
+    await checksSection.getByText("Chính xác (Độc lập)", { exact: false }).waitFor();
 
     // Offline draft queue replay (LIVE 006, Decision D10)
     await a.setOffline(true);
@@ -483,6 +495,7 @@ const path = require("node:path");
     });
     await p1.getByRole("button", { name: "Nộp bài" }).click();
     await p1.getByText("answer.pdf:", { exact: false }).waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Chấm bài", exact: true }).click();
     await t.getByText("Mở tệp: answer.pdf").waitFor();
 
     await p2
@@ -493,9 +506,8 @@ const path = require("node:path");
     await t.getByText("Bài của học sinh hai").waitFor();
 
     // Review Panel: manual observation, claim, grading (TOOL 007)
-    const panel = t.locator("section").filter({
-      has: t.getByRole("heading", { name: "Minh chứng và nhận định" }),
-    });
+    await t.locator(".online-room__views").getByRole("button", { name: "Tổng kết & duyệt", exact: true }).click();
+    const panel = t.locator(".online-room__review");
     await panel.getByLabel("Học sinh").selectOption({ label: "Student One" });
     await panel.getByLabel("Quan sát thực tế").fill("Đã hoàn thành bài tập");
     await panel.getByRole("button", { name: "Lưu quan sát" }).click();
@@ -519,6 +531,7 @@ const path = require("node:path");
       .getByText("Hoàn thành bài tập · Đã duyệt", { exact: false })
       .waitFor();
 
+    await t.locator(".online-room__views").getByRole("button", { name: "Chấm bài", exact: true }).click();
     const submissionForm = t.locator("form").filter({ hasText: "answer.pdf" });
     await submissionForm
       .getByLabel("Nhận xét cho answer.pdf")
@@ -541,6 +554,7 @@ const path = require("node:path");
       throw Error("support leaked across submissions");
 
     await submissionForm.getByRole("button", { name: "Chấm bài" }).click();
+    await t.locator(".online-room__views").getByRole("button", { name: "Tổng kết & duyệt", exact: true }).click();
     await panel.getByLabel("Học sinh").selectOption({ label: "Student One" });
     await panel.getByText("Good work", { exact: false }).waitFor();
 
@@ -554,6 +568,7 @@ const path = require("node:path");
     await panel.getByRole("button", { name: "Đóng nguồn" }).click();
 
     // TTL configure & invite revoke (ROOM 001)
+    await t.locator(".online-room__views").getByRole("button", { name: "Giảng dạy", exact: true }).click();
     await membersSection.getByLabel("Thời hạn liên kết (giờ)").fill("12");
     const studentTwoMember = membersSection.locator("div").filter({ hasText: "Student Two" });
     await studentTwoMember.getByRole("button", { name: "Tạo liên kết mời" }).click();
@@ -563,6 +578,7 @@ const path = require("node:path");
     // End session (LIVE 005)
     await t.getByRole("button", { name: "Kết thúc", exact: true }).click();
     await t.getByText("public · Đã kết thúc").waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Giảng dạy", exact: true }).click();
     if (!(await tb.getByRole("button", { name: "Thêm nét vẽ" }).isDisabled()))
       throw Error("teacher board enabled after end");
 
@@ -573,6 +589,7 @@ const path = require("node:path");
       throw Error("student board enabled after session end");
 
     // Review completion
+    await t.locator(".online-room__views").getByRole("button", { name: "Tổng kết & duyệt", exact: true }).click();
     await panel.getByRole("button", { name: "Hoàn tất duyệt" }).click();
     await t.getByText("public · Đã hoàn tất duyệt").waitFor();
 

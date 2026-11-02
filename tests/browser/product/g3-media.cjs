@@ -417,7 +417,7 @@ const path = require("node:path");
     // 4a. Teacher loads room
     await teacherPage.goto(origin);
     await teacherPage.getByRole("button", { name: "Demo Hoàng Nam" }).click();
-    await teacherPage.getByRole("button", { name: "Soạn buổi học" }).click();
+    await teacherPage.getByRole("navigation", { name: "Điều hướng chính" }).getByRole("button", { name: "Soạn buổi học", exact: true }).click();
     await teacherPage.getByRole("button", { name: uiSessionTitle }).click();
     await teacherPage.getByRole("button", { name: "Mở phòng học" }).click();
     await teacherPage.getByRole("heading", { name: uiSessionTitle }).waitFor();
@@ -470,6 +470,11 @@ const path = require("node:path");
     // Switch Activity: Hoạt động 1 -> Hoạt động 2
     await teacherPage.getByLabel("Hoạt động hiện tại").selectOption({ label: "Hoạt động 2: Thực hành" });
     await teacherPage.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Bảng", exact: true }).click();
+
+    // Changing teacher task modes preserves the same media session too.
+    for (const name of ["Chấm bài", "Tổng kết & duyệt", "Giảng dạy"]) {
+      await teacherPage.getByRole("navigation", { name: "Chế độ buổi học" }).getByRole("button", { name, exact: true }).click();
+    }
 
     // Wait for at least one 5-second polling cycle to complete
     await teacherPage.waitForTimeout(5500);
@@ -526,6 +531,8 @@ const path = require("node:path");
     if (mediaContainerChildCount !== 0) {
       throw new Error(`Media container was not emptied on session end! Child count: ${mediaContainerChildCount}`);
     }
+    // Ending takes the teacher to review; return to teaching to inspect the cleaned-up stage.
+    await teacherPage.getByRole("navigation", { name: "Chế độ buổi học" }).getByRole("button", { name: "Giảng dạy", exact: true }).click();
     await teacherPage.getByText("Chưa bắt đầu video").waitFor();
     console.log("  ✓ SG3-05: Board draft strictly preserved and media stage completely cleaned up on session end");
 

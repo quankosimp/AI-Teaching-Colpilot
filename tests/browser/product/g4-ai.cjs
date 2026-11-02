@@ -40,7 +40,7 @@ const fs = require('node:fs/promises');
     const [teacher, a, b] = await Promise.all(contexts.map(context => context.newPage()));
     await teacher.goto(origin);
     await teacher.getByRole('button', { name: 'Demo Hoàng Nam' }).click();
-    await teacher.getByRole('button', { name: 'Soạn buổi học' }).click();
+    await teacher.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('button', { name: 'Soạn buổi học', exact: true }).click();
     await teacher.getByRole('button', { name: title }).click();
     await teacher.getByRole('button', { name: 'Mở phòng học' }).click();
     await teacher.getByRole('heading', { name: title }).waitFor();
