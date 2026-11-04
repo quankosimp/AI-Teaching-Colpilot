@@ -436,7 +436,7 @@ export default function OnlineApp() {
     return () => {
       active = false;
     };
-  }, [selectedStudent]);
+  }, [selectedStudent, page, roomSession]);
   useEffect(() => {
     if (!selectedSession) {
       setAnnotations([]);
@@ -804,7 +804,10 @@ export default function OnlineApp() {
               sessions={sessions}
               evidence={recentEvidence}
               evidenceError={evidenceError}
-              onPlan={() => navigate("plans")}
+              onPlan={(sessionId?: string) => {
+                if (sessionId) setSelectedSession(sessionId);
+                navigate("plans");
+              }}
               onMaterials={() => navigate("materials")}
               onStudents={() => navigate("students")}
               onSession={openRoom}
@@ -1030,33 +1033,56 @@ export default function OnlineApp() {
               >
                 {profileTab === "overview" && (
                   <div className="two-column restored-profile">
-                    <section className="card">
-                      <h2>Mục tiêu học tập</h2>
-                      <p>{student.goal || "Chưa có mục tiêu học tập."}</p>
-                      <h3>Điểm mạnh</h3>
-                      {student.strengths.length ? (
-                        <ul>
-                          {student.strengths.map((item, index) => (
-                            <li key={index}>{item}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="muted">Giáo viên chưa ghi điểm mạnh.</p>
-                      )}
-                      <h3>Cần củng cố</h3>
-                      {student.gaps.length ? (
-                        <ul>
-                          {student.gaps.map((item, index) => (
-                            <li key={index}>{item}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="muted">
-                          Chưa có nội dung cần củng cố được ghi nhận.
-                        </p>
-                      )}
-                      <h3>Ghi chú riêng của giáo viên</h3>
-                      <p>{student.notes || "Chưa có ghi chú riêng."}</p>
+                    <section className="card profile-overview-card">
+                      <div className="profile-goal-box">
+                        <span className="eyebrow">MỤC TIÊU HỌC TẬP</span>
+                        <h2>Mục tiêu học tập</h2>
+                        <p>{student.goal || "Chưa có mục tiêu học tập."}</p>
+                      </div>
+                      <div className="profile-traits-grid">
+                        <div className="profile-trait-block">
+                          <h3>Điểm mạnh</h3>
+                          {student.strengths.length ? (
+                            <ul className="trait-pill-list">
+                              {student.strengths.map((item, index) => (
+                                <li
+                                  key={index}
+                                  className="trait-pill trait-pill--strength"
+                                >
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="muted">
+                              Giáo viên chưa ghi điểm mạnh.
+                            </p>
+                          )}
+                        </div>
+                        <div className="profile-trait-block">
+                          <h3>Cần củng cố</h3>
+                          {student.gaps.length ? (
+                            <ul className="trait-pill-list">
+                              {student.gaps.map((item, index) => (
+                                <li
+                                  key={index}
+                                  className="trait-pill trait-pill--gap"
+                                >
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="muted">
+                              Chưa có nội dung cần củng cố được ghi nhận.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="profile-note-box">
+                        <h3>Ghi chú riêng của giáo viên</h3>
+                        <p>{student.notes || "Chưa có ghi chú riêng."}</p>
+                      </div>
                     </section>
                     <section className="card">
                       <div className="section-head">
@@ -1361,393 +1387,221 @@ export default function OnlineApp() {
                   )}
                 </aside>
                 <section className="card restored-plan-main">
-                  {" "}
                   {session ? (
                     <>
-                      <h2>{session.title}</h2>
-                      <button
-                        className="button primary"
-                        type="button"
-                        onClick={() => openRoom(session.id)}
-                      >
-                        <Video size={16} />
-                        Mở phòng học
-                      </button>
-                      <p>
-                        {session.date} · {session.time} · {session.duration}{" "}
-                        phút
-                      </p>
-                      <button
-                        className="button ghost small"
-                        onClick={() => setModal("session-settings")}
-                      >
-                        <Settings2 size={15} />
-                        Thiết lập buổi học
-                      </button>
-                      {session.RoomMember_sessionId_items.map((member) => (
-                        <div key={member.studentId}>
-                          {students.find(
-                            (pupil) => pupil.id === member.studentId,
-                          )?.name || "Học sinh"}{" "}
-                          {session.status === "draft" && (
-                            <button
-                              className="text-button"
-                              disabled={
-                                busy ||
-                                session.RoomMember_sessionId_items.length <= 1
-                              }
-                              onClick={() =>
-                                void run(async () => {
-                                  await api(
-                                    `/sessions/${session.id}/members/${member.studentId}`,
-                                    {
-                                      method: "DELETE",
-                                      headers: {
-                                        "If-Match-Version": String(
-                                          session.version,
-                                        ),
-                                      },
-                                    },
-                                  );
-                                  await reload();
-                                })
+                      <header className="plan-main-header">
+                        <div className="plan-main-title-block">
+                          <div className="plan-main-badges">
+                            <Status
+                              tone={
+                                session.status === "live"
+                                  ? "green"
+                                  : session.status === "scheduled"
+                                    ? "blue"
+                                    : session.status === "reviewed"
+                                      ? "green"
+                                      : "violet"
                               }
                             >
-                              Bỏ khỏi bản nháp
-                            </button>
+                              {statusLabel(session.status)}
+                            </Status>
+                            <span className="plan-duration-pill">
+                              Thời lượng {session.duration} phút
+                            </span>
+                          </div>
+                          <h2>{session.title}</h2>
+                          <p className="plan-meta-line">
+                            {session.date} · {session.time} · {session.duration}{" "}
+                            phút
+                          </p>
+                          {(session.sharedGoal || session.goal) && (
+                            <div className="plan-goals-summary">
+                              {session.sharedGoal && (
+                                <p>
+                                  <strong>Mục tiêu lớp học:</strong>{" "}
+                                  {session.sharedGoal}
+                                </p>
+                              )}
+                              {session.goal && (
+                                <p>
+                                  <strong>Mục tiêu giáo viên:</strong>{" "}
+                                  {session.goal}
+                                </p>
+                              )}
+                            </div>
                           )}
                         </div>
-                      ))}
-                      {session.Activity_sessionId_items.map((a, index) => (
-                        <article className="restored-activity-card" key={a.id}>
-                          <p>
-                            {a.title} · {a.duration} phút
-                          </p>
-                          {a.isSourceStale && (
-                            <p role="alert">
-                              Nguồn đã thay đổi, cần kiểm tra lại.
-                            </p>
-                          )}
+                        <div className="plan-main-actions">
                           <button
                             className="button ghost small"
-                            onClick={() => setEditingActivity(a.id)}
+                            onClick={() => setModal("session-settings")}
                           >
-                            <Pencil size={14} />
-                            Chỉnh sửa hoạt động
+                            <Settings2 size={15} />
+                            Thiết lập buổi học
                           </button>
-                          {editingActivity === a.id && (
-                            <Modal
-                              title={`Chỉnh sửa: ${a.title}`}
-                              onClose={() => !busy && setEditingActivity("")}
-                            >
-                              <form
-                                className="form-stack"
-                                key={`${a.id}-${session.version}`}
-                                onSubmit={(event) => {
-                                  event.preventDefault();
-                                  const fields = new FormData(
-                                    event.currentTarget,
-                                  );
-                                  void run(async () => {
-                                    await saveActivities(
-                                      session.Activity_sessionId_items.map(
-                                        (item) =>
-                                          item.id === a.id
-                                            ? {
-                                                ...item,
-                                                title: String(
-                                                  fields.get("title"),
-                                                ),
-                                                description: String(
-                                                  fields.get("description"),
-                                                ),
-                                                duration: Number(
-                                                  fields.get("duration"),
-                                                ),
-                                              }
-                                            : item,
-                                      ),
-                                    );
-                                  });
-                                }}
+                          <button
+                            className="button ghost small"
+                            disabled={busy || session.status !== "draft"}
+                            onClick={() =>
+                              void run(async () => {
+                                await api(`/sessions/${session.id}`, {
+                                  method: "PATCH",
+                                  headers: {
+                                    "If-Match-Version": String(session.version),
+                                  },
+                                  body: body({ status: "scheduled" }),
+                                });
+                                await reload();
+                              })
+                            }
+                          >
+                            Lên lịch
+                          </button>
+                          <button
+                            className="button primary"
+                            type="button"
+                            onClick={() => openRoom(session.id)}
+                          >
+                            <Video size={16} />
+                            Mở phòng học
+                          </button>
+                        </div>
+                      </header>
+
+                      <div className="plan-members-section">
+                        <span className="plan-section-label">
+                          Học sinh tham gia (
+                          {session.RoomMember_sessionId_items.length})
+                        </span>
+                        <div className="plan-member-list">
+                          {session.RoomMember_sessionId_items.map((member) => {
+                            const pupil = students.find(
+                              (item) => item.id === member.studentId,
+                            );
+                            const pupilName = pupil?.name || "Học sinh";
+                            return (
+                              <div
+                                key={member.studentId}
+                                className="plan-member-chip"
                               >
-                                <label>
-                                  Tên hoạt động
-                                  <input
-                                    name="title"
-                                    defaultValue={a.title}
-                                    required
-                                  />
-                                </label>
-                                <label>
-                                  Mô tả hoạt động
-                                  <textarea
-                                    name="description"
-                                    defaultValue={a.description}
-                                  />
-                                </label>
-                                <label>
-                                  Số phút
-                                  <input
-                                    name="duration"
-                                    type="number"
-                                    min="1"
-                                    defaultValue={a.duration}
-                                    required
-                                  />
-                                </label>
-                                <button
-                                  className="button ghost small"
-                                  disabled={busy}
+                                <span
+                                  className={`avatar avatar-sm avatar-${pupil?.color || "violet"}`}
                                 >
-                                  Lưu hoạt động
-                                </button>
-                              </form>
-                            </Modal>
-                          )}
-                          <button
-                            className="text-button"
-                            disabled={busy || index === 0}
-                            onClick={() =>
-                              void run(async () => {
-                                const items = [
-                                  ...session.Activity_sessionId_items,
-                                ];
-                                [items[index - 1], items[index]] = [
-                                  items[index],
-                                  items[index - 1],
-                                ];
-                                await saveActivities(items);
-                              })
-                            }
-                          >
-                            Lên
-                          </button>
-                          <button
-                            className="text-button"
-                            disabled={
-                              busy ||
-                              index ===
-                                session.Activity_sessionId_items.length - 1
-                            }
-                            onClick={() =>
-                              void run(async () => {
-                                const items = [
-                                  ...session.Activity_sessionId_items,
-                                ];
-                                [items[index + 1], items[index]] = [
-                                  items[index],
-                                  items[index + 1],
-                                ];
-                                await saveActivities(items);
-                              })
-                            }
-                          >
-                            Xuống
-                          </button>
-                          <button
-                            className="text-button"
-                            disabled={busy}
-                            onClick={() =>
-                              void run(async () => {
-                                await saveActivities(
-                                  session.Activity_sessionId_items.filter(
-                                    (item) => item.id !== a.id,
-                                  ),
-                                );
-                              })
-                            }
-                          >
-                            Xóa
-                          </button>
-                          <select
-                            aria-label={`Học liệu cho ${a.title}`}
-                            value={a.materialId || ""}
-                            onChange={(e) => {
-                              const materialId = e.target.value || null;
-                              void run(async () => {
-                                await saveActivities(
-                                  session.Activity_sessionId_items.map(
-                                    (item) =>
-                                      item.id === a.id
-                                        ? {
-                                            ...item,
-                                            materialId,
-                                            materialVersion: materialId
-                                              ? (materials.find(
-                                                  (m) => m.id === materialId,
-                                                )?.currentVersion ?? null)
-                                              : null,
-                                          }
-                                        : item,
-                                  ),
-                                );
-                              });
-                            }}
-                          >
-                            <option value="">Chưa gắn học liệu</option>
-                            {materials.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.title}
-                              </option>
-                            ))}
-                          </select>
-                          {a.sourceEvidenceIds.map((id) => (
-                            <button
-                              className="text-button"
-                              key={id}
-                              onClick={() =>
-                                void run(async () => {
-                                  setOpenedSource(await api(`/evidence/${id}`));
-                                })
-                              }
-                            >
-                              Xem nguồn đã duyệt
-                            </button>
-                          ))}
-                          {history
-                            .filter((claim) =>
-                              session.RoomMember_sessionId_items.some(
-                                (member) =>
-                                  member.studentId === selectedStudent,
-                              ),
-                            )
-                            .map((claim) => (
-                              <button
-                                className="text-button"
-                                key={claim.id}
-                                onClick={() =>
-                                  void run(async () => {
-                                    await saveActivities(
-                                      session.Activity_sessionId_items.map(
-                                        (item) =>
-                                          item.id === a.id
-                                            ? {
-                                                ...item,
-                                                sourceEvidenceIds: [
-                                                  ...new Set([
-                                                    ...item.sourceEvidenceIds,
-                                                    ...claim.observationEvidenceIds,
-                                                  ]),
-                                                ],
-                                                sourceClaimRefs: [
-                                                  ...item.sourceClaimRefs.filter(
-                                                    (ref) =>
-                                                      ref.claimId !== claim.id,
-                                                  ),
-                                                  {
-                                                    claimId: claim.id,
-                                                    revision: claim.revision,
-                                                  },
-                                                ],
-                                              }
-                                            : item,
-                                      ),
-                                    );
-                                  })
-                                }
-                              >
-                                Gắn nguồn: {claim.text}
-                              </button>
-                            ))}
-                          {a.materialId && (
-                            <button
-                              className="button ghost small"
-                              onClick={() =>
-                                setViewerActivity(
-                                  viewerActivity === a.id ? "" : a.id,
-                                )
-                              }
-                            >
-                              {viewerActivity === a.id
-                                ? "Đóng xem đề"
-                                : "Xem và chú thích đề"}
-                            </button>
-                          )}
-                          {viewerActivity === a.id &&
-                            a.materialId &&
-                            a.materialVersion &&
-                            materials.find((m) => m.id === a.materialId) && (
-                              <MaterialViewer
-                                materialId={a.materialId}
-                                version={a.materialVersion}
-                                title={
-                                  materials.find((m) => m.id === a.materialId)!
-                                    .title
-                                }
-                                kind={
-                                  materials.find((m) => m.id === a.materialId)!
-                                    .kind
-                                }
-                                annotations={annotations}
-                                sessionId={session.id}
-                                activityId={a.id}
-                                students={session.RoomMember_sessionId_items.map(
-                                  (member) => ({
-                                    id: member.studentId,
-                                    name:
-                                      students.find(
-                                        (pupil) =>
-                                          pupil.id === member.studentId,
-                                      )?.name || "Học sinh",
-                                  }),
+                                  {pupil?.initials || initials(pupilName)}
+                                </span>
+                                <span className="plan-member-name">
+                                  {pupilName}
+                                </span>{" "}
+                                {session.status === "draft" && (
+                                  <button
+                                    className="text-button"
+                                    disabled={
+                                      busy ||
+                                      session.RoomMember_sessionId_items
+                                        .length <= 1
+                                    }
+                                    onClick={() =>
+                                      void run(async () => {
+                                        await api(
+                                          `/sessions/${session.id}/members/${member.studentId}`,
+                                          {
+                                            method: "DELETE",
+                                            headers: {
+                                              "If-Match-Version": String(
+                                                session.version,
+                                              ),
+                                            },
+                                          },
+                                        );
+                                        await reload();
+                                      })
+                                    }
+                                  >
+                                    Bỏ khỏi bản nháp
+                                  </button>
                                 )}
-                                onSaved={(saved) =>
-                                  setAnnotations((items) => [...items, saved])
-                                }
-                              />
-                            )}
-                          {annotations
-                            .filter((item) => item.activityId === a.id)
-                            .map((item) => (
-                              <p key={item.id}>
-                                Chú thích trang {item.page + 1} · vị trí{" "}
-                                {item.x}
-                                %, {item.y}% · phiên bản {item.materialVersion}:{" "}
-                                {item.text}
-                              </p>
-                            ))}
-                        </article>
-                      ))}
-                      <button
-                        className="button ghost"
-                        disabled={
-                          busy || !session.RoomMember_sessionId_items.length
-                        }
-                        onClick={() =>
-                          void run(async () => {
-                            const studentId =
-                              session.RoomMember_sessionId_items.some(
-                                (m) => m.studentId === selectedStudent,
-                              )
-                                ? selectedStudent
-                                : session.RoomMember_sessionId_items[0]
-                                    .studentId;
-                            const response = await api<{
-                              suggestion: {
-                                id: string;
-                                text: string;
-                                provider?: "gemini" | "mock";
-                                sources: {
-                                  claimId: string;
-                                  revision: number;
-                                  evidenceIds: string[];
-                                }[];
-                              };
-                            }>(`/sessions/${session.id}/ai/plan-suggestions`, {
-                              method: "POST",
-                              body: body({ studentId }),
-                            });
-                            setSuggestion(response.suggestion);
-                            setEditingSuggestion(false);
-                          })
-                        }
-                      >
-                        Đề xuất hoạt động từ lịch sử đã duyệt
-                      </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="plan-activities-header">
+                        <div>
+                          <h3>
+                            Lộ trình hoạt động (
+                            {session.Activity_sessionId_items.length})
+                          </h3>
+                          <small>
+                            Tổng thời lượng:{" "}
+                            {session.Activity_sessionId_items.reduce(
+                              (n, a) => n + a.duration,
+                              0,
+                            )}{" "}
+                            phút / {session.duration} phút
+                          </small>
+                        </div>
+                        <div className="plan-activities-actions">
+                          <button
+                            className="button ghost small"
+                            disabled={
+                              busy || !session.RoomMember_sessionId_items.length
+                            }
+                            onClick={() =>
+                              void run(async () => {
+                                const studentId =
+                                  session.RoomMember_sessionId_items.some(
+                                    (m) => m.studentId === selectedStudent,
+                                  )
+                                    ? selectedStudent
+                                    : session.RoomMember_sessionId_items[0]
+                                        .studentId;
+                                const response = await api<{
+                                  suggestion: {
+                                    id: string;
+                                    text: string;
+                                    provider?: "gemini" | "mock";
+                                    sources: {
+                                      claimId: string;
+                                      revision: number;
+                                      evidenceIds: string[];
+                                    }[];
+                                  };
+                                }>(`/sessions/${session.id}/ai/plan-suggestions`, {
+                                  method: "POST",
+                                  body: body({ studentId }),
+                                });
+                                setSuggestion(response.suggestion);
+                                setEditingSuggestion(false);
+                              })
+                            }
+                          >
+                            <Sparkles size={15} />
+                            Đề xuất hoạt động từ lịch sử đã duyệt
+                          </button>
+                          <button
+                            className="button secondary small"
+                            onClick={() => setModal("activity")}
+                          >
+                            <Plus size={16} />
+                            Thêm hoạt động
+                          </button>
+                        </div>
+                      </div>
+
+                      {session.Activity_sessionId_items.reduce(
+                        (n, a) => n + a.duration,
+                        0,
+                      ) > session.duration && (
+                        <p role="alert" className="plan-duration-alert">
+                          Tổng thời lượng hoạt động vượt thời lượng buổi học.
+                        </p>
+                      )}
+
                       {suggestion && (
-                        <>
-                          <p>
+                        <div className="plan-ai-suggestion">
+                          <p className="plan-ai-provider">
+                            <Sparkles size={14} />
                             {suggestion.provider === "mock"
                               ? "Giả lập local"
                               : suggestion.provider === "gemini"
@@ -1818,44 +1672,356 @@ export default function OnlineApp() {
                               />
                             </label>
                           )}
-                        </>
+                        </div>
                       )}
-                      {session.Activity_sessionId_items.reduce(
-                        (n, a) => n + a.duration,
-                        0,
-                      ) > session.duration && (
-                        <p role="alert">
-                          Tổng thời lượng hoạt động vượt thời lượng buổi học.
-                        </p>
-                      )}
-                      <button
-                        className="button secondary"
-                        onClick={() => setModal("activity")}
-                      >
-                        <Plus size={16} />
-                        Thêm hoạt động
-                      </button>
-                      <button
-                        className="button ghost"
-                        disabled={busy || session.status !== "draft"}
-                        onClick={() =>
-                          void run(async () => {
-                            await api(`/sessions/${session.id}`, {
-                              method: "PATCH",
-                              headers: {
-                                "If-Match-Version": String(session.version),
-                              },
-                              body: body({ status: "scheduled" }),
-                            });
-                            await reload();
-                          })
-                        }
-                      >
-                        Lên lịch
-                      </button>
+
+                      <div className="plan-activities-list">
+                        {session.Activity_sessionId_items.map((a, index) => (
+                          <article
+                            className="restored-activity-card"
+                            key={a.id}
+                          >
+                            <div className="activity-card-header">
+                              <div className="activity-card-heading">
+                                <span className="activity-step-badge">
+                                  {String(index + 1).padStart(2, "0")}
+                                </span>
+                                <div>
+                                  <p className="activity-card-title">
+                                    {a.title} · {a.duration} phút
+                                  </p>
+                                  {a.description && (
+                                    <p className="activity-card-desc">
+                                      {a.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="activity-card-actions">
+                                <button
+                                  className="button ghost small"
+                                  onClick={() => setEditingActivity(a.id)}
+                                >
+                                  <Pencil size={14} />
+                                  Chỉnh sửa hoạt động
+                                </button>
+                                <button
+                                  className="text-button"
+                                  disabled={busy || index === 0}
+                                  onClick={() =>
+                                    void run(async () => {
+                                      const items = [
+                                        ...session.Activity_sessionId_items,
+                                      ];
+                                      [items[index - 1], items[index]] = [
+                                        items[index],
+                                        items[index - 1],
+                                      ];
+                                      await saveActivities(items);
+                                    })
+                                  }
+                                >
+                                  Lên
+                                </button>
+                                <button
+                                  className="text-button"
+                                  disabled={
+                                    busy ||
+                                    index ===
+                                      session.Activity_sessionId_items.length -
+                                        1
+                                  }
+                                  onClick={() =>
+                                    void run(async () => {
+                                      const items = [
+                                        ...session.Activity_sessionId_items,
+                                      ];
+                                      [items[index + 1], items[index]] = [
+                                        items[index],
+                                        items[index + 1],
+                                      ];
+                                      await saveActivities(items);
+                                    })
+                                  }
+                                >
+                                  Xuống
+                                </button>
+                                <button
+                                  className="text-button"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void run(async () => {
+                                      await saveActivities(
+                                        session.Activity_sessionId_items.filter(
+                                          (item) => item.id !== a.id,
+                                        ),
+                                      );
+                                    })
+                                  }
+                                >
+                                  Xóa
+                                </button>
+                              </div>
+                            </div>
+
+                            {a.isSourceStale && (
+                              <p role="alert" className="activity-stale-alert">
+                                Nguồn đã thay đổi, cần kiểm tra lại.
+                              </p>
+                            )}
+
+                            {editingActivity === a.id && (
+                              <Modal
+                                title={`Chỉnh sửa: ${a.title}`}
+                                onClose={() => !busy && setEditingActivity("")}
+                              >
+                                <form
+                                  className="form-stack"
+                                  key={`${a.id}-${session.version}`}
+                                  onSubmit={(event) => {
+                                    event.preventDefault();
+                                    const fields = new FormData(
+                                      event.currentTarget,
+                                    );
+                                    void run(async () => {
+                                      await saveActivities(
+                                        session.Activity_sessionId_items.map(
+                                          (item) =>
+                                            item.id === a.id
+                                              ? {
+                                                  ...item,
+                                                  title: String(
+                                                    fields.get("title"),
+                                                  ),
+                                                  description: String(
+                                                    fields.get("description"),
+                                                  ),
+                                                  duration: Number(
+                                                    fields.get("duration"),
+                                                  ),
+                                                }
+                                              : item,
+                                        ),
+                                      );
+                                    });
+                                  }}
+                                >
+                                  <label>
+                                    Tên hoạt động
+                                    <input
+                                      name="title"
+                                      defaultValue={a.title}
+                                      required
+                                    />
+                                  </label>
+                                  <label>
+                                    Mô tả hoạt động
+                                    <textarea
+                                      name="description"
+                                      defaultValue={a.description}
+                                    />
+                                  </label>
+                                  <label>
+                                    Số phút
+                                    <input
+                                      name="duration"
+                                      type="number"
+                                      min="1"
+                                      defaultValue={a.duration}
+                                      required
+                                    />
+                                  </label>
+                                  <button
+                                    className="button primary small"
+                                    disabled={busy}
+                                  >
+                                    Lưu hoạt động
+                                  </button>
+                                </form>
+                              </Modal>
+                            )}
+
+                            <div className="activity-card-footer">
+                              <div className="activity-material-row">
+                                <select
+                                  aria-label={`Học liệu cho ${a.title}`}
+                                  value={a.materialId || ""}
+                                  onChange={(e) => {
+                                    const materialId = e.target.value || null;
+                                    void run(async () => {
+                                      await saveActivities(
+                                        session.Activity_sessionId_items.map(
+                                          (item) =>
+                                            item.id === a.id
+                                              ? {
+                                                  ...item,
+                                                  materialId,
+                                                  materialVersion: materialId
+                                                    ? (materials.find(
+                                                        (m) =>
+                                                          m.id === materialId,
+                                                      )?.currentVersion ?? null)
+                                                    : null,
+                                                }
+                                              : item,
+                                        ),
+                                      );
+                                    });
+                                  }}
+                                >
+                                  <option value="">Chưa gắn học liệu</option>
+                                  {materials.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.title}
+                                    </option>
+                                  ))}
+                                </select>
+                                {a.materialId && (
+                                  <button
+                                    className="button ghost small"
+                                    onClick={() =>
+                                      setViewerActivity(
+                                        viewerActivity === a.id ? "" : a.id,
+                                      )
+                                    }
+                                  >
+                                    {viewerActivity === a.id
+                                      ? "Đóng xem đề"
+                                      : "Xem và chú thích đề"}
+                                  </button>
+                                )}
+                              </div>
+                              <div className="activity-sources-row">
+                                {a.sourceEvidenceIds.map((id) => (
+                                  <button
+                                    className="text-button source-chip"
+                                    key={id}
+                                    onClick={() =>
+                                      void run(async () => {
+                                        setOpenedSource(
+                                          await api(`/evidence/${id}`),
+                                        );
+                                      })
+                                    }
+                                  >
+                                    <FileText size={13} />
+                                    Xem nguồn đã duyệt
+                                  </button>
+                                ))}
+                                {history
+                                  .filter(() =>
+                                    session.RoomMember_sessionId_items.some(
+                                      (member) =>
+                                        member.studentId === selectedStudent,
+                                    ),
+                                  )
+                                  .map((claim) => (
+                                    <button
+                                      className="text-button source-chip"
+                                      key={claim.id}
+                                      onClick={() =>
+                                        void run(async () => {
+                                          await saveActivities(
+                                            session.Activity_sessionId_items.map(
+                                              (item) =>
+                                                item.id === a.id
+                                                  ? {
+                                                      ...item,
+                                                      sourceEvidenceIds: [
+                                                        ...new Set([
+                                                          ...item.sourceEvidenceIds,
+                                                          ...claim.observationEvidenceIds,
+                                                        ]),
+                                                      ],
+                                                      sourceClaimRefs: [
+                                                        ...item.sourceClaimRefs.filter(
+                                                          (ref) =>
+                                                            ref.claimId !==
+                                                            claim.id,
+                                                        ),
+                                                        {
+                                                          claimId: claim.id,
+                                                          revision:
+                                                            claim.revision,
+                                                        },
+                                                      ],
+                                                    }
+                                                  : item,
+                                            ),
+                                          );
+                                        })
+                                      }
+                                    >
+                                      Gắn nguồn: {claim.text}
+                                    </button>
+                                  ))}
+                              </div>
+                            </div>
+
+                            {viewerActivity === a.id &&
+                              a.materialId &&
+                              a.materialVersion &&
+                              materials.find((m) => m.id === a.materialId) && (
+                                <MaterialViewer
+                                  materialId={a.materialId}
+                                  version={a.materialVersion}
+                                  title={
+                                    materials.find(
+                                      (m) => m.id === a.materialId,
+                                    )!.title
+                                  }
+                                  kind={
+                                    materials.find(
+                                      (m) => m.id === a.materialId,
+                                    )!.kind
+                                  }
+                                  annotations={annotations}
+                                  sessionId={session.id}
+                                  activityId={a.id}
+                                  students={session.RoomMember_sessionId_items.map(
+                                    (member) => ({
+                                      id: member.studentId,
+                                      name:
+                                        students.find(
+                                          (pupil) =>
+                                            pupil.id === member.studentId,
+                                        )?.name || "Học sinh",
+                                    }),
+                                  )}
+                                  onSaved={(saved) =>
+                                    setAnnotations((items) => [...items, saved])
+                                  }
+                                />
+                              )}
+                            {annotations
+                              .filter((item) => item.activityId === a.id)
+                              .map((item) => (
+                                <p key={item.id} className="activity-pin-note">
+                                  Chú thích trang {item.page + 1} · vị trí{" "}
+                                  {item.x}
+                                  %, {item.y}% · phiên bản{" "}
+                                  {item.materialVersion}: {item.text}
+                                </p>
+                              ))}
+                          </article>
+                        ))}
+                        {!session.Activity_sessionId_items.length && (
+                          <div className="restored-empty">
+                            <BookOpen size={28} />
+                            <p>Buổi học này chưa có hoạt động nào.</p>
+                            <small>
+                              Nhấn &ldquo;Thêm hoạt động&rdquo; hoặc đề xuất từ
+                              lịch sử đã duyệt để xây dựng lộ trình.
+                            </small>
+                          </div>
+                        )}
+                      </div>
                     </>
                   ) : (
-                    <p>Chọn buổi học.</p>
+                    <div className="restored-empty">
+                      <CalendarDays size={30} />
+                      <p>Chọn buổi học.</p>
+                    </div>
                   )}
                 </section>
               </div>
@@ -1899,7 +2065,10 @@ export default function OnlineApp() {
                         : "teach",
                   )
                 }
-                onPlan={() => navigate("plans")}
+                onPlan={(sessionId?: string) => {
+                if (sessionId) setSelectedSession(sessionId);
+                navigate("plans");
+              }}
               />
             ))}
           {page === "account" && (
@@ -1991,10 +2160,28 @@ export default function OnlineApp() {
           onClose={() => !busy && setModal(null)}
         >
           <section className="restored-profile">
-            {" "}
             {student ? (
               <>
-                <h2>{student.name}</h2>
+                <div className="profile-modal-header">
+                  <div>
+                    <h2>{student.name}</h2>
+                    <small className="muted">
+                      {student.grade} · {student.subject}
+                    </small>
+                  </div>
+                  <button
+                    className="button ghost small"
+                    type="button"
+                    onClick={() =>
+                      updateStudent({
+                        status:
+                          student.status === "active" ? "archived" : "active",
+                      })
+                    }
+                  >
+                    {student.status === "active" ? "Lưu trữ" : "Khôi phục"}
+                  </button>
+                </div>
                 <form
                   className="form-stack"
                   onSubmit={(e) => {
@@ -2029,56 +2216,54 @@ export default function OnlineApp() {
                       onChange={(e) => setEditNotes(e.target.value)}
                     />
                   </label>
-                  <label>
-                    Điểm mạnh (mỗi dòng một mục)
-                    <textarea
-                      aria-label="Điểm mạnh (mỗi dòng một mục)"
-                      value={editStrengths}
-                      onChange={(e) => setEditStrengths(e.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Cần củng cố (mỗi dòng một mục)
-                    <textarea
-                      aria-label="Cần củng cố (mỗi dòng một mục)"
-                      value={editGaps}
-                      onChange={(e) => setEditGaps(e.target.value)}
-                    />
-                  </label>
-                  <button className="button secondary" disabled={busy}>
+                  <div className="form-grid-two">
+                    <label>
+                      Điểm mạnh (mỗi dòng một mục)
+                      <textarea
+                        aria-label="Điểm mạnh (mỗi dòng một mục)"
+                        value={editStrengths}
+                        onChange={(e) => setEditStrengths(e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Cần củng cố (mỗi dòng một mục)
+                      <textarea
+                        aria-label="Cần củng cố (mỗi dòng một mục)"
+                        value={editGaps}
+                        onChange={(e) => setEditGaps(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <button className="button primary" disabled={busy}>
                     Lưu hồ sơ
                   </button>
                 </form>
-                <button
-                  className="button ghost"
-                  onClick={() =>
-                    updateStudent({
-                      status:
-                        student.status === "active" ? "archived" : "active",
-                    })
-                  }
-                >
-                  {student.status === "active" ? "Lưu trữ" : "Khôi phục"}
-                </button>
-                <h3>Nhận định đã duyệt</h3>
-                {studentHistory.map((c) => (
-                  <div key={c.id}>
-                    <p>{c.text}</p>
-                    {c.evidenceIds.map((id) => (
-                      <button
-                        className="text-button"
-                        key={id}
-                        onClick={() =>
-                          void run(async () => {
-                            setOpenedSource(await api(`/evidence/${id}`));
-                          })
-                        }
-                      >
-                        Xem minh chứng
-                      </button>
-                    ))}
-                  </div>
-                ))}
+                <div className="profile-modal-claims">
+                  <h3>Nhận định đã duyệt</h3>
+                  {studentHistory.map((c) => (
+                    <div key={c.id} className="claim-item">
+                      <p>{c.text}</p>
+                      <div className="claim-actions">
+                        {c.evidenceIds.map((id) => (
+                          <button
+                            className="text-button"
+                            key={id}
+                            onClick={() =>
+                              void run(async () => {
+                                setOpenedSource(await api(`/evidence/${id}`));
+                              })
+                            }
+                          >
+                            Xem minh chứng
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {!studentHistory.length && (
+                    <p className="muted">Chưa có nhận định đã duyệt.</p>
+                  )}
+                </div>
               </>
             ) : (
               <p>Chọn học sinh.</p>
@@ -2089,7 +2274,6 @@ export default function OnlineApp() {
       {modal === "material" && (
         <Modal title="Tải học liệu" onClose={() => !busy && setModal(null)}>
           <form className="form-stack" onSubmit={saveMaterial}>
-            <h2>Tải học liệu</h2>
             <label>
               Tên
               <input
@@ -2098,41 +2282,45 @@ export default function OnlineApp() {
                 onChange={(e) => setTitle(e.target.value)}
               />
             </label>
-            <label>
-              Môn học
-              <input
-                value={materialSubject}
-                onChange={(e) => setMaterialSubject(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Lớp
-              <input
-                value={materialGrade}
-                onChange={(e) => setMaterialGrade(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Chủ đề
-              <input
-                value={materialTopic}
-                onChange={(e) => setMaterialTopic(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Mức độ
-              <select
-                value={materialLevel}
-                onChange={(e) => setMaterialLevel(e.target.value)}
-              >
-                <option value="CoBan">Cơ bản</option>
-                <option value="TrungBinh">Trung bình</option>
-                <option value="NangCao">Nâng cao</option>
-              </select>
-            </label>
+            <div className="form-grid-two">
+              <label>
+                Môn học
+                <input
+                  value={materialSubject}
+                  onChange={(e) => setMaterialSubject(e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Lớp
+                <input
+                  value={materialGrade}
+                  onChange={(e) => setMaterialGrade(e.target.value)}
+                  required
+                />
+              </label>
+            </div>
+            <div className="form-grid-two">
+              <label>
+                Chủ đề
+                <input
+                  value={materialTopic}
+                  onChange={(e) => setMaterialTopic(e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Mức độ
+                <select
+                  value={materialLevel}
+                  onChange={(e) => setMaterialLevel(e.target.value)}
+                >
+                  <option value="CoBan">Cơ bản</option>
+                  <option value="TrungBinh">Trung bình</option>
+                  <option value="NangCao">Nâng cao</option>
+                </select>
+              </label>
+            </div>
             <label>
               Mô tả
               <textarea
@@ -2140,7 +2328,7 @@ export default function OnlineApp() {
                 onChange={(e) => setMaterialDescription(e.target.value)}
               />
             </label>
-            <label>
+            <label className="upload-field">
               PDF hoặc ảnh, tối đa 10 MiB
               <input
                 type="file"

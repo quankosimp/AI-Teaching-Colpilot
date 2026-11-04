@@ -219,6 +219,7 @@ export function MediaHost(props: MediaHostProps) {
         <div className="media-controls" aria-label="Điều khiển video">
           <button
             type="button"
+            className="button ghost small"
             onClick={handleToggleAudio}
             aria-pressed={isMuted}
             data-testid="btn-toggle-mic"
@@ -227,6 +228,7 @@ export function MediaHost(props: MediaHostProps) {
           </button>
           <button
             type="button"
+            className="button ghost small"
             onClick={handleToggleVideo}
             aria-pressed={!isVideoOn}
             data-testid="btn-toggle-camera"
@@ -235,6 +237,7 @@ export function MediaHost(props: MediaHostProps) {
           </button>
           <button
             type="button"
+            className="button ghost small"
             onClick={handleToggleShare}
             aria-pressed={isSharing}
             data-testid="btn-toggle-share"

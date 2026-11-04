@@ -104,49 +104,70 @@ export function ReviewPanel({
   };
   return (
     <section className="online-room__review">
-      <h2>Minh chứng và nhận định</h2>
+      <div className="review-panel__top">
+        <div>
+          <span className="eyebrow">TỔNG KẾT & DUYỆT HỒ SƠ</span>
+          <h2>Minh chứng và nhận định</h2>
+        </div>
+        <label className="review-panel__student-picker">
+          Học sinh{" "}
+          <select
+            aria-label="Học sinh tổng kết"
+            value={target}
+            onChange={(e) => {
+              setStudent(e.target.value);
+              setSelected([]);
+              setSource(null);
+              setDetail("");
+              setClaimText("");
+            }}
+          >
+            {members.map((m) => (
+              <option key={m.studentId} value={m.studentId}>
+                {m.displayName || m.studentIdRef?.name || m.studentId}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       {error && <p role="alert">{error}</p>}
-      <label>
-        Học sinh{" "}
-        <select
-          aria-label="Học sinh tổng kết"
-          value={target}
-          onChange={(e) => {
-            setStudent(e.target.value);
-            setSelected([]);
-          }}
-        >
-          {members.map((m) => (
-            <option key={m.studentId} value={m.studentId}>
-              {m.displayName || m.studentIdRef?.name || m.studentId}
-            </option>
-          ))}
-        </select>
-      </label>
-      <form onSubmit={createEvidence}>
+      <form className="review-card-form" onSubmit={createEvidence}>
+        <h3>Thêm quan sát mới</h3>
         <label>
           Quan sát thực tế
           <textarea
             required
+            placeholder="Ghi nhận bước làm bài, thái độ hoặc mức độ hiểu bài của học sinh…"
             value={detail}
             onChange={(e) => setDetail(e.target.value)}
           />
         </label>
-        <label>
-          Mức hỗ trợ
-          <select value={support} onChange={(e) => setSupport(e.target.value)}>
-            <option value="DocLap">Độc lập</option>
-            <option value="CoGoiY">Có gợi ý</option>
-            <option value="DuocHuongDan">Được hướng dẫn</option>
-            <option value="ChuaRo">Chưa rõ</option>
-          </select>
-        </label>
-        <button disabled={busy || !target}>Lưu quan sát</button>
-      </form>
-      <h3>Minh chứng</h3>
-      {visible.map((e) => (
-        <div key={e.id}>
+        <div className="review-form-row">
           <label>
+            Mức hỗ trợ
+            <select
+              value={support}
+              onChange={(e) => setSupport(e.target.value)}
+            >
+              <option value="DocLap">Độc lập</option>
+              <option value="CoGoiY">Có gợi ý</option>
+              <option value="DuocHuongDan">Được hướng dẫn</option>
+              <option value="ChuaRo">Chưa rõ</option>
+            </select>
+          </label>
+          <button className="button primary small" disabled={busy || !target}>
+            Lưu quan sát
+          </button>
+        </div>
+      </form>
+
+      <div className="review-section-head">
+        <h3>Minh chứng ({visible.length})</h3>
+        <small>Chọn minh chứng để làm căn cứ tạo nhận định</small>
+      </div>
+      {visible.map((e) => (
+        <div key={e.id} className="review-evidence-item">
+          <label className="review-evidence-label">
             <input
               type="checkbox"
               disabled={e.status !== "active"}
@@ -159,47 +180,68 @@ export function ReviewPanel({
                 )
               }
             />
-            {e.title}: {e.detail} · {statusLabel(e.support)} · phiên bản{" "}
-            {e.version} · {statusLabel(e.status)}
+            <span>
+              <strong>{e.title}:</strong> {e.detail} · {statusLabel(e.support)}{" "}
+              · phiên bản {e.version} · {statusLabel(e.status)}
+            </span>
           </label>
-          <button
-            type="button"
-            onClick={() =>
-              void request<{ evidence: Evidence; source: unknown }>(
-                `/evidence/${e.id}`,
-              )
-                .then(setSource)
-                .catch((err) => setError(err.message))
-            }
-          >
-            Xem nguồn
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const value = window.prompt("Điều chỉnh minh chứng", e.detail);
-              if (value?.trim())
-                void act(
+          <span className="review-evidence-actions">
+            <button
+              type="button"
+              className="button ghost small"
+              onClick={() =>
+                void request<{ evidence: Evidence; source: unknown }>(
                   `/evidence/${e.id}`,
-                  "PATCH",
-                  { detail: value, reason: "Giáo viên điều chỉnh" },
-                  e.version,
-                );
-            }}
-          >
-            Điều chỉnh
-          </button>
+                )
+                  .then(setSource)
+                  .catch((err) => setError(err.message))
+              }
+            >
+              Xem nguồn
+            </button>
+            <button
+              type="button"
+              className="button ghost small"
+              onClick={() => {
+                const value = window.prompt("Điều chỉnh minh chứng", e.detail);
+                if (value?.trim())
+                  void act(
+                    `/evidence/${e.id}`,
+                    "PATCH",
+                    { detail: value, reason: "Giáo viên điều chỉnh" },
+                    e.version,
+                  );
+              }}
+            >
+              Điều chỉnh
+            </button>
+          </span>
         </div>
       ))}
+      {!visible.length && (
+        <p className="muted">
+          Chưa có minh chứng nào được ghi nhận cho học sinh này.
+        </p>
+      )}
+
       {source && (
-        <div>
-          <h4>Nguồn: {source.evidence.title}</h4>
-          <p>
+        <div className="review-source-box">
+          <div className="review-section-head">
+            <h4>Nguồn: {source.evidence.title}</h4>
+            <button
+              type="button"
+              className="button ghost small"
+              onClick={() => setSource(null)}
+            >
+              Đóng nguồn
+            </button>
+          </div>
+          <p className="review-source-meta">
             Loại {statusLabel(source.evidence.sourceType)} · phiên bản nguồn{" "}
             {source.evidence.sourceVersion ?? "không có"} · mức hỗ trợ{" "}
             {statusLabel(source.evidence.support)}
           </p>
-          <pre>
+          <pre className="review-source-pre">
             {source.source
               ? JSON.stringify(source.source, null, 2)
               : source.evidence.detail}
@@ -208,6 +250,7 @@ export function ReviewPanel({
             source.evidence.sourceId && (
               <button
                 type="button"
+                className="button secondary small"
                 onClick={() =>
                   void request<{ readUrl: string }>(
                     `/submissions/${source.evidence.sourceId}/read-url`,
@@ -221,19 +264,20 @@ export function ReviewPanel({
                 Mở tệp nguồn
               </button>
             )}
-          <button type="button" onClick={() => setSource(null)}>
-            Đóng nguồn
-          </button>
         </div>
       )}
-      {["ended", "reviewed"].includes(status) && <AIClaimDraftPanel
-        key={`${sessionId}:${target}`}
-        sessionId={sessionId}
-        studentId={target}
-        request={request}
-        reload={reload}
-      />}
+
+      {["ended", "reviewed"].includes(status) && (
+        <AIClaimDraftPanel
+          key={`${sessionId}:${target}`}
+          sessionId={sessionId}
+          studentId={target}
+          request={request}
+          reload={reload}
+        />
+      )}
       <form
+        className="review-card-form"
         onSubmit={(e) => {
           e.preventDefault();
           void act(`/sessions/${sessionId}/claims/draft`, "POST", {
@@ -251,66 +295,88 @@ export function ReviewPanel({
         <label>
           Nhận định
           <textarea
+            placeholder="Viết nhận định tổng kết dựa trên các minh chứng đã chọn…"
             value={claimText}
             onChange={(e) => setClaimText(e.target.value)}
             required
           />
         </label>
-        <button disabled={busy || !chosen.length}>
+        <button
+          className="button primary small"
+          disabled={busy || !chosen.length}
+        >
           Tạo nhận định chờ duyệt
         </button>
       </form>
+
+      <h3>Danh sách nhận định</h3>
       {claims
         .filter((c) => c.studentId === target)
         .map((c) => (
-          <div key={c.id}>
-            <p>
+          <div key={c.id} className="review-claim-card">
+            <p className="review-claim-text">
               {c.text} · {statusLabel(c.status)} · phiên bản {c.revision}{" "}
               {c.staleReason && `· ${statusLabel(c.staleReason)}`}
             </p>
-            <p>Nguồn: {c.evidenceIds.map(id => visible.find(item => item.id === id)?.title || "Nguồn cần kiểm tra lại").join("; ")}</p>
-            <button
-              disabled={busy || c.status !== "pending"}
-              onClick={() =>
-                void act(`/claims/${c.id}/review`, "PATCH", {
-                  action: "approve",
-                  revision: c.revision,
-                  evidenceIds: c.evidenceIds,
-                })
-              }
-            >
-              Duyệt
-            </button>
-            <button
-              disabled={busy || c.status !== "pending"}
-              onClick={() =>
-                void act(`/claims/${c.id}/review`, "PATCH", {
-                  action: "reject",
-                  revision: c.revision,
-                })
-              }
-            >
-              Từ chối
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => {
-                const text = window.prompt("Sửa nhận định", c.text);
-                if (text?.trim())
+            <p className="review-claim-sources">
+              Nguồn:{" "}
+              {c.evidenceIds
+                .map(
+                  (id) =>
+                    visible.find((item) => item.id === id)?.title ||
+                    "Nguồn cần kiểm tra lại",
+                )
+                .join("; ")}
+            </p>
+            <div className="review-claim-actions">
+              <button
+                className="button primary small"
+                disabled={busy || c.status !== "pending"}
+                onClick={() =>
                   void act(`/claims/${c.id}/review`, "PATCH", {
-                    action: "edit",
+                    action: "approve",
                     revision: c.revision,
-                    text,
                     evidenceIds: c.evidenceIds,
-                  });
-              }}
-            >
-              Sửa
-            </button>
+                  })
+                }
+              >
+                Duyệt
+              </button>
+              <button
+                className="button ghost small"
+                disabled={busy || c.status !== "pending"}
+                onClick={() =>
+                  void act(`/claims/${c.id}/review`, "PATCH", {
+                    action: "reject",
+                    revision: c.revision,
+                  })
+                }
+              >
+                Từ chối
+              </button>
+              <button
+                className="button ghost small"
+                disabled={busy}
+                onClick={() => {
+                  const text = window.prompt("Sửa nhận định", c.text);
+                  if (text?.trim())
+                    void act(`/claims/${c.id}/review`, "PATCH", {
+                      action: "edit",
+                      revision: c.revision,
+                      text,
+                      evidenceIds: c.evidenceIds,
+                    });
+                }}
+              >
+                Sửa
+              </button>
+            </div>
           </div>
         ))}
+
       {status === "ended" && (
         <form
+          className="review-card-form review-complete-form"
           onSubmit={(e) => {
             e.preventDefault();
             void act(
@@ -322,9 +388,15 @@ export function ReviewPanel({
         >
           <label>
             Ghi chú tổng kết (cần khi chưa có nhận định)
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} />
+            <textarea
+              placeholder="Ghi chú tổng kết buổi học (nếu chưa có nhận định được duyệt)…"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
           </label>
-          <button disabled={busy}>Hoàn tất duyệt</button>
+          <button className="button primary" disabled={busy}>
+            Hoàn tất duyệt
+          </button>
         </form>
       )}
     </section>

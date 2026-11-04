@@ -1,5 +1,8 @@
 /* The original ProductApp shell, restored around API-backed containers. */
-.online-restored {
+:root,
+.online-restored,
+.modal-backdrop,
+.modal-panel {
   --restore-bg: var(--ui-bg, #f6f8fc);
   --restore-surface: var(--ui-surface, #fff);
   --restore-ink: var(--ui-ink, #17213a);
@@ -8,6 +11,8 @@
   --restore-brand: var(--ui-brand, #6252d5);
   --restore-soft: var(--ui-brand-soft, #f0edff);
   --restore-hover: var(--ui-hover, #f4f2ff);
+}
+.online-restored {
   display: flex;
   min-height: 100vh;
   background: var(--restore-bg);
@@ -501,30 +506,38 @@
 .online-restored--room > .restored-sidebar,
 .online-restored--room > .restored-main-column > .restored-topbar { display: none; }
 .online-restored--room > .restored-main-column { width: 100%; }
-.online-restored--room .restored-content { padding: 0 16px 112px; max-width: none; }
+.online-restored--room .restored-content { padding: 0 16px 40px; max-width: none; }
 .online-restored--room .online-room__header { margin: 0 -16px 16px; padding: 16px 24px; border-radius: 0; border-width: 0 0 1px; }
 .online-restored--room .online-room__toolbar {
-  position: fixed; z-index: 45; bottom: 0; left: 0; right: 0;
-  display: flex; align-items: center; justify-content: flex-end; gap: 8px;
-  min-height: 64px; padding: 10px 24px; background: var(--restore-surface);
-  border-top: 1px solid var(--restore-line);
+  position: static;
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  min-height: 56px; margin-top: 12px; padding: 10px 18px;
+  background: var(--restore-surface);
+  border: 1px solid var(--restore-line);
+  border-radius: 14px;
+  box-shadow: var(--restore-shadow);
+}
+.online-restored--room .room-view-summary > .online-room__toolbar,
+.online-restored--room .room-view-grading > .online-room__toolbar {
+  margin-bottom: 16px;
 }
 .online-restored--room .online-room__media-strip { min-width: 0; }
 .online-restored--room .online-room__media-strip .online-room__media { min-width: 0; }
 .online-restored--room .online-room__media-strip .mock-media__grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .online-restored--room .online-room__media-strip .mock-media__tile { flex: 0 1 200px; min-width: 130px; min-height: 72px; }
 .online-restored--room .online-room__media-strip .mock-media__banner { font-size: 12px; }
+.online-restored--room .online-room__media-strip .media-controls {
+  position: static;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--restore-line);
+}
 @media (min-width: 1280px) {
-  .online-restored--room .room-view-teach .online-room__workspace--teacher { grid-template-columns: 210px minmax(0, 1fr) 320px; }
+  .online-restored--room .room-view-teach .online-room__workspace--teacher { grid-template-columns: 230px minmax(0, 1fr) 320px; }
   .online-restored--room .room-view-teach .online-room__workspace--teacher > .online-room__participants { grid-column: 1; grid-row: 1 / span 2; }
   .online-restored--room .room-view-teach .online-room__workspace--teacher > .online-room__media-strip { grid-column: 2; grid-row: 1; }
   .online-restored--room .room-view-teach .online-room__workspace--teacher > .online-room__stage { grid-column: 2; grid-row: 2; }
   .online-restored--room .room-view-teach .online-room__workspace--teacher > .online-room__dock { grid-column: 3; grid-row: 1 / span 2; }
-  .online-restored--room .online-room__media-strip .media-controls {
-    position: fixed; z-index: 46; bottom: 0; left: 0; right: 340px;
-    display: flex; flex-wrap: nowrap; align-items: center; gap: 8px;
-    min-height: 64px; padding: 10px 24px; overflow-x: auto; background: var(--restore-surface);
-  }
 }
 @media (max-width: 1279px) {
   .online-restored--room .room-view-teach .online-room__workspace--teacher { display: flex; flex-direction: column; }
@@ -535,7 +548,7 @@
   .online-restored--room .room-view-teach .online-room__workspace--teacher > .online-room__dock { order: 3; position: static; max-height: none; }
 }
 @media (max-width: 650px) {
-  .online-restored--room .restored-content { padding: 0 12px 100px; }
+  .online-restored--room .restored-content { padding: 0 12px 32px; }
   .online-restored--room .online-room__header { margin-inline: -12px; }
   .online-restored--room .online-room__toolbar { padding: 8px 12px; }
 }
@@ -555,19 +568,20 @@
   .online-restored--student .online-room__workspace > .online-room__participants { order: 3; }
 }
 .online-restored--room .online-room { width: 100%; max-width: none; margin: 0; }
-.online-restored--room .online-room__roadmap { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.online-restored--room .online-room__roadmap button { display: flex; width: 100%; align-items: flex-start; gap: 9px; padding: 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--restore-ink); text-align: left; line-height: 1.4; }
-.online-restored--room .online-room__roadmap button[aria-current="step"] { background: var(--restore-soft); color: var(--restore-brand); }
-.online-restored--room .online-room__roadmap button > span:first-child { flex: none; color: var(--restore-brand); font-size: 12px; }
+.online-restored--room .online-room__roadmap { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.online-restored--room .online-room__roadmap button { display: flex; width: 100%; align-items: flex-start; gap: 9px; padding: 10px 12px; border: 1px solid var(--restore-line); border-radius: 10px; background: var(--restore-bg); color: var(--restore-ink); text-align: left; line-height: 1.4; transition: all 0.15s ease; }
+.online-restored--room .online-room__roadmap button:hover { border-color: var(--restore-brand); background: var(--restore-hover); }
+.online-restored--room .online-room__roadmap button[aria-current="step"] { background: var(--restore-soft); border-color: var(--restore-brand); color: var(--restore-brand); box-shadow: 0 2px 8px rgba(99, 85, 216, 0.12); }
+.online-restored--room .online-room__roadmap button > span:first-child { flex: none; color: var(--restore-brand); font-size: 12px; font-weight: 800; }
 .online-restored--room .online-room__roadmap button strong, .online-restored--room .online-room__roadmap button small { display: block; }
 .online-restored--room .online-room__roadmap button strong { overflow-wrap: anywhere; font-size: 12px; }
 .online-restored--room .online-room__roadmap button small { margin-top: 4px; font-size: 11px; color: var(--restore-subtle); }
 .online-restored--room .online-room__activity-picker { margin: 10px 0; font-size: 12px; color: var(--restore-subtle); }
-@media (min-width: 1280px) { .online-restored--room .online-room__media-strip .media-controls { justify-content: flex-start; } }
 .online-restored--student .online-room__participants:empty { display: none; }
 .online-restored--room .online-room__stage > [aria-label="Chọn nội dung chung"] {
-  position: sticky; top: -16px; z-index: 3; padding-block: 12px;
+  position: sticky; top: -18px; z-index: 4; padding-block: 10px;
   background: var(--restore-surface);
+  border-bottom: 1px solid var(--restore-line);
 }
 @media (min-width: 761px) {
   .online-restored--student .online-room__workspace:has(> .online-room__participants:empty) { grid-template-columns: minmax(0, 1fr); }
@@ -579,13 +593,1355 @@
 @media (min-width: 1101px) {
   .online-restored--room .room-view-teach .online-room__workspace--teacher:has(.mock-media) {
     display: grid;
-    grid-template-columns: 210px minmax(0, 1fr) 320px;
+    grid-template-columns: 230px minmax(0, 1fr) 320px;
     grid-template-rows: auto minmax(0, 1fr);
-    height: max(320px, calc(100dvh - 290px));
+    height: max(360px, calc(100dvh - 260px));
     align-items: stretch;
   }
   .online-restored--room .room-view-teach .online-room__workspace--teacher:has(.mock-media) > .online-room__participants { grid-column: 1; grid-row: 1 / span 2; min-height: 0; max-height: none; overflow: auto; }
   .online-restored--room .room-view-teach .online-room__workspace--teacher:has(.mock-media) > .online-room__media-strip { grid-column: 2; grid-row: 1; }
   .online-restored--room .room-view-teach .online-room__workspace--teacher:has(.mock-media) > .online-room__stage { grid-column: 2; grid-row: 2; min-height: 0; max-height: 100%; overflow: auto; }
   .online-restored--room .room-view-teach .online-room__workspace--teacher:has(.mock-media) > .online-room__dock { grid-column: 3; grid-row: 1 / span 2; position: static; min-height: 0; max-height: none; overflow: auto; }
+}
+
+/* ==========================================================================
+   Commercial SaaS UI Polish — Auth, Profile, Lesson Planner, Live Room & Review
+   ========================================================================== */
+
+/* Synchronize button surfaces with theme switches and style light/dark controls */
+.online-restored button,
+.online-restored .button,
+.online-restored .media-controls button {
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.online-restored .button.ghost {
+  background: var(--restore-surface);
+  color: var(--restore-ink);
+  border: 1px solid var(--restore-line);
+}
+.online-restored .button.ghost:hover:not(:disabled) {
+  background: var(--restore-hover);
+  border-color: var(--restore-brand);
+}
+.online-restored .button.secondary {
+  background: var(--restore-soft);
+  color: var(--restore-brand);
+  border: 1px solid rgba(99, 85, 216, 0.24);
+}
+.online-restored[data-theme="dark"] .button.ghost,
+body.dark .online-restored .button.ghost,
+.online-restored[data-theme="dark"] .media-controls button:not(.secondary),
+body.dark .online-restored .media-controls button:not(.secondary) {
+  background: #1d2336;
+  color: #e8edf7;
+  border-color: #2f3954;
+}
+.online-restored[data-theme="dark"] .button.secondary,
+body.dark .online-restored .button.secondary,
+.online-restored[data-theme="dark"] .media-controls button.secondary,
+body.dark .online-restored .media-controls button.secondary {
+  background: #272545;
+  color: #d6ceff;
+  border-color: #433d73;
+}
+
+/* High-contrast accessible disabled buttons in both light and dark modes */
+.online-restored button:not(.text-button):disabled,
+.online-restored .button:disabled {
+  opacity: 1 !important;
+  background: #eceff6 !important;
+  color: #677489 !important;
+  border-color: #d5dce8 !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+}
+.online-restored[data-theme="dark"] button:not(.text-button):disabled,
+.online-restored[data-theme="dark"] .button:disabled,
+body.dark .online-restored button:not(.text-button):disabled,
+body.dark .online-restored .button:disabled {
+  background: #273042 !important;
+  color: #9aa7bd !important;
+  border-color: #3d4963 !important;
+}
+.online-restored .text-button:disabled {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  opacity: 0.45 !important;
+  cursor: not-allowed;
+}
+
+.online-restored .button.danger {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+.online-restored .button.danger:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+/* Auth Demo Accounts & Student Lobby Polish */
+.restored-auth .auth-demo {
+  display: grid;
+  gap: 10px;
+}
+.restored-auth .auth-demo > .status {
+  justify-self: start;
+}
+.restored-auth .demo-account {
+  margin: 0;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.restored-auth .demo-account:hover:not(:disabled) {
+  border-color: var(--restore-brand);
+  box-shadow: 0 6px 18px rgba(99, 85, 216, 0.12);
+  transform: translateY(-1px);
+}
+.restored-student-lobby {
+  width: min(100%, 480px);
+  margin: 32px auto;
+  min-height: auto;
+  border-radius: 20px;
+  padding: 32px;
+  background: var(--restore-surface);
+  border: 1px solid var(--restore-line);
+  box-shadow: var(--restore-shadow);
+}
+.restored-student-lobby .restored-auth-brand {
+  margin-bottom: 16px;
+}
+.lobby-session-preview {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--restore-soft);
+  border: 1px solid rgba(99, 85, 216, 0.2);
+}
+.lobby-session-preview p {
+  margin: 6px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--restore-ink);
+}
+.lobby-status-box {
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  color: var(--restore-subtle);
+}
+
+/* Student Profile Overview & Modal Polish */
+.online-restored .profile-overview-card {
+  display: grid;
+  gap: 18px;
+}
+.online-restored .profile-goal-box {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--restore-soft), transparent);
+  border: 1px solid rgba(99, 85, 216, 0.22);
+}
+.online-restored .profile-goal-box h2 {
+  margin: 4px 0 6px;
+  font-size: 16px;
+}
+.online-restored .profile-goal-box p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--restore-ink);
+}
+.online-restored .profile-traits-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.online-restored .profile-trait-block {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+}
+.online-restored .profile-trait-block h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--restore-ink);
+}
+.online-restored .trait-pill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.online-restored .trait-pill {
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.online-restored .trait-pill--strength {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+.online-restored .trait-pill--gap {
+  background: rgba(245, 158, 11, 0.13);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.online-restored[data-theme="dark"] .trait-pill--strength {
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+}
+.online-restored[data-theme="dark"] .trait-pill--gap {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+.online-restored .profile-note-box {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px dashed var(--restore-line);
+}
+.online-restored .profile-note-box h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--restore-subtle);
+}
+.online-restored .profile-note-box p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+:is(.online-restored, .modal-panel) .profile-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--restore-line);
+}
+:is(.online-restored, .modal-panel) .profile-modal-header h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+:is(.online-restored, .modal-panel) .form-grid-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+:is(.online-restored, .modal-panel) .profile-modal-claims {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--restore-line);
+  display: grid;
+  gap: 10px;
+}
+@media (max-width: 650px) {
+  .online-restored .profile-traits-grid,
+  :is(.online-restored, .modal-panel) .form-grid-two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Lesson Planning (Soạn buổi học) Commercial Polish */
+.online-restored .restored-plan-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.online-restored .plan-main-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--restore-line);
+}
+.online-restored .plan-main-title-block {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+:is(.online-restored, .modal-panel) .plan-main-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+:is(.online-restored, .modal-panel) .plan-duration-pill {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--restore-subtle);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+}
+.online-restored .plan-main-title-block h2 {
+  margin: 0 0 6px;
+  font-size: clamp(20px, 2.2vw, 24px);
+  letter-spacing: -0.02em;
+}
+:is(.online-restored, .modal-panel) .plan-meta-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--restore-subtle);
+}
+:is(.online-restored, .modal-panel) .plan-goals-summary {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  display: grid;
+  gap: 6px;
+}
+:is(.online-restored, .modal-panel) .plan-goals-summary p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--restore-ink);
+}
+.online-restored .plan-main-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+:is(.online-restored, .modal-panel) .plan-members-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+}
+:is(.online-restored, .modal-panel) .plan-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--restore-subtle);
+}
+:is(.online-restored, .modal-panel) .plan-member-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+:is(.online-restored, .modal-panel) .plan-member-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--restore-surface);
+  border: 1px solid var(--restore-line);
+  font-size: 13px;
+  font-weight: 600;
+}
+:is(.online-restored, .modal-panel) .avatar-sm {
+  width: 26px;
+  height: 26px;
+  font-size: 11px;
+}
+:is(.online-restored, .modal-panel) .plan-activities-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+:is(.online-restored, .modal-panel) .plan-activities-header h3 {
+  margin: 0 0 2px;
+  font-size: 16px;
+}
+:is(.online-restored, .modal-panel) .plan-activities-header small {
+  color: var(--restore-subtle);
+  font-size: 12px;
+}
+.online-restored .plan-activities-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.online-restored .plan-duration-alert,
+.online-restored .activity-stale-alert {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #b45309;
+  font-size: 13px;
+  font-weight: 600;
+}
+.online-restored[data-theme="dark"] .plan-duration-alert,
+.online-restored[data-theme="dark"] .activity-stale-alert {
+  color: #fcd34d;
+}
+.online-restored .plan-ai-suggestion {
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--restore-soft);
+  border: 1px solid rgba(99, 85, 216, 0.28);
+  display: grid;
+  gap: 10px;
+}
+.online-restored .plan-ai-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--restore-brand);
+}
+.online-restored .plan-activities-list {
+  display: grid;
+  gap: 12px;
+}
+.online-restored .restored-activity-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.online-restored .restored-activity-card:hover {
+  border-color: rgba(99, 85, 216, 0.35);
+}
+.online-restored .activity-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.online-restored .activity-card-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+:is(.online-restored, .modal-panel) .activity-step-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--restore-soft);
+  color: var(--restore-brand);
+  font-size: 12px;
+  font-weight: 800;
+  flex: none;
+}
+.online-restored .activity-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--restore-ink);
+}
+.online-restored .activity-card-desc {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--restore-subtle);
+}
+.online-restored .activity-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.online-restored .activity-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--restore-line);
+}
+.online-restored .activity-material-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1 1 260px;
+}
+.online-restored .activity-material-row select {
+  max-width: 280px;
+}
+.online-restored .activity-sources-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.online-restored .source-chip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--restore-surface);
+  border: 1px solid var(--restore-line);
+  font-size: 12px;
+}
+.online-restored .activity-pin-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--restore-surface);
+  border: 1px solid var(--restore-line);
+  font-size: 12px;
+  color: var(--restore-subtle);
+}
+
+/* LiveRoom Header, Left Rail, Stage, Dock, Board & Chat Polish */
+.online-restored .online-room__conn-status {
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  font-size: 12px;
+  font-weight: 600;
+}
+.online-restored .online-room__shared-goal {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--restore-surface);
+  border: 1px solid var(--restore-line);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--restore-ink);
+}
+.online-restored .online-room__complete-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 6px;
+}
+.online-restored .online-room__member-card {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  display: grid;
+  gap: 8px;
+}
+.online-restored .online-room__member-select {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--restore-line);
+  background: var(--restore-surface);
+  color: var(--restore-ink);
+  font-weight: 700;
+  text-align: left;
+}
+.online-restored .online-room__member-state {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--restore-subtle);
+}
+.online-restored .online-room__tool-fieldset {
+  margin: 4px 0;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--restore-line);
+  background: var(--restore-surface);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.online-restored .online-room__tool-fieldset legend {
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--restore-subtle);
+}
+.online-restored .online-room__admit-actions {
+  display: flex;
+  gap: 8px;
+}
+.online-restored .online-room__admit-actions > .button {
+  flex: 1;
+}
+.online-restored .online-room__invite-result {
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--restore-soft);
+  font-size: 12px;
+  display: grid;
+  gap: 6px;
+}
+.online-restored .online-room__stage-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.online-restored .online-room__stage-tabs button {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--restore-line);
+  background: var(--restore-bg);
+  color: var(--restore-subtle);
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+.online-restored .online-room__stage-tabs button[aria-pressed="true"],
+.online-restored .online-room__stage-tabs button.active {
+  background: var(--restore-brand);
+  border-color: var(--restore-brand);
+  color: #fff;
+}
+.online-restored .online-room__stage-empty,
+.online-restored .online-room__stage-banner,
+.online-restored .online-room__inspect-banner {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  font-size: 13px;
+  color: var(--restore-ink);
+}
+.online-restored .online-room__inspect-banner {
+  background: var(--restore-soft);
+  border-color: rgba(99, 85, 216, 0.3);
+  color: var(--restore-brand);
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.online-restored .online-board-card {
+  gap: 12px;
+}
+.online-restored .online-board-head {
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--restore-line);
+}
+.online-restored .online-board-meta {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.online-restored .online-board-tools {
+  gap: 6px;
+}
+.online-restored .online-board-tools .button.active {
+  background: var(--restore-soft);
+  border-color: var(--restore-brand);
+  color: var(--restore-brand);
+}
+.online-restored .online-board-canvas {
+  border: 1px solid var(--restore-line);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: inset 0 2px 6px rgba(15, 23, 42, 0.03);
+}
+.online-restored[data-theme="dark"] .online-board-canvas,
+body.dark .online-restored .online-board-canvas {
+  background: #131926;
+  border-color: #2c364f;
+}
+.online-restored .online-board-note-row {
+  align-items: flex-end;
+  gap: 10px;
+}
+.online-restored .online-room__dock-head h2 {
+  margin: 0 0 6px;
+}
+.online-restored .online-room__dock-student {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--restore-brand);
+}
+.online-restored .online-room__dock-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--restore-subtle);
+}
+.online-restored .online-room__dock-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.online-restored .online-room__dock-actions > .button {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+.online-restored .online-room__dock-evidence {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+}
+.online-restored .online-room__evidence-pill {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.online-restored .ai-panel {
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  margin: 12px 0;
+}
+.online-restored .ai-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.online-restored .ai-panel__head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.online-restored .ai-panel__badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--restore-soft);
+  color: var(--restore-brand);
+  font-size: 11px;
+  font-weight: 700;
+}
+.online-restored .ai-panel__desc {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--restore-subtle);
+}
+.online-restored .presentation-suggestion {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--restore-surface);
+  border: 1px solid var(--restore-line);
+}
+.online-restored .online-room__check-item,
+.online-restored .online-room__grade-card {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+}
+.online-restored .online-room__grade-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+  width: 100%;
+}
+.online-restored .online-room__grade-controls > label {
+  flex: 1 1 180px;
+}
+.online-restored .online-room__chat-list {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+  margin-bottom: 12px;
+}
+.online-restored .online-room__chat-bubble {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  font-size: 13px;
+}
+
+/* ReviewPanel (Tổng kết & duyệt) Executive Layout */
+.online-restored .online-room__review {
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--restore-surface);
+  border: 1px solid var(--restore-line);
+  box-shadow: var(--restore-shadow);
+}
+.online-restored .review-panel__top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 18px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--restore-line);
+}
+.online-restored .review-panel__top h2 {
+  margin: 6px 0 0;
+  font-size: 22px;
+}
+.online-restored .review-panel__student-picker {
+  min-width: 240px;
+}
+.online-restored .review-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.online-restored .review-panel__col {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.online-restored .review-card-form {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  margin: 0;
+}
+.online-restored .review-card-form h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.online-restored .review-form-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.online-restored .review-form-row > label {
+  flex: 1 1 180px;
+}
+.online-restored .review-evidence-section,
+.online-restored .review-claims-list {
+  display: grid;
+  gap: 10px;
+}
+.online-restored .review-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.online-restored .review-section-head h3,
+.online-restored .review-section-head h4 {
+  margin: 0;
+  font-size: 15px;
+}
+.online-restored .review-section-head small {
+  color: var(--restore-subtle);
+  font-size: 12px;
+}
+.online-restored .review-evidence-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+}
+.online-restored .review-evidence-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1 1 260px;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.online-restored .review-evidence-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.online-restored .review-source-box {
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--restore-soft);
+  border: 1px solid rgba(99, 85, 216, 0.28);
+  display: grid;
+  gap: 10px;
+}
+.online-restored .review-source-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--restore-subtle);
+}
+.online-restored .review-source-pre {
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--restore-surface);
+  border: 1px solid var(--restore-line);
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.online-restored .review-claim-card {
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  display: grid;
+  gap: 8px;
+}
+.online-restored .review-claim-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--restore-ink);
+}
+.online-restored .review-claim-sources {
+  margin: 0;
+  font-size: 12px;
+  color: var(--restore-subtle);
+}
+.online-restored .review-claim-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.online-restored .review-complete-form {
+  border-color: rgba(99, 85, 216, 0.35);
+  background: linear-gradient(180deg, var(--restore-soft), var(--restore-bg));
+}
+@media (max-width: 960px) {
+  .online-restored .review-panel__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================================
+   Interactive Teaching Schedule Calendar & Session Detail Modal
+   ========================================================================== */
+.online-restored .schedule-card-head {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.online-restored .schedule-head-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.online-restored .schedule-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  gap: 2px;
+}
+.online-restored .schedule-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--restore-subtle);
+  font-size: 12px;
+  font-weight: 700;
+}
+.online-restored .schedule-toggle-btn.is-active {
+  background: var(--restore-surface);
+  color: var(--restore-brand);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+.online-restored .teaching-calendar {
+  display: grid;
+  gap: 14px;
+}
+.online-restored .teaching-calendar__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+}
+.online-restored .teaching-calendar__month-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.online-restored .teaching-calendar__month-label {
+  min-width: 124px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--restore-ink);
+}
+.online-restored .teaching-calendar__legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--restore-subtle);
+}
+.online-restored .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.online-restored .legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.online-restored .legend-dot--live {
+  background: #10b981;
+}
+.online-restored .legend-dot--scheduled {
+  background: #3b82f6;
+}
+.online-restored .legend-dot--draft {
+  background: #6355d8;
+}
+.online-restored .legend-dot--done {
+  background: #94a3b8;
+}
+.online-restored .teaching-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border: 1px solid var(--restore-line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--restore-line);
+  gap: 1px;
+}
+.online-restored .teaching-calendar__weekday {
+  background: var(--restore-bg);
+  padding: 9px 6px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--restore-subtle);
+}
+.online-restored .teaching-calendar__cell {
+  min-height: 92px;
+  padding: 7px;
+  background: var(--restore-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  min-width: 0;
+  transition: background-color 0.12s ease;
+}
+.online-restored .teaching-calendar__cell:hover {
+  background: var(--restore-hover);
+}
+.online-restored .teaching-calendar__cell.is-outside {
+  background: var(--restore-bg);
+  opacity: 0.6;
+}
+.online-restored .teaching-calendar__cell.is-selected {
+  background: var(--restore-soft);
+  box-shadow: inset 0 0 0 2px var(--restore-brand);
+}
+.online-restored .teaching-calendar__cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.online-restored .teaching-calendar__day-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--restore-ink);
+}
+.online-restored .teaching-calendar__cell.is-today .teaching-calendar__day-num {
+  background: var(--restore-brand);
+  color: #fff;
+}
+.online-restored .teaching-calendar__count-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--restore-soft);
+  color: var(--restore-brand);
+}
+.online-restored .teaching-calendar__events {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.online-restored .calendar-event-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: left;
+  overflow: hidden;
+}
+.online-restored .calendar-event-pill__time {
+  font-weight: 800;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.online-restored .calendar-event-pill__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.online-restored .calendar-event-pill--live {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.32);
+}
+.online-restored .calendar-event-pill--scheduled {
+  background: rgba(59, 130, 246, 0.13);
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+.online-restored .calendar-event-pill--draft {
+  background: rgba(99, 85, 216, 0.13);
+  color: var(--restore-brand);
+  border-color: rgba(99, 85, 216, 0.28);
+}
+.online-restored .calendar-event-pill--ended,
+.online-restored .calendar-event-pill--reviewed {
+  background: var(--restore-bg);
+  color: var(--restore-subtle);
+  border-color: var(--restore-line);
+}
+.online-restored[data-theme="dark"] .calendar-event-pill--live,
+body.dark .online-restored .calendar-event-pill--live {
+  background: rgba(16, 185, 129, 0.22);
+  color: #6ee7b7;
+}
+.online-restored[data-theme="dark"] .calendar-event-pill--scheduled,
+body.dark .online-restored .calendar-event-pill--scheduled {
+  background: rgba(59, 130, 246, 0.22);
+  color: #93c5fd;
+}
+.online-restored[data-theme="dark"] .calendar-event-pill--draft,
+body.dark .online-restored .calendar-event-pill--draft {
+  background: rgba(121, 102, 243, 0.24);
+  color: #d6ceff;
+}
+.online-restored .calendar-event-more {
+  border: 0;
+  background: transparent;
+  color: var(--restore-brand);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: left;
+  padding: 2px 4px;
+}
+.online-restored .teaching-calendar__day-panel {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  display: grid;
+  gap: 12px;
+}
+.online-restored .teaching-calendar__day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.online-restored .teaching-calendar__day-head h3 {
+  margin: 4px 0 0;
+  font-size: 15px;
+  text-transform: capitalize;
+}
+.online-restored .teaching-calendar__day-list {
+  display: grid;
+  gap: 10px;
+}
+.online-restored .calendar-day-session-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--restore-surface);
+  border: 1px solid var(--restore-line);
+}
+.online-restored .calendar-day-session-card:hover {
+  border-color: var(--restore-brand);
+}
+.online-restored .calendar-day-session-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--restore-ink);
+  text-align: left;
+}
+.online-restored .calendar-day-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.online-restored .teaching-calendar__day-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.online-restored .teaching-calendar__day-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--restore-subtle);
+}
+.online-restored .agenda-title-btn {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--restore-ink);
+  text-align: left;
+}
+.online-restored .agenda-title-btn:hover strong {
+  color: var(--restore-brand);
+  text-decoration: underline;
+}
+
+/* Session Detail Modal */
+:is(.online-restored, .modal-panel) .session-detail-modal {
+  display: grid;
+  gap: 18px;
+}
+:is(.online-restored, .modal-panel) .session-detail-modal__header h2 {
+  margin: 6px 0;
+  font-size: 20px;
+}
+:is(.online-restored, .modal-panel) .session-detail-modal__header .plan-meta-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: capitalize;
+}
+:is(.online-restored, .modal-panel) .session-detail-modal__activities {
+  display: grid;
+  gap: 10px;
+}
+:is(.online-restored, .modal-panel) .session-detail-modal__activity-list {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+:is(.online-restored, .modal-panel) .session-detail-activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+}
+:is(.online-restored, .modal-panel) .session-detail-activity-copy {
+  flex: 1;
+  min-width: 0;
+}
+:is(.online-restored, .modal-panel) .session-detail-activity-copy p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--restore-subtle);
+}
+:is(.online-restored, .modal-panel) .session-detail-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--restore-line);
+}
+
+@media (max-width: 760px) {
+  .online-restored .teaching-calendar__cell {
+    min-height: 56px;
+    padding: 4px;
+    align-items: center;
+  }
+  .online-restored .teaching-calendar__cell-head {
+    justify-content: center;
+  }
+  .online-restored .teaching-calendar__count-badge,
+  .online-restored .calendar-event-pill__title,
+  .online-restored .calendar-event-more {
+    display: none;
+  }
+  .online-restored .teaching-calendar__events {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 3px;
+  }
+  .online-restored .calendar-event-pill {
+    width: auto;
+    padding: 2px 4px;
+    font-size: 9px;
+  }
+  .online-restored .calendar-day-session-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .online-restored .calendar-day-session-actions {
+    justify-content: flex-end;
+  }
 }

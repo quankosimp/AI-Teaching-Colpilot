@@ -250,21 +250,30 @@ export function StudentEntry() {
   return (
     <div className="online-restored online-restored--student">
       <main className="card online-lobby restored-student-lobby">
+        <div className="restored-auth-brand">
+          <span className="brand-mark">
+            <Sparkles size={20} />
+          </span>
+          <strong>AI Teaching Copilot</strong>
+        </div>
         <h1>Tham gia lớp học</h1>
         {!preview && !error && (
-          <p role="status" aria-live="polite">
+          <p role="status" aria-live="polite" className="lobby-status-box">
             Đang tải thông tin tham gia lớp học…
           </p>
         )}
         {error && (
-          <div role="alert">
+          <div role="alert" className="lobby-error-box">
             <p>{error}</p>
             <p>Liên hệ giáo viên để được hỗ trợ hoặc nhận liên kết mời mới.</p>
-            <a href="/">Quay về trang chủ</a>
+            <a href="/" className="button ghost small">
+              Quay về trang chủ
+            </a>
           </div>
         )}
         {preview && (
           <form
+            className="form-stack"
             onSubmit={(e) => {
               e.preventDefault();
               void studentRequest<Grant>("/room/join-request", {
@@ -279,16 +288,20 @@ export function StudentEntry() {
                 .catch((e) => setError(e.message));
             }}
           >
-            <p>{preview.sessionTitle}</p>
+            <div className="lobby-session-preview">
+              <span className="eyebrow">BUỔI HỌC TRỰC TUYẾN</span>
+              <p>{preview.sessionTitle}</p>
+            </div>
             <label>
               Tên hiển thị{" "}
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                placeholder="Nhập họ và tên của bạn…"
                 required
               />
             </label>
-            <label>
+            <label className="checkbox-line">
               <input
                 type="checkbox"
                 checked={consent}
@@ -296,7 +309,9 @@ export function StudentEntry() {
               />{" "}
               Tôi đồng ý tham gia lớp học
             </label>
-            <button disabled={!consent}>Gửi yêu cầu</button>
+            <button className="button primary" disabled={!consent}>
+              Gửi yêu cầu
+            </button>
           </form>
         )}
       </main>
@@ -620,24 +635,30 @@ export function LiveRoom({
         {grant && (
           <button
             type="button"
+            className="button ghost small"
             onClick={() => document.body.classList.toggle("dark")}
           >
             Đổi giao diện
           </button>
         )}
         {!grant && onThemeToggle && (
-          <button type="button" onClick={onThemeToggle}>
+          <button
+            type="button"
+            className="button ghost small"
+            onClick={onThemeToggle}
+          >
             Đổi giao diện
           </button>
         )}
         <h1>{s?.title || "Phòng chờ"}</h1>
-        <p>
+        <p className="online-room__conn-status">
           Kết nối dữ liệu: {connected ? "đã kết nối" : "mất kết nối"} · Video:{" "}
           {mediaVideoStatus}
         </p>
         {!grant && s && (
           <div className="online-room__lifecycle">
             <button
+              className="button primary small"
               onClick={() =>
                 void command(`/sessions/${sessionId}/start`, "POST", {})
               }
@@ -670,36 +691,6 @@ export function LiveRoom({
           ))}
         </nav>
       )}
-      {!grant && s && (
-        <footer
-          className="online-room__toolbar"
-          aria-label="Điều khiển buổi học"
-        >
-          <button
-            type="button"
-            onClick={() => {
-              onViewChange?.("teach");
-              requestAnimationFrame(() =>
-                document
-                  .getElementById("classroom-chat")
-                  ?.scrollIntoView({ behavior: "smooth" }),
-              );
-            }}
-          >
-            Trò chuyện
-          </button>
-          <button
-            onClick={() =>
-              void command(`/sessions/${sessionId}/end`, "POST", {}).then(
-                (saved) => saved && onViewChange?.("summary"),
-              )
-            }
-            disabled={s.status !== "live"}
-          >
-            Kết thúc
-          </button>{" "}
-        </footer>
-      )}
       {error && <p role="alert">{error}</p>}
       {!room && !error && (
         <p role="status" aria-live="polite">
@@ -713,7 +704,7 @@ export function LiveRoom({
       )}
       {s && (
         <>
-          <p>
+          <p className="online-room__shared-goal">
             {s.sharedGoal} · {statusLabel(s.status)}
           </p>
           <div
@@ -799,6 +790,7 @@ export function LiveRoom({
                     </select>
                   </details>
                   <button
+                    className="button ghost small online-room__complete-btn"
                     disabled={!s.currentActivityId}
                     onClick={() => {
                       if (s.currentActivityId)
@@ -825,7 +817,7 @@ export function LiveRoom({
                     aria-label="Học sinh trong phòng"
                   >
                     <h2>Học sinh</h2>
-                    <label>
+                    <label className="online-room__ttl-field">
                       Thời hạn liên kết (giờ)
                       <input
                         type="number"
@@ -835,7 +827,7 @@ export function LiveRoom({
                         onChange={(e) => setTtl(Number(e.target.value))}
                       />
                     </label>
-                    <fieldset>
+                    <fieldset className="online-room__tool-fieldset">
                       <legend>Công cụ cả lớp</legend>
                       {(Object.keys(toolNames) as (keyof Tools)[]).map(
                         (key) => (
@@ -855,9 +847,10 @@ export function LiveRoom({
                       )}
                     </fieldset>
                     {members.map((m) => (
-                      <div key={m.id}>
+                      <div key={m.id} className="online-room__member-card">
                         <button
                           type="button"
+                          className={`online-room__member-select${selected === m.studentId ? " is-selected" : ""}`}
                           aria-pressed={selected === m.studentId}
                           onClick={() => {
                             setSelectedStudent(m.studentId);
@@ -866,8 +859,11 @@ export function LiveRoom({
                         >
                           {m.displayName || m.studentIdRef?.name || m.studentId}
                         </button>{" "}
-                        · {statusLabel(m.state)}{" "}
+                        <span className="online-room__member-state">
+                          · {statusLabel(m.state)}
+                        </span>{" "}
                         <button
+                          className="button ghost small"
                           onClick={() =>
                             void request<{ inviteUrl: string }>(
                               `/sessions/${sessionId}/invites`,
@@ -887,7 +883,7 @@ export function LiveRoom({
                         >
                           Tạo liên kết mời
                         </button>
-                        <fieldset>
+                        <fieldset className="online-room__tool-fieldset">
                           <legend>
                             Quyền {m.displayName || m.studentIdRef?.name}
                           </legend>
@@ -923,6 +919,7 @@ export function LiveRoom({
                           .map((i) => (
                             <button
                               key={i.id}
+                              className="button ghost small"
                               onClick={() =>
                                 void command(
                                   `/sessions/${sessionId}/invites/${i.id}/revoke`,
@@ -935,8 +932,9 @@ export function LiveRoom({
                             </button>
                           ))}
                         {m.state === "waiting" && (
-                          <>
+                          <div className="online-room__admit-actions">
                             <button
+                              className="button primary small"
                               onClick={() =>
                                 void command(
                                   `/sessions/${sessionId}/members/${m.id}/admit`,
@@ -948,6 +946,7 @@ export function LiveRoom({
                               Cho vào
                             </button>
                             <button
+                              className="button ghost small"
                               onClick={() =>
                                 void command(
                                   `/sessions/${sessionId}/members/${m.id}/admit`,
@@ -958,12 +957,12 @@ export function LiveRoom({
                             >
                               Từ chối
                             </button>
-                          </>
+                          </div>
                         )}
                       </div>
                     ))}
                     {link && (
-                      <p>
+                      <p className="online-room__invite-result">
                         Liên kết mời một lần:{" "}
                         <input
                           readOnly
@@ -979,7 +978,10 @@ export function LiveRoom({
 
             <div className="online-room__stage" aria-label="Sân khấu lớp học">
               {!grant && (
-                <div aria-label="Chọn nội dung chung">
+                <div
+                  className="online-room__stage-tabs"
+                  aria-label="Chọn nội dung chung"
+                >
                   {(
                     [
                       ["document", "Học liệu"],
@@ -990,6 +992,9 @@ export function LiveRoom({
                     <button
                       type="button"
                       key={value}
+                      className={
+                        (s.sharedView || "document") === value ? "active" : ""
+                      }
                       aria-pressed={(s.sharedView || "document") === value}
                       onClick={() => patchClassroom({ sharedView: value })}
                     >
@@ -1034,12 +1039,14 @@ export function LiveRoom({
                       }
                     />
                   ) : (
-                    <p>Hoạt động chưa có học liệu.</p>
+                    <p className="online-room__stage-empty">
+                      Hoạt động chưa có học liệu.
+                    </p>
                   )}
                 </div>
               )}
               {s.sharedView === "check" && (grant || !inspectBoard) && (
-                <div>
+                <div className="online-room__stage-check">
                   <p>
                     {room?.activeQuickCheck?.question ||
                       room?.checks?.find((c) => c.status === "open")
@@ -1062,7 +1069,9 @@ export function LiveRoom({
                       onCommand={async () => {}}
                     />
                   ) : s.sharedBoardOwnerId === grant.studentId ? (
-                    <p>Bảng nháp của bạn đang được trình bày cho cả lớp.</p>
+                    <p className="online-room__stage-banner">
+                      Bảng nháp của bạn đang được trình bày cho cả lớp.
+                    </p>
                   ) : (
                     <OnlineBoard
                       testId="stage-board"
@@ -1074,7 +1083,7 @@ export function LiveRoom({
                     />
                   )
                 ) : (
-                  <p>
+                  <p className="online-room__stage-banner">
                     Bảng đang trình bày trên sân khấu:{" "}
                     {s.sharedBoardOwnerId === "common"
                       ? "Bảng chung"
@@ -1095,7 +1104,7 @@ export function LiveRoom({
                   }}
                 >
                   {inspectBoard && (
-                    <p role="status">
+                    <p role="status" className="online-room__inspect-banner">
                       Đang xem nháp riêng. Nội dung chia sẻ với lớp không thay
                       đổi.
                     </p>
@@ -1110,69 +1119,78 @@ export function LiveRoom({
                 className="online-room__dock"
                 aria-label="Hỗ trợ học sinh đã chọn"
               >
-                <h2>Học sinh được chọn</h2>
-                <p>
-                  {members.find((m) => m.studentId === selected)?.displayName ||
-                    selected ||
-                    "Chưa chọn học sinh"}
-                </p>
-                <p>
-                  Giáo viên có thể xem bảng riêng để hỗ trợ; chỉ bảng đã chia sẻ
-                  mới được trình bày cho lớp.
-                </p>
-                <button
-                  type="button"
-                  disabled={!selected}
-                  onClick={() => setInspectBoard(!inspectBoard)}
-                >
-                  {inspectBoard ? "Trở về bảng chung" : "Xem bảng riêng"}
-                </button>
-                <button
-                  type="button"
-                  disabled={
-                    !room?.boards?.some(
-                      (b) =>
-                        b.ownerId === selected &&
-                        b.shared &&
-                        (!s.currentActivityId ||
-                          b.id.includes(`:${s.currentActivityId}:`)),
-                    )
-                  }
-                  onClick={() => {
-                    setInspectBoard(false);
-                    patchClassroom({
-                      sharedBoardOwnerId: selected,
-                      sharedView: "board",
-                    });
-                  }}
-                >
-                  Trình bày bảng đã chia sẻ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInspectBoard(false);
-                    patchClassroom({
-                      sharedBoardOwnerId: "common",
-                      sharedView: "board",
-                    });
-                  }}
-                >
-                  Trình bày bảng chung
-                </button>
-                <button
-                  type="button"
-                  disabled={!selected}
-                  onClick={() =>
-                    void command(
-                      `/sessions/${sessionId}/boards/${selected}/attempts`,
-                      "POST",
-                      {},
-                    )
-                  }
-                >
-                  Chụp bảng học sinh
-                </button>
+                <div className="online-room__dock-head">
+                  <h2>Học sinh được chọn</h2>
+                  <p className="online-room__dock-student">
+                    {members.find((m) => m.studentId === selected)
+                      ?.displayName ||
+                      selected ||
+                      "Chưa chọn học sinh"}
+                  </p>
+                  <p className="online-room__dock-hint">
+                    Giáo viên có thể xem bảng riêng để hỗ trợ; chỉ bảng đã chia
+                    sẻ mới được trình bày cho lớp.
+                  </p>
+                </div>
+                <div className="online-room__dock-actions">
+                  <button
+                    type="button"
+                    className="button ghost small"
+                    disabled={!selected}
+                    onClick={() => setInspectBoard(!inspectBoard)}
+                  >
+                    {inspectBoard ? "Trở về bảng chung" : "Xem bảng riêng"}
+                  </button>
+                  <button
+                    type="button"
+                    className="button ghost small"
+                    disabled={
+                      !room?.boards?.some(
+                        (b) =>
+                          b.ownerId === selected &&
+                          b.shared &&
+                          (!s.currentActivityId ||
+                            b.id.includes(`:${s.currentActivityId}:`)),
+                      )
+                    }
+                    onClick={() => {
+                      setInspectBoard(false);
+                      patchClassroom({
+                        sharedBoardOwnerId: selected,
+                        sharedView: "board",
+                      });
+                    }}
+                  >
+                    Trình bày bảng đã chia sẻ
+                  </button>
+                  <button
+                    type="button"
+                    className="button ghost small"
+                    onClick={() => {
+                      setInspectBoard(false);
+                      patchClassroom({
+                        sharedBoardOwnerId: "common",
+                        sharedView: "board",
+                      });
+                    }}
+                  >
+                    Trình bày bảng chung
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary small"
+                    disabled={!selected}
+                    onClick={() =>
+                      void command(
+                        `/sessions/${sessionId}/boards/${selected}/attempts`,
+                        "POST",
+                        {},
+                      )
+                    }
+                  >
+                    Chụp bảng học sinh
+                  </button>
+                </div>
                 <h3>Minh chứng gần đây</h3>
                 <AITeachingPanel
                   key={`${sessionId}:${selected}:${s.currentActivityId}`}
@@ -1183,15 +1201,18 @@ export function LiveRoom({
                   request={request}
                   reload={load}
                 />
-                {room?.evidence
-                  ?.filter((e) => e.studentId === selected)
-                  .slice(0, 3)
-                  .map((e) => (
-                    <p key={e.id}>
-                      {e.title}: {e.detail} ({statusLabel(e.support)})
-                    </p>
-                  ))}
+                <div className="online-room__dock-evidence">
+                  {room?.evidence
+                    ?.filter((e) => e.studentId === selected)
+                    .slice(0, 3)
+                    .map((e) => (
+                      <p key={e.id} className="online-room__evidence-pill">
+                        {e.title}: {e.detail} ({statusLabel(e.support)})
+                      </p>
+                    ))}
+                </div>
                 <form
+                  className="online-room__note-form"
                   onSubmit={(e) => {
                     e.preventDefault();
                     void command(`/sessions/${sessionId}/evidence`, "POST", {
@@ -1210,22 +1231,59 @@ export function LiveRoom({
                     Ghi chú quan sát
                     <textarea
                       aria-label="Ghi chú quan sát"
+                      placeholder="Ghi nhanh biểu hiện hoặc bước giải của học sinh…"
                       required
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
                     />
                   </label>
-                  <button disabled={!selected || !note.trim()}>
+                  <button
+                    className="button primary small"
+                    disabled={!selected || !note.trim()}
+                  >
                     Lưu ghi chú
                   </button>
                 </form>
               </aside>
             )}
           </div>
+          {!grant && (
+            <footer
+              className="online-room__toolbar"
+              aria-label="Điều khiển buổi học"
+            >
+              <button
+                type="button"
+                className="button ghost small"
+                onClick={() => {
+                  onViewChange?.("teach");
+                  requestAnimationFrame(() =>
+                    document
+                      .getElementById("classroom-chat")
+                      ?.scrollIntoView({ behavior: "smooth" }),
+                  );
+                }}
+              >
+                Trò chuyện
+              </button>
+              <button
+                className="button danger small"
+                onClick={() =>
+                  void command(`/sessions/${sessionId}/end`, "POST", {}).then(
+                    (saved) => saved && onViewChange?.("summary"),
+                  )
+                }
+                disabled={s.status !== "live"}
+              >
+                Kết thúc
+              </button>{" "}
+            </footer>
+          )}
           {!grant && s.Activity_sessionId_items && (
             <section className="online-room__checks">
               <h2>Kiểm tra nhanh</h2>
               <form
+                className="online-room__check-create"
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (s.currentActivityId)
@@ -1243,6 +1301,7 @@ export function LiveRoom({
                   required
                 />
                 <button
+                  className="button primary small"
                   disabled={
                     s.status !== "live" ||
                     !s.currentActivityId ||
@@ -1253,11 +1312,12 @@ export function LiveRoom({
                 </button>
               </form>
               {room?.checks?.map((c) => (
-                <div key={c.id}>
-                  <p>
-                    {c.question} · {statusLabel(c.status)}{" "}
+                <div key={c.id} className="online-room__check-item">
+                  <p className="online-room__check-head">
+                    <strong>{c.question}</strong> · {statusLabel(c.status)}{" "}
                     {c.status === "open" && (
                       <button
+                        className="button ghost small"
                         onClick={() =>
                           void command(`/checks/${c.id}`, "PATCH", {
                             status: "closed",
@@ -1280,7 +1340,7 @@ export function LiveRoom({
                         );
                       }}
                     >
-                      <span>
+                      <span className="online-room__grade-summary">
                         {members.find((m) => m.studentId === r.studentId)
                           ?.displayName || r.studentId}
                         : {r.answer}
@@ -1315,7 +1375,12 @@ export function LiveRoom({
                     onChange={(e) => setAnswer(e.target.value)}
                     required
                   />
-                  <button disabled={!checkAllowed}>Gửi câu trả lời</button>
+                  <button
+                    className="button primary small"
+                    disabled={!checkAllowed}
+                  >
+                    Gửi câu trả lời
+                  </button>
                 </form>
               )}
               {!checkAllowed && <p>Giáo viên đã tắt kiểm tra nhanh.</p>}
@@ -1333,10 +1398,10 @@ export function LiveRoom({
               />
               {!uploadAllowed && <p>Giáo viên đã tắt nộp bài.</p>}
               {!room?.ownSubmissions?.length && (
-                <p>Chưa có bài làm nào được nộp.</p>
+                <p className="muted">Chưa có bài làm nào được nộp.</p>
               )}
               {room?.ownSubmissions?.map((x) => (
-                <p key={x.id}>
+                <p key={x.id} className="online-room__submission-receipt">
                   {x.title}: {x.answer}{" "}
                   {x.finalFeedback && `— ${x.finalFeedback}`}{" "}
                   {x.support && `(${statusLabel(x.support)})`}
@@ -1348,7 +1413,7 @@ export function LiveRoom({
             <section className="online-room__submissions online-room__grading">
               <h2>Bài học sinh nộp</h2>
               {!room?.submissions?.length && (
-                <p>Chưa có bài nộp từ học sinh.</p>
+                <p className="muted">Chưa có bài nộp từ học sinh.</p>
               )}
               {room?.submissions?.map((x) => (
                 <SubmissionGrade
@@ -1361,31 +1426,36 @@ export function LiveRoom({
                     });
                   }}
                 >
-                  <p>
-                    {members.find((m) => m.studentId === x.studentId)
-                      ?.displayName || x.studentId}
-                    : {x.title} — {x.answer}
-                  </p>
-                  {x.fileName && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void request<{ readUrl: string }>(
-                          `/submissions/${x.id}/read-url`,
-                        )
-                          .then((r) =>
-                            window.open(
-                              r.readUrl,
-                              "_blank",
-                              "noopener,noreferrer",
-                            ),
+                  <div className="online-room__submission-meta">
+                    <p>
+                      <strong>
+                        {members.find((m) => m.studentId === x.studentId)
+                          ?.displayName || x.studentId}
+                      </strong>
+                      : {x.title} — {x.answer}
+                    </p>
+                    {x.fileName && (
+                      <button
+                        type="button"
+                        className="button ghost small"
+                        onClick={() =>
+                          void request<{ readUrl: string }>(
+                            `/submissions/${x.id}/read-url`,
                           )
-                          .catch((e) => setError(e.message))
-                      }
-                    >
-                      Mở tệp: {x.fileName}
-                    </button>
-                  )}
+                            .then((r) =>
+                              window.open(
+                                r.readUrl,
+                                "_blank",
+                                "noopener,noreferrer",
+                              ),
+                            )
+                            .catch((e) => setError(e.message))
+                        }
+                      >
+                        Mở tệp: {x.fileName}
+                      </button>
+                    )}
+                  </div>
                 </SubmissionGrade>
               ))}
             </section>
@@ -1396,12 +1466,15 @@ export function LiveRoom({
             className="online-room__chat"
           >
             <h2>Trò chuyện</h2>
-            {(grant ? room?.roomMessages : room?.messages)?.map((m) => (
-              <p key={m.id}>
-                {m.authorId}: {m.text}
-              </p>
-            ))}
+            <div className="online-room__chat-list">
+              {(grant ? room?.roomMessages : room?.messages)?.map((m) => (
+                <p key={m.id} className="online-room__chat-bubble">
+                  {m.authorId}: {m.text}
+                </p>
+              ))}
+            </div>
             <form
+              className="online-room__chat-form"
               onSubmit={(e) => {
                 e.preventDefault();
                 void command(`/sessions/${sessionId}/messages`, "POST", {
@@ -1415,12 +1488,15 @@ export function LiveRoom({
                 Tin nhắn
                 <input
                   aria-label="Tin nhắn"
+                  placeholder="Nhập tin nhắn trao đổi với lớp…"
                   value={chat}
                   required
                   onChange={(e) => setChat(e.target.value)}
                 />
               </label>
-              <button disabled={!chatAllowed}>Gửi</button>
+              <button className="button primary small" disabled={!chatAllowed}>
+                Gửi
+              </button>
             </form>
             {!chatAllowed && <p>Giáo viên đã tắt trò chuyện.</p>}
           </section>
@@ -1454,36 +1530,39 @@ function SubmissionGrade({
   const [support, setSupport] = useState("DocLap");
   return (
     <form
+      className="online-room__grade-card"
       onSubmit={(e) => {
         e.preventDefault();
         void onGrade(feedback, support);
       }}
     >
       {children}
-      <label>
-        Nhận xét
-        <input
-          aria-label={`Nhận xét cho ${title}`}
-          value={feedback}
-          onChange={(e) => setFeedback(e.target.value)}
-          placeholder="Nhận xét"
-          required
-        />
-      </label>
-      <label>
-        Mức hỗ trợ
-        <select
-          aria-label={`Mức hỗ trợ cho ${title}`}
-          value={support}
-          onChange={(e) => setSupport(e.target.value)}
-        >
-          <option value="DocLap">Độc lập</option>
-          <option value="CoGoiY">Có gợi ý</option>
-          <option value="DuocHuongDan">Được hướng dẫn</option>
-          <option value="ChuaRo">Chưa rõ</option>
-        </select>
-      </label>
-      <button>Chấm bài</button>
+      <div className="online-room__grade-controls">
+        <label>
+          Nhận xét
+          <input
+            aria-label={`Nhận xét cho ${title}`}
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="Nhận xét"
+            required
+          />
+        </label>
+        <label>
+          Mức hỗ trợ
+          <select
+            aria-label={`Mức hỗ trợ cho ${title}`}
+            value={support}
+            onChange={(e) => setSupport(e.target.value)}
+          >
+            <option value="DocLap">Độc lập</option>
+            <option value="CoGoiY">Có gợi ý</option>
+            <option value="DuocHuongDan">Được hướng dẫn</option>
+            <option value="ChuaRo">Chưa rõ</option>
+          </select>
+        </label>
+        <button className="button primary small">Chấm bài</button>
+      </div>
     </form>
   );
 }

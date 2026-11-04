@@ -101,16 +101,17 @@ export function SubmissionForm({
     }
   };
   return (
-    <form onSubmit={submit}>
+    <form className="submission-form-card" onSubmit={submit}>
       <label>
         Bài làm
         <textarea
           value={answer}
+          placeholder="Nhập lời giải, các bước làm hoặc câu trả lời của bạn…"
           disabled={busy || !!pending.current}
           onChange={(e) => setAnswer(e.target.value)}
         />
       </label>
-      <label>
+      <label className="upload-field">
         Ảnh hoặc PDF
         <input
           key={inputVersion}
@@ -124,7 +125,7 @@ export function SubmissionForm({
       {pending.current && (
         <p>Bài đang chờ xác nhận. Gửi lại sẽ dùng cùng mã yêu cầu.</p>
       )}
-      <button disabled={!enabled || busy}>
+      <button className="button primary small" disabled={!enabled || busy}>
         {busy ? "Đang nộp…" : "Nộp bài"}
       </button>
     </form>

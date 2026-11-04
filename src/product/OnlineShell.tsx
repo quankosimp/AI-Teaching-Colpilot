@@ -65,7 +65,7 @@ export function OnlineShell({ page, title, teacher, theme, onThemeToggle, navIte
       else if (!event.shiftKey && (document.activeElement === last || !sidebar.current?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     };
     document.addEventListener("keydown", trap);
-    return () => { cancelAnimationFrame(focusFrame); document.body.style.overflow = previousOverflow; document.removeEventListener("keydown", trap); };
+    return () => { cancelAnimationFrame(focusFrame); document.body.style.overflow = previousOverflow; document.removeEventListener("keydown", trap); opener.current?.focus(); };
   }, [mobileOpen, smallScreen]);
   const navigate = (id: string) => {
     onNavigate(id);

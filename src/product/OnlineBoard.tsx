@@ -191,42 +191,49 @@ export function OnlineBoard({
   const strokes = board?.strokes ?? [];
 
   return (
-    <div className="form-stack" data-testid={testId || "online-board"}>
-      <div className="row-actions">
-        <strong>{title}</strong>
-        <span className="muted">
-          Phiên bản bảng: {board?.revision ?? 1} · {strokes.length} nét vẽ
-        </span>
-        {isOwnPrivateBoard && (
-          <button
-            type="button"
-            className="button ghost small"
-            disabled={!canWrite || busy}
-            onClick={() =>
-              void onCommand({
-                operation: "setShared",
-                shared: !board?.shared,
-              })
-            }
-          >
-            {board?.shared
-              ? "Dừng chia sẻ nháp"
-              : "Chia sẻ nháp với giáo viên/lớp"}
-          </button>
-        )}
-        {onCaptureAttempt && (
-          <button
-            type="button"
-            className="button secondary small"
-            disabled={!canWrite || busy}
-            onClick={() => void onCaptureAttempt()}
-          >
-            Lưu bản nháp
-          </button>
-        )}
+    <div
+      className="form-stack online-board-card"
+      data-testid={testId || "online-board"}
+    >
+      <div className="row-actions online-board-head">
+        <div>
+          <strong>{title}</strong>
+          <span className="muted online-board-meta">
+            Phiên bản bảng: {board?.revision ?? 1} · {strokes.length} nét vẽ
+          </span>
+        </div>
+        <div className="row-actions">
+          {isOwnPrivateBoard && (
+            <button
+              type="button"
+              className="button ghost small"
+              disabled={!canWrite || busy}
+              onClick={() =>
+                void onCommand({
+                  operation: "setShared",
+                  shared: !board?.shared,
+                })
+              }
+            >
+              {board?.shared
+                ? "Dừng chia sẻ nháp"
+                : "Chia sẻ nháp với giáo viên/lớp"}
+            </button>
+          )}
+          {onCaptureAttempt && (
+            <button
+              type="button"
+              className="button secondary small"
+              disabled={!canWrite || busy}
+              onClick={() => void onCaptureAttempt()}
+            >
+              Lưu bản nháp
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="row-actions">
+      <div className="row-actions online-board-tools">
         <button
           type="button"
           className={`button ghost small ${kind === "pen" ? "active" : ""}`}
@@ -263,7 +270,7 @@ export function OnlineBoard({
           <button
             key={c.value}
             type="button"
-            className="button ghost small"
+            className={`button ghost small ${color === c.value ? "active" : ""}`}
             disabled={!canWrite || busy}
             onClick={() => setColor(c.value)}
             aria-label={`Màu ${c.label}`}
@@ -314,6 +321,7 @@ export function OnlineBoard({
 
       <svg
         ref={svgRef}
+        className="online-board-canvas"
         viewBox="0 0 800 420"
         aria-label={`Khung vẽ ${title}`}
         onPointerDown={handlePointerDown}
@@ -322,9 +330,6 @@ export function OnlineBoard({
         style={{
           width: "100%",
           height: "280px",
-          border: "1px solid var(--border, #d8b4fe)",
-          borderRadius: "12px",
-          background: "var(--surface, #faf5ff)",
           touchAction: "none",
           cursor: canWrite ? "crosshair" : "not-allowed",
         }}
@@ -344,7 +349,7 @@ export function OnlineBoard({
           )}
       </svg>
 
-      <div className="row-actions">
+      <div className="row-actions online-board-note-row">
         <label style={{ flex: 1 }}>
           Ghi chú / lời giải trên bảng
           <input

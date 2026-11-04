@@ -43,7 +43,7 @@ export class RealGeminiAdapter implements AIAdapter {
       throw new Error("GEMINI_API_KEY and GEMINI_MODEL are required for RealGeminiAdapter");
     }
     this.model = config.model;
-    this.timeoutMs = config.timeoutMs ?? 10_000;
+    this.timeoutMs = config.timeoutMs ?? 15_000;
     this.client = new GoogleGenAI({ apiKey: config.apiKey });
     this.breaker = new CircuitBreaker(config.circuitConfig);
   }
@@ -114,8 +114,9 @@ export class RealGeminiAdapter implements AIAdapter {
         contents: instructions,
         config: {
           abortSignal: AbortSignal.timeout(this.timeoutMs),
-          maxOutputTokens: 500,
+          maxOutputTokens: 1024,
           temperature: 0.3,
+          thinkingConfig: { thinkingBudget: 0 },
         },
       });
 
@@ -194,9 +195,10 @@ export class RealGeminiAdapter implements AIAdapter {
         contents: instructions,
         config: {
           abortSignal: AbortSignal.timeout(this.timeoutMs),
-          maxOutputTokens: 600,
+          maxOutputTokens: 1024,
           temperature: 0.2,
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 0 },
         },
       });
 
@@ -281,8 +283,9 @@ export class RealGeminiAdapter implements AIAdapter {
         contents: prompt,
         config: {
           abortSignal: AbortSignal.timeout(this.timeoutMs),
-          maxOutputTokens: 400,
+          maxOutputTokens: 1024,
           temperature: 0.3,
+          thinkingConfig: { thinkingBudget: 0 },
         },
       });
 
