@@ -137,7 +137,7 @@ const path = require("node:path");
     // Teacher navigation and room load
     await t.goto(origin);
     await t.getByRole("button", { name: "Demo Hoàng Nam" }).click();
-    await t.getByRole("button", { name: "Soạn buổi học" }).click();
+    await t.getByRole("navigation", { name: "Điều hướng chính" }).getByRole("button", { name: "Soạn buổi học", exact: true }).click();
     await t.getByRole("button", { name: title }).click();
     await t.route("**/api/v1/room/state?*", async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -197,7 +197,10 @@ const path = require("node:path");
     await p1.reload();
     await p1.getByText("Bảng nháp của tôi").waitFor();
     await p1.getByText("Chưa có bài làm nào được nộp.").waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Chấm bài", exact: true }).click();
     await t.getByText("Chưa có bài nộp từ học sinh.").waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Giảng dạy", exact: true }).click();
+    await t.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Bảng", exact: true }).click();
 
     const tb = t.getByTestId("online-board"),
       sb = p1.getByTestId("online-board");
@@ -255,9 +258,11 @@ const path = require("node:path");
       throw Error("teacher controls lack accessible labels");
     const headerBox = await t.locator(".online-room__header").boundingBox(),
       boardBox = await t.locator(".online-room__board").boundingBox(),
-      reviewBox = await t.locator(".online-room__review").boundingBox();
-    if (!headerBox || !boardBox || !reviewBox || boardBox.y >= reviewBox.y)
-      throw Error("board must precede review");
+      participantsBox = await t.locator(".online-room__participants").boundingBox();
+    if (!headerBox || !boardBox || !participantsBox || headerBox.y >= boardBox.y)
+      throw Error("teaching workspace must follow the room header");
+    if (await t.locator(".online-room__review").isVisible())
+      throw Error("full review must stay outside the teaching view");
 
     await t.setViewportSize({ width: 1440, height: 900 });
     await t.screenshot({
@@ -294,7 +299,7 @@ const path = require("node:path");
 
     // Teacher presents common board again
     await dock.getByRole("button", { name: "Trình bày bảng chung" }).click();
-    await t.getByText("Bảng chung", { exact: false }).waitFor();
+    await tb.getByText("Bảng chung", { exact: true }).waitFor();
 
     // Teacher inspects student private board
     await dock.getByRole("button", { name: "Xem bảng riêng" }).click();
@@ -308,7 +313,7 @@ const path = require("node:path");
     await sb.getByText("0 nét vẽ", { exact: false }).waitFor();
 
     // Shared Stage Document & controlled page sync (LIVE 003, TOOL 003)
-    await t.getByLabel("Hoạt động hiện tại").selectOption({ label: "Phiếu học tập" });
+    await t.getByRole("navigation", { name: "Lộ trình hoạt động" }).getByRole("button", { name: "Phiếu học tập", exact: true }).click();
     const stage = t.locator(".online-room__stage");
     await stage.getByRole("button", { name: "Học liệu" }).click();
     // Page counters alone do not prove that an auto-detected PDF was rendered.
@@ -326,6 +331,15 @@ const path = require("node:path");
     await p1.locator(".online-room__stage").getByText("Trang 1/2").waitFor();
 
     await p1.waitForFunction(() => Number(document.querySelector(".online-room__stage canvas")?.dataset.renderedPage) === 1);
+    // Inspecting a private draft does not change what the class sees or reload the document.
+    await stage.locator("canvas").evaluate(el => { el.uiRestoreIdentity = "kept-document"; });
+    await dock.getByRole("button", { name: "Xem bảng riêng", exact: true }).click();
+    await tb.getByText("Xem bảng riêng: Student One", { exact: true }).waitFor();
+    if (await stage.locator("canvas").isVisible()) throw Error("private inspection must occupy the teacher stage");
+    await p1.locator(".online-room__stage canvas").waitFor({ state: "visible" });
+    await dock.getByRole("button", { name: "Trở về bảng chung", exact: true }).click();
+    await stage.locator("canvas").waitFor({ state: "visible" });
+    if ((await stage.locator("canvas").evaluate(el => el.uiRestoreIdentity)) !== "kept-document") throw Error("private inspection remounted the document");
     for (const [role, page] of [["teacher", t], ["student", p1]]) {
       for (const width of [360, 375, 768, 1440]) {
         await page.setViewportSize({ width, height: 900 });
@@ -337,7 +351,20 @@ const path = require("node:path");
           if (role === "teacher" && width === 1440) {
             const stageBox = await page.locator(".online-room__stage").boundingBox();
             const dockBox = await page.locator(".online-room__dock").boundingBox();
-            if (!stageBox || !dockBox || dockBox.x < stageBox.x + stageBox.width) throw Error("desktop dock must sit beside stage");
+            const railBox = await page.locator(".online-room__participants").boundingBox();
+            const mediaBox = await page.locator(".online-room__media-strip").boundingBox();
+            if (!stageBox || !dockBox || !railBox || !mediaBox ||
+                stageBox.x < railBox.x + railBox.width ||
+                dockBox.x < stageBox.x + stageBox.width ||
+                Math.abs(mediaBox.x - stageBox.x) > 1 || mediaBox.y + mediaBox.height > stageBox.y || stageBox.width < 480)
+              throw Error("desktop requires roadmap rail, video above readable single stage and Copilot dock");
+            if (await page.locator(".online-room__stage-board").isVisible()) throw Error("board editor must hide while the shared stage shows a PDF");
+            const toolbarBox = await page.locator(".online-room__toolbar").boundingBox();
+            if (!toolbarBox || stageBox.y + stageBox.height > toolbarBox.y) throw Error("stage must stay above fixed controls");
+            await stage.evaluate(el => { el.scrollTop = el.scrollHeight; });
+            const tabsBox = await stage.getByLabel("Chọn nội dung chung").boundingBox();
+            if (!tabsBox || tabsBox.y < stageBox.y - 1 || tabsBox.y + tabsBox.height > stageBox.y + stageBox.height) throw Error("shared stage tabs must remain visible while scrolling");
+            await stage.evaluate(el => { el.scrollTop = 0; });
           }
           await page.screenshot({ path: path.join(artifacts, `final-${role}-${width}-${theme}.png`), fullPage: true });
         }
@@ -400,6 +427,7 @@ const path = require("node:path");
       throw Error("student chat did not re-enable");
 
     // Quick Check & Review with support level (TOOL 004, TOOL 007)
+    await stage.getByRole("button", { name: "Kiểm tra", exact: true }).click();
     await t.getByPlaceholder("Câu hỏi kiểm tra nhanh").fill("2 + 2?");
     await t.getByRole("button", { name: "Mở câu hỏi" }).click();
     await p1.getByRole("heading", { name: "2 + 2?" }).waitFor();
@@ -416,11 +444,12 @@ const path = require("node:path");
       .getByRole("heading", { name: "2 + 2?" })
       .waitFor({ state: "hidden" });
 
-    const checkGradeForm = activitySection.locator("form").filter({ hasText: "Student One: 4" });
+    const checksSection = t.locator(".online-room__checks");
+    const checkGradeForm = checksSection.locator("form").filter({ hasText: "Student One: 4" });
     await checkGradeForm.getByLabel("Nhận xét", { exact: false }).fill("Chính xác");
     await checkGradeForm.getByLabel("Mức hỗ trợ", { exact: false }).selectOption("DocLap");
     await checkGradeForm.getByRole("button", { name: "Chấm bài" }).click();
-    await activitySection.getByText("Chính xác (Độc lập)", { exact: false }).waitFor();
+    await checksSection.getByText("Chính xác (Độc lập)", { exact: false }).waitFor();
 
     // Offline draft queue replay (LIVE 006, Decision D10)
     await a.setOffline(true);
@@ -483,6 +512,7 @@ const path = require("node:path");
     });
     await p1.getByRole("button", { name: "Nộp bài" }).click();
     await p1.getByText("answer.pdf:", { exact: false }).waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Chấm bài", exact: true }).click();
     await t.getByText("Mở tệp: answer.pdf").waitFor();
 
     await p2
@@ -493,9 +523,8 @@ const path = require("node:path");
     await t.getByText("Bài của học sinh hai").waitFor();
 
     // Review Panel: manual observation, claim, grading (TOOL 007)
-    const panel = t.locator("section").filter({
-      has: t.getByRole("heading", { name: "Minh chứng và nhận định" }),
-    });
+    await t.locator(".online-room__views").getByRole("button", { name: "Tổng kết & duyệt", exact: true }).click();
+    const panel = t.locator(".online-room__review");
     await panel.getByLabel("Học sinh").selectOption({ label: "Student One" });
     await panel.getByLabel("Quan sát thực tế").fill("Đã hoàn thành bài tập");
     await panel.getByRole("button", { name: "Lưu quan sát" }).click();
@@ -519,6 +548,7 @@ const path = require("node:path");
       .getByText("Hoàn thành bài tập · Đã duyệt", { exact: false })
       .waitFor();
 
+    await t.locator(".online-room__views").getByRole("button", { name: "Chấm bài", exact: true }).click();
     const submissionForm = t.locator("form").filter({ hasText: "answer.pdf" });
     await submissionForm
       .getByLabel("Nhận xét cho answer.pdf")
@@ -541,6 +571,7 @@ const path = require("node:path");
       throw Error("support leaked across submissions");
 
     await submissionForm.getByRole("button", { name: "Chấm bài" }).click();
+    await t.locator(".online-room__views").getByRole("button", { name: "Tổng kết & duyệt", exact: true }).click();
     await panel.getByLabel("Học sinh").selectOption({ label: "Student One" });
     await panel.getByText("Good work", { exact: false }).waitFor();
 
@@ -554,6 +585,7 @@ const path = require("node:path");
     await panel.getByRole("button", { name: "Đóng nguồn" }).click();
 
     // TTL configure & invite revoke (ROOM 001)
+    await t.locator(".online-room__views").getByRole("button", { name: "Giảng dạy", exact: true }).click();
     await membersSection.getByLabel("Thời hạn liên kết (giờ)").fill("12");
     const studentTwoMember = membersSection.locator("div").filter({ hasText: "Student Two" });
     await studentTwoMember.getByRole("button", { name: "Tạo liên kết mời" }).click();
@@ -563,7 +595,8 @@ const path = require("node:path");
     // End session (LIVE 005)
     await t.getByRole("button", { name: "Kết thúc", exact: true }).click();
     await t.getByText("public · Đã kết thúc").waitFor();
-    if (!(await tb.getByRole("button", { name: "Thêm nét vẽ" }).isDisabled()))
+    await t.locator(".online-room__views").getByRole("button", { name: "Giảng dạy", exact: true }).click();
+    if (!(await tb.getByRole("button", { name: "Thêm nét vẽ", includeHidden: true }).isDisabled()))
       throw Error("teacher board enabled after end");
 
     // Student 1 verifies coherent post-end receipt
@@ -573,6 +606,7 @@ const path = require("node:path");
       throw Error("student board enabled after session end");
 
     // Review completion
+    await t.locator(".online-room__views").getByRole("button", { name: "Tổng kết & duyệt", exact: true }).click();
     await panel.getByRole("button", { name: "Hoàn tất duyệt" }).click();
     await t.getByText("public · Đã hoàn tất duyệt").waitFor();
 

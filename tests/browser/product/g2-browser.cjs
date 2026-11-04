@@ -1,6 +1,10 @@
 const { chromium } = require("playwright-core");
+const fs = require("node:fs/promises");
+const path = require("node:path");
 (async () => {
   const origin = new URL(process.env.BROWSER_BASE_URL || "http://127.0.0.1:3002").origin;
+  const artifacts = process.env.BROWSER_ARTIFACT_DIR || "/tmp/copilot-browser-test";
+  await fs.mkdir(artifacts, { recursive: true });
   const post = async (path, token, body, method = "POST", extra = {}) => {
     const r = await fetch(origin + "/api/v1" + path, {
       method,
@@ -79,7 +83,7 @@ const { chromium } = require("playwright-core");
       p2 = await b.newPage();
     await t.goto(origin);
     await t.getByRole("button", { name: "Demo Hoàng Nam" }).click();
-    await t.getByRole("button", { name: "Soạn buổi học" }).click();
+    await t.getByRole("navigation", { name: "Điều hướng chính" }).getByRole("button", { name: "Soạn buổi học", exact: true }).click();
     await t.getByRole("button", { name: title }).click();
     await t.route("**/api/v1/room/state?*", async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -131,7 +135,10 @@ const { chromium } = require("playwright-core");
     await p1.reload();
     await p1.getByText("Bảng nháp của tôi").waitFor();
     await p1.getByText("Chưa có bài làm nào được nộp.").waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Chấm bài", exact: true }).click();
     await t.getByText("Chưa có bài nộp từ học sinh.").waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Giảng dạy", exact: true }).click();
+    await t.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Bảng", exact: true }).click();
     const tb = t.getByTestId("online-board"),
       sb = p1.getByTestId("online-board");
     const roomInfo = await (
@@ -182,12 +189,13 @@ const { chromium } = require("playwright-core");
       throw Error("teacher controls lack accessible labels");
     const headerBox = await t.locator(".online-room__header").boundingBox(),
       boardBox = await t.locator(".online-room__board").boundingBox(),
-      reviewBox = await t.locator(".online-room__review").boundingBox();
-    if (!headerBox || !boardBox || !reviewBox || boardBox.y >= reviewBox.y)
-      throw Error("board must precede review");
+      railBox = await t.locator(".online-room__participants").boundingBox();
+    if (!headerBox || !boardBox || !railBox || headerBox.y >= boardBox.y)
+      throw Error("workspace must follow room header");
+    if (await t.locator(".online-room__review").isVisible()) throw Error("full review must stay outside teaching view");
     await t.setViewportSize({ width: 1440, height: 900 });
     await t.screenshot({
-      path: "/tmp/copilot-browser-test/teacher-wiring-1440.png",
+      path: path.join(artifacts, "teacher-wiring-1440.png"),
       fullPage: true,
     });
     await t.setViewportSize({ width: 1200, height: 800 });
@@ -203,6 +211,7 @@ const { chromium } = require("playwright-core");
     await sb.getByRole("button", { name: "Dừng chia sẻ nháp" }).waitFor();
     await sb.getByRole("button", { name: "Hoàn tác nét của tôi" }).click();
     await sb.getByText("0 nét vẽ", { exact: false }).waitFor();
+    await t.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Kiểm tra", exact: true }).click();
     await t.getByPlaceholder("Câu hỏi kiểm tra nhanh").fill("2 + 2?");
     await t.getByRole("button", { name: "Mở câu hỏi" }).click();
     await p1.getByRole("heading", { name: "2 + 2?" }).waitFor();
@@ -273,6 +282,7 @@ const { chromium } = require("playwright-core");
     });
     await p1.getByRole("button", { name: "Nộp bài" }).click();
     await p1.getByText("answer.pdf:", { exact: false }).waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Chấm bài", exact: true }).click();
     await t.getByText("Mở tệp: answer.pdf").waitFor();
     await p2
       .locator(".online-room__submissions")
@@ -280,9 +290,8 @@ const { chromium } = require("playwright-core");
       .fill("Bài của học sinh hai");
     await p2.getByRole("button", { name: "Nộp bài" }).click();
     await t.getByText("Bài của học sinh hai").waitFor();
-    const panel = t.locator("section").filter({
-      has: t.getByRole("heading", { name: "Minh chứng và nhận định" }),
-    });
+    await t.locator(".online-room__views").getByRole("button", { name: "Tổng kết & duyệt", exact: true }).click();
+    const panel = t.locator(".online-room__review");
     await panel.getByLabel("Học sinh").selectOption({ label: "Student One" });
     await panel.getByLabel("Quan sát thực tế").fill("Đã hoàn thành bài tập");
     await panel.getByRole("button", { name: "Lưu quan sát" }).click();
@@ -305,6 +314,7 @@ const { chromium } = require("playwright-core");
     await panel
       .getByText("Hoàn thành bài tập · Đã duyệt", { exact: false })
       .waitFor();
+    await t.locator(".online-room__views").getByRole("button", { name: "Chấm bài", exact: true }).click();
     const submissionForm = t.locator("form").filter({ hasText: "answer.pdf" });
     await submissionForm
       .getByLabel("Nhận xét cho answer.pdf")
@@ -325,6 +335,7 @@ const { chromium } = require("playwright-core");
     )
       throw Error("support leaked across submissions");
     await submissionForm.getByRole("button", { name: "Chấm bài" }).click();
+    await t.locator(".online-room__views").getByRole("button", { name: "Tổng kết & duyệt", exact: true }).click();
     await panel.getByLabel("Học sinh").selectOption({ label: "Student One" });
     await panel.getByText("Good work", { exact: false }).waitFor();
     const gradedEvidence = panel
@@ -337,8 +348,10 @@ const { chromium } = require("playwright-core");
     await panel.getByRole("button", { name: "Đóng nguồn" }).click();
     await t.getByRole("button", { name: "Kết thúc", exact: true }).click();
     await t.getByText("public · Đã kết thúc").waitFor();
-    if (!(await tb.getByRole("button", { name: "Thêm nét vẽ" }).isDisabled()))
+    await t.locator(".online-room__views").getByRole("button", { name: "Giảng dạy", exact: true }).click();
+    if (!(await tb.getByRole("button", { name: "Thêm nét vẽ", includeHidden: true }).isDisabled()))
       throw Error("teacher board enabled after end");
+    await t.locator(".online-room__views").getByRole("button", { name: "Tổng kết & duyệt", exact: true }).click();
     await panel.getByRole("button", { name: "Hoàn tất duyệt" }).click();
     await t.getByText("public · Đã hoàn tất duyệt").waitFor();
     t.once("dialog", (d) => d.accept("Quan sát đã sửa"));
@@ -364,7 +377,7 @@ const { chromium } = require("playwright-core");
       tools: { board: true, upload: true, check: true, chat: true },
     });
     await t.goto(origin);
-    await t.getByRole("button", { name: "Soạn buổi học" }).click();
+    await t.getByRole("navigation", { name: "Điều hướng chính" }).getByRole("button", { name: "Soạn buổi học", exact: true }).click();
     await t.getByRole("button", { name: zeroTitle }).click();
     await t.getByRole("button", { name: "Mở phòng học" }).click();
     await t.getByRole("heading", { name: zeroTitle }).waitFor();

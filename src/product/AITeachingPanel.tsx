@@ -70,20 +70,23 @@ export function AITeachingPanel({ sessionId, studentId, activityId, active, requ
     finally { if (mounted.current) setBusy(false); }
   };
   return <section className="ai-panel" aria-label="Copilot hỗ trợ giảng dạy">
-    <h3>Copilot giảng dạy</h3>
-    <p>Gợi ý dành riêng cho giáo viên. Giáo viên kiểm tra nội dung trước khi dùng.</p>
-    <form onSubmit={event => { event.preventDefault(); void generate(); }}>
+    <div className="ai-panel__head">
+      <h3>Copilot giảng dạy</h3>
+      <span className="ai-panel__badge">AI Copilot</span>
+    </div>
+    <p className="ai-panel__desc">Gợi ý dành riêng cho giáo viên. Giáo viên kiểm tra nội dung trước khi dùng.</p>
+    <form className="ai-panel__form" onSubmit={event => { event.preventDefault(); void generate(); }}>
       <label>Cách hỗ trợ<select value={mode} onChange={event => setMode(event.target.value as TeachingRequestMode)} disabled={busy}>
         {Object.entries(modeNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
-      <label>Lưu ý cho Copilot<textarea value={prompt} maxLength={4000} onChange={event => setPrompt(event.target.value)} disabled={busy} /></label>
-      <button disabled={busy || !active || !studentId || !activityId}>{busy ? "Đang xử lý…" : "Lấy gợi ý"}</button>
+      <label>Lưu ý cho Copilot<textarea placeholder="Nhập tình huống hoặc yêu cầu gợi ý…" value={prompt} maxLength={4000} onChange={event => setPrompt(event.target.value)} disabled={busy} /></label>
+      <button className="button primary small" disabled={busy || !active || !studentId || !activityId}>{busy ? "Đang xử lý…" : "Lấy gợi ý"}</button>
     </form>
-    {!activityId && <p>Chọn hoạt động để lấy gợi ý phù hợp.</p>}
-    {!active && <p>Gợi ý trong lớp khả dụng khi buổi học đang chuẩn bị hoặc diễn ra.</p>}
+    {!activityId && <p className="muted">Chọn hoạt động để lấy gợi ý phù hợp.</p>}
+    {!active && <p className="muted">Gợi ý trong lớp khả dụng khi buổi học đang chuẩn bị hoặc diễn ra.</p>}
     {busy && <p role="status">Đang xử lý yêu cầu. Nội dung đang soạn được giữ lại.</p>}
-    {error && <div role="alert"><p>{error}</p><button disabled={busy || !active || !activityId} onClick={() => void generate()}>Thử lại gợi ý</button><button onClick={() => setLoad(value => value + 1)}>Tải lại lịch sử</button></div>}
-    {result && <p role="status">{result}</p>}
+    {error && <div role="alert" className="ai-panel__error"><p>{error}</p><div className="presentation-actions"><button className="button ghost small" disabled={busy || !active || !activityId} onClick={() => void generate()}>Thử lại gợi ý</button><button className="button ghost small" onClick={() => setLoad(value => value + 1)}>Tải lại lịch sử</button></div></div>}
+    {result && <p role="status" className="ai-panel__status">{result}</p>}
     {items.slice(0, 5).map(item => <Suggestion key={item.id} item={item} busy={busy} update={update} />)}
   </section>;
 }
@@ -91,14 +94,14 @@ function Suggestion({ item, busy, update }: { item: AISuggestionItem; busy: bool
   const [text, setText] = useState(item.editedText || item.responseText);
   const [save, setSave] = useState(false);
   return <article className="presentation-suggestion" aria-label="Gợi ý Copilot">
-    <p><strong>{item.provider === "mock" ? "Giả lập local" : "Gemini"}</strong> · {statusNames[item.status]}</p>
+    <p className="presentation-suggestion__meta"><strong>{item.provider === "mock" ? "Giả lập local" : "Gemini"}</strong> · {statusNames[item.status]}</p>
     {item.status === "ready" ? <>
       <label>Nội dung gợi ý có thể chỉnh sửa<textarea value={text} maxLength={4000} onChange={event => setText(event.target.value)} disabled={busy} /></label>
-      <label><input type="checkbox" checked={save} onChange={event => setSave(event.target.checked)} disabled={busy} /> Lưu làm gợi ý giảng dạy</label>
+      <label className="checkbox-line"><input type="checkbox" checked={save} onChange={event => setSave(event.target.checked)} disabled={busy} /> Lưu làm gợi ý giảng dạy</label>
       <div className="presentation-actions">
-        <button disabled={busy || !text.trim()} onClick={() => void update(item, "used", text, save)}>Đã sử dụng</button>
-        <button disabled={busy} onClick={() => void update(item, "ignored", text, false)}>Bỏ qua</button>
-        <button disabled={busy} onClick={() => void update(item, "reported", text, false)}>Báo chưa phù hợp</button>
+        <button className="button primary small" disabled={busy || !text.trim()} onClick={() => void update(item, "used", text, save)}>Đã sử dụng</button>
+        <button className="button ghost small" disabled={busy} onClick={() => void update(item, "ignored", text, false)}>Bỏ qua</button>
+        <button className="button ghost small" disabled={busy} onClick={() => void update(item, "reported", text, false)}>Báo chưa phù hợp</button>
       </div>
     </> : <p>{item.editedText || item.responseText}</p>}
   </article>;
@@ -128,14 +131,17 @@ export function AIClaimDraftPanel({ sessionId, studentId, request, reload }: {
     finally { if (mounted.current) setBusy(false); }
   };
   return <section className="ai-panel" aria-label="Copilot dự thảo nhận định">
-    <h3>Dự thảo từ minh chứng</h3>
-    <p>Copilot chỉ đề xuất nhận định chờ duyệt từ quan sát hiện hành của học sinh được chọn. Gợi ý giảng dạy không được dùng làm quan sát năng lực.</p>
-    <form onSubmit={event => { event.preventDefault(); void generate(); }}>
-      <label>Lưu ý khi dự thảo<textarea value={prompt} maxLength={2000} onChange={event => setPrompt(event.target.value)} disabled={busy} /></label>
-      <button disabled={busy || !studentId}>{busy ? "Đang dự thảo…" : "Dự thảo nhận định bằng Copilot"}</button>
+    <div className="ai-panel__head">
+      <h3>Dự thảo từ minh chứng</h3>
+      <span className="ai-panel__badge">AI Copilot</span>
+    </div>
+    <p className="ai-panel__desc">Copilot chỉ đề xuất nhận định chờ duyệt từ quan sát hiện hành của học sinh được chọn. Gợi ý giảng dạy không được dùng làm quan sát năng lực.</p>
+    <form className="ai-panel__form" onSubmit={event => { event.preventDefault(); void generate(); }}>
+      <label>Lưu ý khi dự thảo<textarea placeholder="Nhập trọng tâm cần Copilot tổng hợp từ minh chứng…" value={prompt} maxLength={2000} onChange={event => setPrompt(event.target.value)} disabled={busy} /></label>
+      <button className="button primary small" disabled={busy || !studentId}>{busy ? "Đang dự thảo…" : "Dự thảo nhận định bằng Copilot"}</button>
     </form>
     {busy && <p role="status">Đang đối chiếu minh chứng; chưa có nhận định nào được tự động duyệt.</p>}
     {error && <p role="alert">{error} Nội dung đang soạn vẫn được giữ; có thể thử lại hoặc tạo nhận định thủ công.</p>}
-    {summary && <p role="status">{summary}</p>}
+    {summary && <p role="status" className="ai-panel__status">{summary}</p>}
   </section>;
 }

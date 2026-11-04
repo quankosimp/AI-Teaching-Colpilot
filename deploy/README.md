@@ -133,6 +133,28 @@ Local mock mode does not pretend that external providers are operational; health
 
 ## 4. Production Deployment Guidelines (Future Real Credentials)
 
+### Optional: real providers while running locally
+
+The demo needs no external provider keys. To add real services to the existing local Docker stack, copy `deploy/local.env.example` to root `.env.local` if that file does not exist. `.env.local` is ignored by Git and excluded from Docker's build context. Enter secrets there; do not edit or commit the example file with real credentials.
+
+Keep `APP_MODE=local_mock`, `NODE_ENV=development`, and `APP_ORIGIN=http://127.0.0.1:4170` for this local HTTP setup. Configure only the services needed:
+
+| Service | Variables |
+|---|---|
+| Gemini | `ENABLE_AI=true`, `GEMINI_API_KEY`, `GEMINI_MODEL` (an available model ID for that key/project) |
+| Zoom Video SDK | `MEDIA_PROVIDER=zoom`, `ZOOM_SDK_KEY`, `ZOOM_SDK_SECRET` (SDK credentials for Video SDK session authorization) |
+| Google sign-in | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI=http://127.0.0.1:4170/` |
+
+For Google, create an OAuth client of type **Web application** and register the exact redirect URI above. The frontend root handles Google's `code`/`state` response, then posts to the API; do not set the redirect URI to the API's POST callback route. Use the same hostname in the browser and `APP_ORIGIN`. Google permits HTTP localhost/loopback redirects for local testing: [Google OAuth documentation](https://developers.google.com/identity/protocols/oauth2/web-server).
+
+`JWT_SECRET` must contain at least 32 characters; the local example already supplies it along with PostgreSQL/MinIO fixture credentials. These are separate from external provider keys. To apply an edited local file, recreate the API with:
+
+```bash
+docker compose --env-file .env.local -f compose.docker.yml up -d api
+```
+
+No image rebuild or volume reset is required for these environment values. Google/Zoom/Gemini real acceptance still requires actually exercising each configured provider; the presence of keys alone is not a passing test.
+
 When a domain name and server are provisioned:
 
 1. **Domain & DNS**: Point your domain `A` and `AAAA` records to your server's public IP.

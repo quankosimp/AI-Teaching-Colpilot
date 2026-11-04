@@ -1,0 +1,25 @@
+{
+  "uiSource": "c2face59bc65b5cb81559a77383b4b5be8e7d029",
+  "baselineUI": "5bdb70d6c1416f70f2e23cba764302cf3d638b94",
+  "apiSource": "af70f23a8cd5987c60ea7dacee523e53168f5741",
+  "origin": "http://127.0.0.1:4170",
+  "gatewayImage": "sha256:b5b08841b7ca7ec9e2001d034036aaf84e57b0677fc1575571f4f3ec996b700e",
+  "apiImage": "sha256:2b2432950359070cc57b2e2a54384565192cd9f629d492731a45fbefb693ef1f",
+  "changedRuntimeServices": [
+    "gateway"
+  ],
+  "databaseReset": false,
+  "regression": {
+    "passed": 80,
+    "failed": 0,
+    "skipped": 6
+  },
+  "productionClassroomBrowser": "PASS: teacher + two independent student contexts",
+  "dockerDoctorExitCode": 0,
+  "realProviders": {
+    "google": "BLOCKED",
+    "zoom": "BLOCKED",
+    "gemini": "BLOCKED"
+  },
+  "acceptanceScope": "UI restoration and local workflows; no G5 or complete P0/NFR acceptance"
+}

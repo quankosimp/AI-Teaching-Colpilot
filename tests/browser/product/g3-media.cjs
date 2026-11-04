@@ -417,7 +417,7 @@ const path = require("node:path");
     // 4a. Teacher loads room
     await teacherPage.goto(origin);
     await teacherPage.getByRole("button", { name: "Demo Hoàng Nam" }).click();
-    await teacherPage.getByRole("button", { name: "Soạn buổi học" }).click();
+    await teacherPage.getByRole("navigation", { name: "Điều hướng chính" }).getByRole("button", { name: "Soạn buổi học", exact: true }).click();
     await teacherPage.getByRole("button", { name: uiSessionTitle }).click();
     await teacherPage.getByRole("button", { name: "Mở phòng học" }).click();
     await teacherPage.getByRole("heading", { name: uiSessionTitle }).waitFor();
@@ -468,8 +468,13 @@ const path = require("node:path");
     await teacherPage.getByText("Chưa có câu hỏi đang mở.").waitFor();
 
     // Switch Activity: Hoạt động 1 -> Hoạt động 2
-    await teacherPage.getByLabel("Hoạt động hiện tại").selectOption({ label: "Hoạt động 2: Thực hành" });
+    await teacherPage.getByRole("navigation", { name: "Lộ trình hoạt động" }).getByRole("button", { name: "Hoạt động 2: Thực hành", exact: true }).click();
     await teacherPage.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Bảng", exact: true }).click();
+
+    // Changing teacher task modes preserves the same media session too.
+    for (const name of ["Chấm bài", "Tổng kết & duyệt", "Giảng dạy"]) {
+      await teacherPage.getByRole("navigation", { name: "Chế độ buổi học" }).getByRole("button", { name, exact: true }).click();
+    }
 
     // Wait for at least one 5-second polling cycle to complete
     await teacherPage.waitForTimeout(5500);
@@ -497,12 +502,16 @@ const path = require("node:path");
     await teacherPage.getByText("🎙️ Bật mic").waitFor();
     await selfTile.locator('.mock-media__tile-status').filter({ hasText: "🔇 Mic tắt" }).waitFor();
 
+    // Stage switches hide the editor without destroying its local draft.
+    const preservedBoardDraft = teacherPage.getByPlaceholder("Nhập bước biến đổi hoặc ghi chú bảng...");
+    await preservedBoardDraft.fill("teacher-draft-survives-stage-tabs");
     // Switch view to document and back to board, verify mute state is preserved
     await teacherPage.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Học liệu", exact: true }).click();
     await teacherPage.getByLabel("Chọn nội dung chung").getByRole("button", { name: "Bảng", exact: true }).click();
     await teacherPage.getByText("🎙️ Bật mic").waitFor();
     await selfTile.locator('.mock-media__tile-status').filter({ hasText: "🔇 Mic tắt" }).waitFor();
-    console.log("  ✓ SG3-02: Mute state preserved across view switches");
+    assert.equal(await preservedBoardDraft.inputValue(), "teacher-draft-survives-stage-tabs");
+    console.log("  ✓ SG3-02: Mute state and board draft preserved across view switches");
 
     // 4g. Test Draft Preservation & Media Cleanup on End Session (SG3-05)
     const boardInput = teacherPage.getByPlaceholder("Nhập bước biến đổi hoặc ghi chú bảng...");
@@ -526,6 +535,8 @@ const path = require("node:path");
     if (mediaContainerChildCount !== 0) {
       throw new Error(`Media container was not emptied on session end! Child count: ${mediaContainerChildCount}`);
     }
+    // Ending takes the teacher to review; return to teaching to inspect the cleaned-up stage.
+    await teacherPage.getByRole("navigation", { name: "Chế độ buổi học" }).getByRole("button", { name: "Giảng dạy", exact: true }).click();
     await teacherPage.getByText("Chưa bắt đầu video").waitFor();
     console.log("  ✓ SG3-05: Board draft strictly preserved and media stage completely cleaned up on session end");
 
