@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -7,7 +7,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Eye,
   FileText,
+  Lightbulb,
+  ListChecks,
+  ShieldCheck,
+  Target,
   List,
   Plus,
   Settings2,
@@ -26,6 +31,9 @@ type Student = {
   subject?: string;
   color?: string;
   initials?: string;
+  goal?: string;
+  gaps?: string[];
+  strengths?: string[];
 };
 type ActivityItem = {
   id?: string;
@@ -105,7 +113,9 @@ export function OnlineOverview({
   onStudents,
   onSession,
   onEvidence,
+  teacherName,
 }: {
+  teacherName?: string;
   students: Student[];
   materialsCount: number;
   sessions: Session[];
@@ -249,41 +259,145 @@ export function OnlineOverview({
         "Học sinh",
     ).join(", ") || "Chưa chọn học sinh";
 
-  const metrics = [
-    {
-      icon: Users,
+  // Buổi nổi bật trên đầu trang: đang diễn ra, rồi buổi sắp tới gần nhất.
+  const nextSession = useMemo(() => {
+    const live = unfinished.find((s) => s.status === "live");
+    if (live) return live;
+    return schedule.find((s) => s.date >= todayKey) || schedule[0] || null;
+  }, [unfinished, schedule, todayKey]);
+  const laterSessions = useMemo(
+    () => schedule.filter((s) => s.id !== nextSession?.id).slice(0, 3),
+    [schedule, nextSession],
+  );
+  const todayCount = sessionsByDate.get(todayKey)?.length || 0;
+  const whenLabel = (s: Session) => {
+    if (s.status === "live") return "Đang diễn ra";
+    if (s.date === todayKey) return "Hôm nay";
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (s.date === toDateKey(tomorrow)) return "Ngày mai";
+    return fullDateLabel(s.date);
+  };
+  const firstName = teacherName?.trim().split(/\s+/).slice(-1)[0];
+  const [showMonth, setShowMonth] = useState(false);
+  const activeStudents = students.filter((s) => s.status === "active");
+  const weekDays = useMemo(() => {
+    const start = new Date();
+    start.setHours(12, 0, 0, 0);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = toDateKey(d);
+      return {
+        key,
+        label: key === todayKey ? "Hôm nay" : WEEKDAYS[i],
+        day: String(d.getDate()).padStart(2, "0"),
+        isToday: key === todayKey,
+        sessions: sessionsByDate.get(key) || [],
+      };
+    });
+  }, [sessionsByDate, todayKey]);
+  // Trên điện thoại, dải tuần cuộn ngang: đưa ngày hôm nay vào tầm nhìn.
+  const weekRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const box = weekRef.current;
+    const today = box?.querySelector<HTMLElement>(".lv-day.is-today");
+    if (box && today && box.scrollWidth > box.clientWidth) box.scrollLeft = today.offsetLeft - 8;
+  }, [weekDays]);
+  const weekCount = weekDays.reduce((n, d) => n + d.sessions.length, 0);
+  const nextStudents = nextSession
+    ? (nextSession.RoomMember_sessionId_items
+        .map((m) => students.find((st) => st.id === m.studentId))
+        .filter(Boolean) as Student[])
+    : [];
+  const gapCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const st of students) {
+      if (st.status !== "active") continue;
+      for (const g of st.gaps || []) {
+        const k = g.trim();
+        if (k) map.set(k, (map.get(k) || 0) + 1);
+      }
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [students]);
+  const gapMax = gapCounts[0]?.[1] || 1;
+  const winStudent = activeStudents.find((st) => st.strengths?.length);
+  const nextFor = (studentId: string) =>
+    schedule.find((x) =>
+      x.RoomMember_sessionId_items.some((m) => m.studentId === studentId),
+    );
+  const shortNames = (x: Session) =>
+    x.RoomMember_sessionId_items
+      .map((m) => students.find((st) => st.id === m.studentId)?.name.trim().split(/\s+/).slice(-1)[0])
+      .filter(Boolean)
+      .join(", ") || "Chưa có HS";
+  const weekTone = (status: string) =>
+    status === "live"
+      ? "mint"
+      : status === "scheduled"
+        ? "sky"
+        : status === "ended"
+          ? "peach"
+          : status === "reviewed"
+            ? "mint"
+            : "violet";
+  const weekState = (status: string) =>
+    status === "live"
+      ? "● Đang dạy"
+      : status === "ended"
+        ? "! Chưa tổng kết"
+        : status === "reviewed"
+          ? "✓ Đã tổng kết"
+          : status === "scheduled"
+            ? "Đã lên lịch"
+            : "Bản nháp";
+  const todos = [
+    ...pending.map((x) => ({
+      key: `p-${x.id}`,
       tone: "violet",
-      title: "Học sinh đang theo dõi",
-      value: students.filter((student) => student.status === "active").length,
-      note: "Hồ sơ có thể dùng cho buổi tiếp theo",
-      click: onStudents,
-    },
-    {
+      icon: Sparkles,
+      title: `Tổng kết buổi “${x.title}”`,
+      note: `${getStudentNames(x)} · ${dateLabel(x.date)}`,
+      action: "Duyệt",
+      run: () => onSession(x.id, "summary"),
+    })),
+    ...unplanned.map((x) => ({
+      key: `u-${x.id}`,
+      tone: "sky",
       icon: CalendarDays,
-      tone: "blue",
-      title: "Buổi chưa hoàn tất",
-      value: unfinished.length,
-      note: "Bản nháp, đã lên lịch và đang diễn ra",
-      click: () => onPlan(),
-    },
-    {
-      icon: BookOpen,
-      tone: "amber",
-      title: "Học liệu của bạn",
-      value: materialsCount,
-      note: "Học liệu riêng tư đã lưu trên máy chủ",
-      click: onMaterials,
-    },
-    {
-      icon: CheckCircle2,
-      tone: "green",
-      title: "Buổi cần tổng kết",
-      value: pending.length,
-      note: "Hoàn tất duyệt trước khi dùng cho hồ sơ",
-      click: () =>
-        pending[0] ? onSession(pending[0].id, "summary") : onPlan(),
-    },
+      title: `Soạn lộ trình “${x.title}”`,
+      note: `${dateLabel(x.date)} · chưa có hoạt động`,
+      action: "Soạn",
+      run: () => onPlan(x.id),
+    })),
+    ...(materialsCount === 0
+      ? [
+          {
+            key: "materials",
+            tone: "sun",
+            icon: BookOpen,
+            title: "Tải học liệu đầu tiên",
+            note: "Để Copilot gợi ý đúng bài cho từng em",
+            action: "Mở",
+            run: onMaterials,
+          },
+        ]
+      : []),
+    ...activeStudents
+      .filter((st) => !st.goal?.trim())
+      .map((st) => ({
+        key: `g-${st.id}`,
+        tone: "mint",
+        icon: Target,
+        title: `Thêm mục tiêu cho ${st.name.split(/\s+/).slice(-1)[0]}`,
+        note: `${st.subject || "Hồ sơ"} · còn thiếu mục tiêu`,
+        action: "Mở",
+        run: onStudents,
+      })),
   ];
+
 
   return (
     <div className="restored-dashboard">
@@ -297,9 +411,24 @@ export function OnlineOverview({
               year: "numeric",
             })}
           </div>
-          <h1>Không gian dạy học của bạn</h1>
+          <h1>
+            {firstName ? `Chào ${firstName}` : "Chào bạn"}{" "}
+            <span aria-hidden="true">👋</span>
+          </h1>
           <p>
-            Chuẩn bị, đánh giá và theo dõi học sinh trong một luồng làm việc.
+            {todayCount || pending.length ? (
+              <>
+                Hôm nay có <b>{todayCount} buổi</b>
+                {pending.length ? (
+                  <>
+                    {" "}và <b>{pending.length} buổi</b> đang chờ tổng kết
+                  </>
+                ) : null}
+                .
+              </>
+            ) : (
+              "Chuẩn bị, đánh giá và theo dõi học sinh trong một luồng làm việc."
+            )}
           </p>
         </div>
         <button className="button primary" onClick={() => onPlan()}>
@@ -307,24 +436,285 @@ export function OnlineOverview({
           Soạn buổi học
         </button>
       </div>
-      <div className="metric-grid">
-        {metrics.map((metric) => (
-          <button
-            key={metric.title}
-            className="metric-card"
-            onClick={metric.click}
-          >
-            <span className={`metric-icon tone-${metric.tone}`}>
-              <metric.icon size={21} />
+      <div className="lv-tq">
+        <div className="lv-col">
+      {nextSession ? (
+        <section className="lv-next" aria-label="Buổi tiếp theo">
+          <span className="lv-blob lv-blob--1" aria-hidden="true" />
+          <span className="lv-blob lv-blob--2" aria-hidden="true" />
+          <div className="lv-next__main">
+            <span className="lv-next__eyebrow">
+              <span
+                className={`lv-dot${nextSession.status === "live" ? " is-live" : ""}`}
+                aria-hidden="true"
+              />
+              Buổi tiếp theo · {whenLabel(nextSession)}
             </span>
-            <span>{metric.title}</span>
-            <strong>{metric.value}</strong>
-            <small>{metric.note}</small>
-          </button>
-        ))}
+            <h2>
+              {nextSession.time} · {nextSession.title}
+            </h2>
+            <p className="lv-next__meta">
+              {getStudentNames(nextSession)} · {nextSession.duration} phút
+            </p>
+            <div className="lv-next__prep">
+              <span
+                className={`lv-prep-icon${nextSession.Activity_sessionId_items.length ? " is-ready" : ""}`}
+                aria-hidden="true"
+              >
+                {nextSession.Activity_sessionId_items.length ? (
+                  <CheckCircle2 size={20} />
+                ) : (
+                  <Clock3 size={20} />
+                )}
+              </span>
+              <span>
+                <b>
+                  {nextSession.Activity_sessionId_items.length
+                    ? `Đã chuẩn bị ${nextSession.Activity_sessionId_items.length} hoạt động`
+                    : "Chưa có hoạt động nào"}
+                </b>
+                <small>
+                  {nextSession.Activity_sessionId_items.length
+                    ? "Lộ trình sẵn sàng cho buổi dạy"
+                    : "Thêm lộ trình để Copilot gợi ý trong buổi"}
+                </small>
+              </span>
+              <Status tone={statusTone(nextSession.status)}>
+                {statusLabel(nextSession.status)}
+              </Status>
+            </div>
+            <div className="lv-next__actions">
+              <button
+                className="button primary"
+                onClick={() => onSession(nextSession.id, "teach")}
+              >
+                <Video size={17} />
+                Vào phòng dạy
+              </button>
+              <button
+                className="button ghost"
+                onClick={() => onPlan(nextSession.id)}
+              >
+                Xem lộ trình
+              </button>
+            </div>
+          </div>
+          <div className="lv-next__side lv-watch">
+            <h3>
+              <Eye size={17} aria-hidden="true" />
+              Cần chú ý trong buổi này
+            </h3>
+            {nextStudents.length ? (
+              nextStudents.map((st) => (
+                <div className="lv-watch__row" key={st.id}>
+                  <span
+                    className={`avatar avatar-sm avatar-${st.color || "violet"}`}
+                  >
+                    {st.initials || initials(st.name)}
+                  </span>
+                  <div>
+                    <b>{st.name}</b>{" "}
+                    {st.gaps?.length ? (
+                      <>
+                        cần củng cố <mark>{st.gaps[0]}</mark>
+                      </>
+                    ) : (
+                      <span className="lv-muted">chưa có ghi chú cần chú ý</span>
+                    )}
+                  </div>
+                  {(st.gaps?.length || 0) > 1 && (
+                    <span className="lv-count">+{(st.gaps?.length || 0) - 1}</span>
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="lv-next__empty-text">
+                Buổi này chưa có học sinh. Mời học sinh để Copilot nhắc riêng từng em.
+              </p>
+            )}
+            <p className="lv-watch__src">
+              <ShieldCheck size={14} aria-hidden="true" />
+              Lấy từ hồ sơ học sinh bạn đã duyệt
+            </p>
+          </div>
+        </section>
+      ) : null}
+          <section className="card lv-week">
+            <div className="lv-card-h">
+              <span className="lv-ib lv-t-sky"><CalendarDays size={18} /></span>
+              <h2>Tuần này</h2>
+              <span className="lv-meta">{weekCount} buổi</span>
+              <button
+                className="text-button lv-card-h__r"
+                aria-expanded={showMonth}
+                aria-controls="lv-month"
+                onClick={() => setShowMonth((v) => !v)}
+              >
+                {showMonth ? "Ẩn lịch tháng" : "Mở lịch tháng"} <ChevronRight size={14} />
+              </button>
+            </div>
+            <div className="lv-week__days" ref={weekRef}>
+              {weekDays.map((d) => (
+                <div className={`lv-day${d.isToday ? " is-today" : ""}`} key={d.key}>
+                  <div className="lv-day__n">
+                    {d.label}
+                    <b>{d.day}</b>
+                  </div>
+                  {d.sessions.length ? (
+                    d.sessions.map((x) => (
+                      <button
+                        key={x.id}
+                        className={`lv-ses lv-t-${weekTone(x.status)}${x.status === "ended" ? " is-warn" : ""}`}
+                        onClick={() => setDetailSessionId(x.id)}
+                      >
+                        <b>{x.time}</b>
+                        <span className="lv-ses__t">{x.title}</span>
+                        <span className="lv-ses__s">{shortNames(x)}</span>
+                        <span className="lv-ses__st">{weekState(x.status)}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <span className="lv-day__none">Trống</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+          <div className="lv-two">
+            <section className="card">
+              <div className="lv-card-h">
+                <span className="lv-ib lv-t-pink"><Target size={18} /></span>
+                <h2>Điểm các em cần củng cố</h2>
+              </div>
+              {gapCounts.length ? (
+                <>
+                  {gapCounts.map(([gap, n], i) => (
+                    <div className="lv-er" key={gap}>
+                      <span title={gap}>{gap}</span>
+                      <div className="lv-bar">
+                        <i
+                          className={`lv-bar--${i % 4}`}
+                          style={{ width: `${Math.max(12, (n / gapMax) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="lv-er__c">{n}</span>
+                    </div>
+                  ))}
+                  <div className="lv-idea">
+                    <Lightbulb size={17} aria-hidden="true" />
+                    <div>
+                      Dành vài phút đầu buổi tới cho <b>{gapCounts[0][0]}</b>.
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="lv-empty">
+                  <p>Khi bạn ghi điểm cần củng cố vào hồ sơ, chúng sẽ được gom ở đây.</p>
+                  <button className="button ghost small" onClick={onStudents}>
+                    Mở hồ sơ học sinh
+                  </button>
+                </div>
+              )}
+            </section>
+            <section className="card">
+              <div className="lv-card-h">
+                <span className="lv-ib lv-t-violet"><Users size={18} /></span>
+                <h2>Học sinh</h2>
+                <span className="lv-meta">{activeStudents.length} em</span>
+                <button className="text-button lv-card-h__r" onClick={onStudents}>
+                  Tất cả <ChevronRight size={14} />
+                </button>
+              </div>
+              {winStudent && (
+                <div className="lv-win">
+                  <span aria-hidden="true">🎉</span>
+                  <div>
+                    <b>{winStudent.name}</b> đã vững{" "}
+                    <b>{winStudent.strengths?.[0]}</b>
+                  </div>
+                </div>
+              )}
+              {activeStudents.length ? (
+                activeStudents.slice(0, 5).map((st) => {
+                  const nx = nextFor(st.id);
+                  return (
+                    <button className="lv-sr" key={st.id} onClick={onStudents}>
+                      <span
+                        className={`avatar avatar-md avatar-${st.color || "violet"}`}
+                      >
+                        {st.initials || initials(st.name)}
+                      </span>
+                      <span className="lv-sr__copy">
+                        <strong>{st.name}</strong>
+                        <small>
+                          {[st.subject, st.grade].filter(Boolean).join(" · ")}
+                          {nx ? ` · buổi tới: ${dateLabel(nx.date)}` : ""}
+                        </small>
+                      </span>
+                      <span className={`lv-pill${st.gaps?.length ? " is-warn" : ""}`}>
+                        {st.gaps?.length ? `${st.gaps.length} điểm cần củng cố` : "Ổn định"}
+                      </span>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="lv-empty">
+                  <p>Chưa có học sinh nào.</p>
+                  <button className="button ghost small" onClick={onStudents}>
+                    Thêm học sinh
+                  </button>
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+        <aside className="lv-side">
+          <section className="card lv-todo">
+            <div className="lv-card-h">
+              <span className="lv-ib lv-t-mint"><ListChecks size={18} /></span>
+              <h2>Việc cần làm</h2>
+              {todos.length > 0 && <span className="lv-badge">{todos.length}</span>}
+              <span className="lv-meta lv-card-h__r">gấp trước</span>
+            </div>
+            {todos.length ? (
+              todos.slice(0, 8).map((t) => (
+                <div className="lv-td" key={t.key}>
+                  <span className={`lv-ib lv-t-${t.tone}`}>
+                    <t.icon size={17} />
+                  </span>
+                  <div>
+                    <div className="lv-td__t">{t.title}</div>
+                    <div className="lv-td__d">{t.note}</div>
+                  </div>
+                  <button className="button ghost small" onClick={t.run}>
+                    {t.action}
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="lv-empty">
+                <p>Không còn việc nào. Nghỉ ngơi chút nhé ☕</p>
+              </div>
+            )}
+            <p className="lv-foot">Xong hết là hồ sơ các em luôn mới nhất trước buổi sau ✨</p>
+          </section>
+          <section className="hint-card lv-tip">
+            <div className="eyebrow">
+              <Lightbulb size={16} />
+              MẸO NHỎ
+            </div>
+            <h3>Duyệt ngay sau buổi học</h3>
+            <p>Nhận định được duyệt sớm thì gợi ý cho buổi sau sẽ trúng hơn.</p>
+            {pending[0] && (
+              <button className="button" onClick={() => onSession(pending[0].id, "summary")}>
+                Tổng kết buổi gần nhất <ArrowRight size={15} />
+              </button>
+            )}
+          </section>
+        </aside>
       </div>
-      <div className="dashboard-grid">
-        <section className="card schedule-calendar-card">
+      {showMonth && (
+        <section className="card schedule-calendar-card" id="lv-month">
           <div className="section-head schedule-card-head">
             <div>
               <h2>Lịch dạy cần theo dõi</h2>
@@ -624,55 +1014,7 @@ export function OnlineOverview({
             </div>
           )}
         </section>
-        <div className="dashboard-side">
-          <section className="card">
-            <h2>Việc cần xử lý</h2>
-            <div className="task-list">
-              <button
-                onClick={() =>
-                  pending[0] ? onSession(pending[0].id, "summary") : onPlan()
-                }
-              >
-                <CheckCircle2 size={20} />
-                <span>
-                  <strong>
-                    {pending.length
-                      ? `${pending.length} buổi cần tổng kết`
-                      : "Chưa có buổi chờ tổng kết"}
-                  </strong>
-                  <small>Kiểm tra minh chứng và duyệt nhận định</small>
-                </span>
-                <ArrowRight size={15} />
-              </button>
-              <button onClick={() => onPlan()}>
-                <CalendarDays size={20} />
-                <span>
-                  <strong>
-                    {unplanned.length
-                      ? `${unplanned.length} bản nháp cần chuẩn bị`
-                      : "Chuẩn bị buổi học tiếp theo"}
-                  </strong>
-                  <small>Sắp xếp mục tiêu và hoạt động trước khi dạy</small>
-                </span>
-                <ArrowRight size={15} />
-              </button>
-            </div>
-          </section>
-          <section className="hint-card">
-            <div className="eyebrow">
-              <Sparkles size={16} />
-              GỢI Ý CHO BUỔI TIẾP THEO
-            </div>
-            <h3>Dạy tiếp từ điều đã biết</h3>
-            <p>
-              Dùng lại minh chứng đã duyệt để chọn học liệu phù hợp cho từng em.
-            </p>
-            <button className="button" onClick={onMaterials}>
-              Xem học liệu <ArrowRight size={15} />
-            </button>
-          </section>
-        </div>
-      </div>
+      )}
       <section className="card">
         <div className="section-head">
           <div>

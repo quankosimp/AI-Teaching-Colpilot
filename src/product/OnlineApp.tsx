@@ -799,6 +799,7 @@ export default function OnlineApp() {
         <>
           {page === "dashboard" && (
             <OnlineOverview
+              teacherName={teacher?.name}
               students={students}
               materialsCount={materials.length}
               sessions={sessions}

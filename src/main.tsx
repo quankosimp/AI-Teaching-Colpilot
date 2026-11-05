@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import OnlineApp from "./product/OnlineApp.tsx";
 import { StudentEntry, hasStudentRoom } from "./product/LiveRoom.tsx";
 import "./index.css";
+import "./product/lively.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
