@@ -1,9 +1,11 @@
 import "@zoom/videosdk-ui-toolkit/dist/videosdk-ui-toolkit.css";
-import type { UIToolkit } from "@zoom/videosdk-ui-toolkit";
+import type { SuspensionViewValue, UIToolkit } from "@zoom/videosdk-ui-toolkit";
 import type { MediaParticipant, MediaSessionConfig, MediaSessionHandle, MediaSessionStatus } from "./types";
 
 type Toolkit = Pick<UIToolkit, "joinSession" | "leaveSession" | "destroy" | "onSessionJoined" | "offSessionJoined" | "onSessionClosed" | "offSessionClosed" | "on" | "off" | "getAllUser" | "getCurrentUserInfo">;
 type Participant = ReturnType<Toolkit["getAllUser"]>[number];
+// Toolkit view modes are a runtime enum; pass the string values without importing the bundle eagerly.
+const view = (mode: "gallery" | "speaker") => mode as unknown as SuspensionViewValue;
 
 export async function createZoomSession(
   container: HTMLElement,
@@ -96,9 +98,12 @@ export async function createZoomSession(
     const joining = toolkit.joinSession(container, {
       videoSDKJWT: config.token, sessionName: config.topic, userName: config.userName,
       featuresOptions: {
-        preview: { enable: true }, video: { enable: true }, audio: { enable: true },
+        // The app has its own lobby, so skip the toolkit preview and join the call directly.
+        preview: { enable: false }, video: { enable: true }, audio: { enable: true },
         share: { enable: true }, footer: { enable: true }, settings: { enable: true },
         users: { enable: true }, chat: { enable: false, enableEmoji: false }, leave: { enable: false },
+        // The toolkit header only shows the raw session id; the app top bar already names the class.
+        header: { enable: false }, viewMode: { enable: true, defaultViewMode: view("gallery"), viewModes: [view("gallery"), view("speaker")] },
       },
     });
     initialized = true;

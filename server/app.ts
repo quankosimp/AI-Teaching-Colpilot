@@ -5,8 +5,10 @@ import cookieParser from "cookie-parser";
 import { requestId, originGuard, fail, db, type AppConfig } from "./context.js";
 import { attachClassroomRealtime } from "./realtime.js";
 import { aiRouter } from "./routes/ai.js";
+import { activeAIProvider, isAIConfigured } from "./ai/index.js";
 import { authRouter } from "./routes/auth.js";
 import { classroomRouter } from "./routes/classroom.js";
+import { classesRouter } from "./routes/classes.js";
 import { materialsRouter, storage } from "./routes/materials.js";
 import { reviewRouter } from "./routes/review.js";
 import { teacherRouter } from "./routes/teacher.js";
@@ -51,9 +53,8 @@ export function createApp(config?: AppConfig) {
               : null,
           ai: {
             enabled: process.env.ENABLE_AI === "true",
-            configured: !!(
-              process.env.GEMINI_API_KEY && process.env.GEMINI_MODEL
-            ),
+            configured: isAIConfigured(),
+            provider: activeAIProvider(),
             probe: "not_run",
           },
           video: {
@@ -67,6 +68,7 @@ export function createApp(config?: AppConfig) {
     });
     app.use("/api/v1/auth", authRouter(config));
     app.use("/api/v1", classroomRouter(config));
+    app.use("/api/v1", classesRouter(config));
     app.use("/api/v1", reviewRouter(config));
     app.use("/api/v1", teacherRouter(config));
     app.use("/api/v1", materialsRouter(config));

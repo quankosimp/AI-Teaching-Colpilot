@@ -72,7 +72,7 @@ const versionHeader = (req: Request) => {
   return Number.isInteger(value) && value > 0 ? value : -1;
 };
 
-async function signStudentAccess(
+export async function signStudentAccess(
   config: AppConfig,
   input: {
     studentId: string;
@@ -1423,9 +1423,14 @@ export function classroomRouter(config: AppConfig) {
             where: { sessionId: current.id, status: "open" },
             data: { status: "closed", closedAt: now },
           });
+          // Keep the real leave time of students who left early: attendance reads it.
+          await tx.roomMember.updateMany({
+            where: { sessionId: current.id, leftAt: null },
+            data: { leftAt: now },
+          });
           await tx.roomMember.updateMany({
             where: { sessionId: current.id },
-            data: { state: "left", leftAt: now, handRaised: false },
+            data: { state: "left", handRaised: false },
           });
           await tx.roomReaction.deleteMany({
             where: { sessionId: current.id },

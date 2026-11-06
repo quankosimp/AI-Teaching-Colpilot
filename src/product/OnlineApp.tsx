@@ -36,7 +36,10 @@ import {
   Sparkles,
   Users,
   Video,
+  ChevronLeft,
 } from "lucide-react";
+import { ClassesPage } from "./Classes";
+import { SessionsPage } from "./Sessions";
 import { LiveRoom } from "./LiveRoom";
 import { MaterialViewer } from "./MaterialViewer";
 import "./product.css";
@@ -90,6 +93,8 @@ type Session = {
   sharedGoal: string;
   status: string;
   version: number;
+  groupId?: string | null;
+  groupName?: string | null;
   Activity_sessionId_items: Activity[];
   RoomMember_sessionId_items: { studentId: string }[];
 };
@@ -114,6 +119,8 @@ type Annotation = {
 };
 type Page =
   | "dashboard"
+  | "classes"
+  | "sessions"
   | "students"
   | "student"
   | "materials"
@@ -124,6 +131,8 @@ type Page =
   | "account";
 const pageNames: Record<Page, string> = {
   dashboard: "Tổng quan",
+  classes: "Lớp",
+  sessions: "Buổi học",
   students: "Học sinh",
   student: "Hồ sơ học sinh",
   materials: "Kho học liệu",
@@ -133,9 +142,15 @@ const pageNames: Record<Page, string> = {
   summary: "Tổng kết & duyệt",
   account: "Tài khoản",
 };
-const navItems: OnlineNavItem[] = Object.entries(pageNames)
-  .filter(([id]) => id !== "student")
-  .map(([id, label]) => ({ id, label, icon: id as OnlineNavItem["icon"] }));
+// Soạn, dạy, chấm và tổng kết đều đi từ một mục "Buổi học".
+const navItems: OnlineNavItem[] = (
+  ["dashboard", "classes", "sessions", "students", "materials", "account"] as const
+).map((id) => ({
+  id,
+  label: pageNames[id],
+  icon: (id === "sessions" ? "plans" : id) as OnlineNavItem["icon"],
+}));
+const sessionPages: Page[] = ["sessions", "plans", "live", "grading", "summary"];
 const message = (e: unknown): Feedback =>
   e instanceof ApiError
     ? e.failure
@@ -187,7 +202,7 @@ export default function OnlineApp() {
   const [suggestion, setSuggestion] = useState<{
     id: string;
     text: string;
-    provider?: "gemini" | "mock";
+    provider?: "openai" | "gemini" | "mock";
     sources: { claimId: string; revision: number; evidenceIds: string[] }[];
   } | null>(null);
   const [editingSuggestion, setEditingSuggestion] = useState(false);
@@ -534,6 +549,7 @@ export default function OnlineApp() {
       setModal(null);
       await reload();
       setSelectedSession(created.session.id);
+      setPage("plans");
     });
   };
   const saveActivities = async (items: Activity[]) => {
@@ -781,7 +797,7 @@ export default function OnlineApp() {
     );
   return (
     <OnlineShell
-      page={page}
+      page={sessionPages.includes(page) ? "sessions" : page}
       title={pageNames[page]}
       teacher={teacher}
       theme={theme ? "dark" : "light"}
@@ -813,6 +829,35 @@ export default function OnlineApp() {
               onStudents={() => navigate("students")}
               onSession={openRoom}
               onEvidence={openSource}
+            />
+          )}
+          {page === "sessions" && (
+            <SessionsPage
+              sessions={sessions}
+              students={students}
+              onOpen={(id, view) => openRoom(id, view)}
+              onEdit={(id) => {
+                setSelectedSession(id);
+                navigate("plans");
+              }}
+              onCreate={() => {
+                setTitle("");
+                setModal("session");
+              }}
+            />
+          )}
+          {page === "classes" && (
+            <ClassesPage
+              students={students}
+              onChanged={reload}
+              onOpenSession={(id) => {
+                const found = sessions.find((item) => item.id === id);
+                if (found?.status === "live") openRoom(id);
+                else {
+                  setSelectedSession(id);
+                  navigate("plans");
+                }
+              }}
             />
           )}
           {page === "students" && (
@@ -1339,6 +1384,13 @@ export default function OnlineApp() {
             <>
               <div className="restored-page-title">
                 <div>
+                  <button
+                    type="button"
+                    className="text-button restored-back"
+                    onClick={() => navigate("sessions")}
+                  >
+                    <ChevronLeft size={16} /> Buổi học
+                  </button>
                   <h1>Soạn buổi học</h1>
                   <p>
                     Từ mục tiêu của học sinh đến một mạch hoạt động rõ ràng.
@@ -1561,7 +1613,7 @@ export default function OnlineApp() {
                                   suggestion: {
                                     id: string;
                                     text: string;
-                                    provider?: "gemini" | "mock";
+                                    provider?: "openai" | "gemini" | "mock";
                                     sources: {
                                       claimId: string;
                                       revision: number;
@@ -1605,7 +1657,9 @@ export default function OnlineApp() {
                             <Sparkles size={14} />
                             {suggestion.provider === "mock"
                               ? "Giả lập local"
-                              : suggestion.provider === "gemini"
+                              : suggestion.provider === "openai"
+                                ? "OpenAI"
+                                : suggestion.provider === "gemini"
                                 ? "Gemini"
                                 : "Gợi ý đã lưu"}{" "}
                             · Giáo viên kiểm tra nguồn trước khi dùng.
@@ -2046,7 +2100,7 @@ export default function OnlineApp() {
                 }
                 onExit={() => {
                   setRoomSession("");
-                  setPage("plans");
+                  setPage("sessions");
                 }}
               />
             ) : (

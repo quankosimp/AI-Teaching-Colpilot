@@ -274,7 +274,7 @@ export function aiRouter(config: AppConfig) {
             "AI_UNAVAILABLE",
             errorMsg.startsWith("AI_")
               ? errorMsg
-              : "Gemini tạm không khả dụng; giáo viên có thể tiếp tục ghi chú thủ công",
+              : "Dịch vụ AI tạm không khả dụng; giáo viên có thể tiếp tục ghi chú thủ công",
           );
         }
 
@@ -736,7 +736,7 @@ export function aiRouter(config: AppConfig) {
             "AI_UNAVAILABLE",
             errorMsg.startsWith("AI_")
               ? errorMsg
-              : "Gemini tạm không khả dụng; giáo viên có thể tạo nhận định thủ công",
+              : "Dịch vụ AI tạm không khả dụng; giáo viên có thể tạo nhận định thủ công",
           );
         }
 
@@ -1093,7 +1093,7 @@ export function aiRouter(config: AppConfig) {
             "AI_UNAVAILABLE",
             errorMsg.startsWith("AI_")
               ? errorMsg
-              : "Gemini tạm không khả dụng; có thể chuẩn bị giáo án thủ công",
+              : "Dịch vụ AI tạm không khả dụng; có thể chuẩn bị giáo án thủ công",
           );
         }
 

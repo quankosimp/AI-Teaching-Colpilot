@@ -14,6 +14,10 @@ interface MediaHostProps {
   request: <T>(path: string, init?: RequestInit) => Promise<T>;
   onError?: (error: string) => void;
   onStatusChange?: (description: string) => void;
+  /** Called whenever the provider reports a roster change (used to follow screen sharing). */
+  onParticipantsChange?: (participants: MediaParticipant[]) => void;
+  /** "stage": video fills its container, without the status header and help text. */
+  variant?: "panel" | "stage";
 }
 
 export function MediaHost(props: MediaHostProps) {
@@ -75,7 +79,9 @@ export function MediaHost(props: MediaHostProps) {
       };
       const sync = () => {
         if (signal.aborted) return;
-        setParticipants(handle.getParticipants()); setActiveSpeakerId(handle.getActiveSpeakerId());
+        const roster = handle.getParticipants();
+        setParticipants(roster); setActiveSpeakerId(handle.getActiveSpeakerId());
+        propsRef.current.onParticipantsChange?.(roster);
         setIsMuted(handle.isAudioMuted()); setIsVideoOn(handle.isVideoOn()); setIsSharing(handle.isScreenSharing());
         setPermissions(handle.getDevicePermissions());
       };
@@ -128,13 +134,15 @@ export function MediaHost(props: MediaHostProps) {
   };
   const activeSpeaker = participants.find((participant) => participant.id === activeSpeakerId);
 
+  const stage = props.variant === "stage";
   return (
     <section
-      className="online-room__media"
+      className={`online-room__media${stage ? " online-room__media--stage" : ""}`}
       aria-label="Khu vực video lớp học"
       data-testid="online-room-media"
+      data-status={status}
     >
-      <div className="online-room__media-header">
+      {!stage && <div className="online-room__media-header">
         <div>
           <span
             className={`online-room__media-status online-room__media-status--${status}`}
@@ -164,7 +172,7 @@ export function MediaHost(props: MediaHostProps) {
             Thành viên video: {participants.length}
           </span>
         )}
-      </div>
+      </div>}
 
       {permissionAlert && (
         <div
@@ -203,7 +211,7 @@ export function MediaHost(props: MediaHostProps) {
         </div>
       )}
 
-      {provider === "zoom" && isLive && (
+      {!stage && provider === "zoom" && isLive && (
         <p>Điều khiển mic, camera và chia sẻ trong thanh Zoom. Nếu trình duyệt chặn thiết bị, mở quyền của trang rồi thử lại; học liệu và bản nháp vẫn dùng được.</p>
       )}
       {/* Persistent DOM container stays mounted */}

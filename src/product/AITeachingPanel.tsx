@@ -94,7 +94,7 @@ function Suggestion({ item, busy, update }: { item: AISuggestionItem; busy: bool
   const [text, setText] = useState(item.editedText || item.responseText);
   const [save, setSave] = useState(false);
   return <article className="presentation-suggestion" aria-label="Gợi ý Copilot">
-    <p className="presentation-suggestion__meta"><strong>{item.provider === "mock" ? "Giả lập local" : "Gemini"}</strong> · {statusNames[item.status]}</p>
+    <p className="presentation-suggestion__meta"><strong>{item.provider === "mock" ? "Giả lập local" : item.provider === "openai" ? "OpenAI" : "Gemini"}</strong> · {statusNames[item.status]}</p>
     {item.status === "ready" ? <>
       <label>Nội dung gợi ý có thể chỉnh sửa<textarea value={text} maxLength={4000} onChange={event => setText(event.target.value)} disabled={busy} /></label>
       <label className="checkbox-line"><input type="checkbox" checked={save} onChange={event => setSave(event.target.checked)} disabled={busy} /> Lưu làm gợi ý giảng dạy</label>

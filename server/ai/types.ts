@@ -23,7 +23,7 @@ export interface TeachingRequestInput {
 
 export interface TeachingSuggestionResult {
   text: string;
-  provider: "gemini" | "mock";
+  provider: "openai" | "gemini" | "mock";
   model: string;
   modelVersion: string;
   contextSummary: string;
@@ -63,7 +63,7 @@ export interface ClaimDraftCandidate {
 export interface ClaimDraftResult {
   claims: ClaimDraftCandidate[];
   summary: string;
-  provider: "gemini" | "mock";
+  provider: "openai" | "gemini" | "mock";
   model: string;
   modelVersion: string;
   contextSummary: string;
@@ -82,7 +82,7 @@ export interface PlanSuggestionInput {
 
 export interface PlanSuggestionResult {
   text: string;
-  provider: "gemini" | "mock";
+  provider: "openai" | "gemini" | "mock";
   model: string;
   modelVersion: string;
   contextSummary: string;
@@ -93,7 +93,7 @@ export interface PlanSuggestionResult {
 export interface CircuitStatus {
   enabled: boolean;
   configured: boolean;
-  provider: "gemini" | "mock";
+  provider: "openai" | "gemini" | "mock";
   model: string;
   circuitOpen: boolean;
   consecutiveFailures: number;

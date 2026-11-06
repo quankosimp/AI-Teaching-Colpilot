@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import "./online-restoration.css";
 
-export type OnlineNavIcon = "dashboard" | "students" | "materials" | "plan" | "plans" | "grading" | "live" | "summary" | "account";
+export type OnlineNavIcon = "dashboard" | "classes" | "students" | "materials" | "plan" | "plans" | "grading" | "live" | "summary" | "account";
 export type OnlineNavItem = { id: string; label: string; icon?: OnlineNavIcon; badge?: number };
 export type OnlineShellProps = {
   page: string;
@@ -23,7 +23,7 @@ export type OnlineShellProps = {
   children: ReactNode;
 };
 const icons: Record<OnlineNavIcon, LucideIcon> = {
-  dashboard: LayoutDashboard, students: Users, materials: LibraryBig,
+  dashboard: LayoutDashboard, classes: GraduationCap, students: Users, materials: LibraryBig,
   plan: CalendarDays, plans: CalendarDays, grading: ClipboardCheck,
   live: Video, summary: CheckCircle2, account: Settings2,
 };
