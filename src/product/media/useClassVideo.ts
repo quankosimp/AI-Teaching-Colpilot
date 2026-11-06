@@ -70,6 +70,9 @@ export function useClassVideo(opts: {
   optsRef.current = opts;
   const client = useRef<Client | null>(null);
   const stream = useRef<Stream | null>(null);
+  // Tăng mỗi khi có (hoặc mất) luồng media. Zoom có thể báo người đang chia sẻ / bật camera
+  // ngay trong lúc join, trước khi có luồng: các khung hình phải gắn lại khi luồng sẵn sàng.
+  const [streamEpoch, setStreamEpoch] = useState(0);
   const shareEl = useRef<HTMLVideoElement | HTMLCanvasElement | null>(null);
   const [provider, setProvider] = useState<ClassVideo["provider"]>("none");
   const [status, setStatus] = useState<ClassVideoStatus>("idle");
@@ -174,6 +177,7 @@ export function useClassVideo(opts: {
       }
       const s = c.getMediaStream();
       stream.current = s;
+      setStreamEpoch((n) => n + 1);
       setUsesVideo(s.isStartShareScreenWithVideoElement());
       setStatus("connected");
       sync();
@@ -200,6 +204,7 @@ export function useClassVideo(opts: {
       const c = client.current;
       client.current = null;
       stream.current = null;
+      setStreamEpoch((n) => n + 1);
       setAudioJoined(false);
       setSharingSelf(false);
       setShareUserId(null);
@@ -263,19 +268,24 @@ export function useClassVideo(opts: {
     const s = stream.current;
     if (!s || userId < 0) return;
     void import("@zoom/videosdk").then(({ VideoQuality }) => s.attachVideo(userId, VideoQuality.Video_360P, el)).catch(() => {});
-  }, []);
+  }, [streamEpoch]);
   const detachVideo = useCallback((userId: number, el: VideoPlayer) => {
     const s = stream.current;
     if (s && userId > 0) void Promise.resolve(s.detachVideo(userId, el)).catch(() => {});
-  }, []);
+  }, [streamEpoch]);
   const attachShare = useCallback((userId: number, el: VideoPlayer) => {
     const s = stream.current;
-    if (s) void Promise.resolve(s.attachShareView(userId, el)).catch(() => {});
-  }, []);
+    if (!s) return;
+    // attachShareView báo lỗi bằng giá trị trả về (ExecutedFailure), không ném lỗi.
+    void Promise.resolve(s.attachShareView(userId, el)).then(
+      (r) => { if (!(r instanceof HTMLElement)) console.warn("Không hiện được màn hình chia sẻ", r); },
+      (e) => console.warn("Không hiện được màn hình chia sẻ", e),
+    );
+  }, [streamEpoch]);
   const detachShare = useCallback((userId: number, el: VideoPlayer) => {
     const s = stream.current;
     if (s) void Promise.resolve(s.detachShareView(userId, el)).catch(() => {});
-  }, []);
+  }, [streamEpoch]);
   const selfShareTarget = useCallback((el: HTMLVideoElement | HTMLCanvasElement | null) => {
     shareEl.current = el;
   }, []);
