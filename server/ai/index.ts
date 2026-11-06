@@ -1,16 +1,35 @@
 import type { AIAdapter, CircuitStatus } from "./types.js";
 import { FakeAIAdapter } from "./fakeAdapter.js";
 import { RealGeminiAdapter } from "./geminiAdapter.js";
+import { RealOpenAIAdapter } from "./openaiAdapter.js";
 
 export * from "./types.js";
 export * from "./sanitizer.js";
 export * from "./circuitBreaker.js";
 export { FakeAIAdapter } from "./fakeAdapter.js";
 export { RealGeminiAdapter } from "./geminiAdapter.js";
+export { RealOpenAIAdapter } from "./openaiAdapter.js";
 
 let testAdapterOverride: AIAdapter | null = null;
 let defaultFakeAdapter: FakeAIAdapter | null = null;
-let defaultRealAdapter: RealGeminiAdapter | null = null;
+let defaultRealAdapter: RealGeminiAdapter | RealOpenAIAdapter | null = null;
+
+type RealProvider = "openai" | "gemini";
+/** Nhà cung cấp AI thật đang cấu hình. AI_PROVIDER chọn rõ; nếu không, có khoá OpenAI thì dùng OpenAI. */
+export function activeAIProvider(): RealProvider | null {
+  const wanted = (process.env.AI_PROVIDER || "").trim().toLowerCase();
+  const openai = !!(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL);
+  const gemini = !!(process.env.GEMINI_API_KEY && process.env.GEMINI_MODEL);
+  if (wanted === "openai") return openai ? "openai" : null;
+  if (wanted === "gemini") return gemini ? "gemini" : null;
+  return openai ? "openai" : gemini ? "gemini" : null;
+}
+export function isAIConfigured(): boolean {
+  return activeAIProvider() !== null;
+}
+function realModel(provider: RealProvider) {
+  return (provider === "openai" ? process.env.OPENAI_MODEL : process.env.GEMINI_MODEL) || "";
+}
 
 export function isAIEnabled(): boolean {
   return process.env.ENABLE_AI === "true";
@@ -43,13 +62,20 @@ export function getAIAdapter(): AIAdapter | null {
     return null;
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL;
-
-  // Real Gemini: if credentials and model are configured, can run in any environment (including local/test if developer provided keys)
-  if (apiKey && model) {
-    if (!defaultRealAdapter || defaultRealAdapter.model !== model) {
-      defaultRealAdapter = new RealGeminiAdapter({ apiKey, model });
+  // Real provider: if credentials and model are configured, can run in any environment (including local/test if developer provided keys)
+  const provider = activeAIProvider();
+  if (provider) {
+    const model = realModel(provider);
+    if (!defaultRealAdapter || defaultRealAdapter.provider !== provider || defaultRealAdapter.model !== model) {
+      defaultRealAdapter =
+        provider === "openai"
+          ? new RealOpenAIAdapter({
+              apiKey: process.env.OPENAI_API_KEY || "",
+              model,
+              reasoningEffort: process.env.OPENAI_REASONING_EFFORT || "low",
+              baseUrl: process.env.OPENAI_BASE_URL || undefined,
+            })
+          : new RealGeminiAdapter({ apiKey: process.env.GEMINI_API_KEY || "", model });
     }
     return defaultRealAdapter;
   }
@@ -90,9 +116,10 @@ export function resetAIAdapterForTesting(): void {
 
 export function getCircuitStatus(): CircuitStatus {
   const enabled = isAIEnabled();
-  const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const configured = Boolean(apiKey && process.env.GEMINI_MODEL);
+  const real = activeAIProvider();
+  const configured = real !== null;
+  const realName: RealProvider = real ?? ((process.env.AI_PROVIDER || "openai").toLowerCase() === "gemini" ? "gemini" : "openai");
+  const model = (real ? realModel(real) : "") || (realName === "openai" ? "gpt-6-luna" : "gemini-2.5-flash");
   const mockAllowed = isMockEnvironmentAllowed();
   const prod = isProductionOrStaging();
 
@@ -104,7 +131,7 @@ export function getCircuitStatus(): CircuitStatus {
     return {
       enabled: false,
       configured,
-      provider: configured ? "gemini" : mockAllowed ? "mock" : "gemini",
+      provider: configured ? realName : mockAllowed ? "mock" : realName,
       model,
       circuitOpen: true,
       consecutiveFailures: 0,
@@ -117,7 +144,7 @@ export function getCircuitStatus(): CircuitStatus {
     return {
       enabled: true,
       configured: true,
-      provider: "gemini",
+      provider: realName,
       model,
       circuitOpen: false,
       consecutiveFailures: 0,
@@ -129,7 +156,7 @@ export function getCircuitStatus(): CircuitStatus {
     return {
       enabled: true,
       configured: false,
-      provider: "gemini",
+      provider: realName,
       model,
       circuitOpen: true,
       consecutiveFailures: 0,

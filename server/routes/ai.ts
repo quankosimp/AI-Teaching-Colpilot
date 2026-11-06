@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { aiAllowed } from "../aiConsent.js";
 import { z } from "zod";
 import { filterEligibleApprovedClaims } from "../eligibleClaims.js";
 import {
@@ -131,7 +132,7 @@ export function aiRouter(config: AppConfig) {
       });
       if (!member)
         return fail(res, 403, "PERMISSION_DENIED", "Học sinh không thuộc buổi học");
-      if (!member.consent)
+      if (!aiAllowed(member.consent, member.studentIdRef))
         return fail(
           res,
           403,
@@ -274,7 +275,7 @@ export function aiRouter(config: AppConfig) {
             "AI_UNAVAILABLE",
             errorMsg.startsWith("AI_")
               ? errorMsg
-              : "Gemini tạm không khả dụng; giáo viên có thể tiếp tục ghi chú thủ công",
+              : "Dịch vụ AI tạm không khả dụng; giáo viên có thể tiếp tục ghi chú thủ công",
           );
         }
 
@@ -295,8 +296,9 @@ export function aiRouter(config: AppConfig) {
                 studentId: parsed.data.studentId,
               },
             },
+            include: { studentIdRef: { select: { aiConsentAt: true, aiConsentRevokedAt: true } } },
           });
-          if (!currentMember || !currentMember.consent)
+          if (!currentMember || !aiAllowed(currentMember.consent, currentMember.studentIdRef))
             throw new SessionConflict("PERMISSION_DENIED", "Học sinh không còn quyền hoặc thiếu consent");
 
           if (eligiblePrior.length) {
@@ -593,7 +595,7 @@ export function aiRouter(config: AppConfig) {
       });
       if (!member)
         return fail(res, 403, "PERMISSION_DENIED", "Học sinh không thuộc buổi học");
-      if (!member.consent)
+      if (!aiAllowed(member.consent, member.studentIdRef))
         return fail(res, 403, "PERMISSION_DENIED", "Học sinh chưa có sự đồng ý (consent) để sử dụng AI");
 
       const routeKey = `/sessions/${session.id}/ai/claims-draft`;
@@ -736,7 +738,7 @@ export function aiRouter(config: AppConfig) {
             "AI_UNAVAILABLE",
             errorMsg.startsWith("AI_")
               ? errorMsg
-              : "Gemini tạm không khả dụng; giáo viên có thể tạo nhận định thủ công",
+              : "Dịch vụ AI tạm không khả dụng; giáo viên có thể tạo nhận định thủ công",
           );
         }
 
@@ -761,8 +763,9 @@ export function aiRouter(config: AppConfig) {
                 studentId: targetStudentId,
               },
             },
+            include: { studentIdRef: { select: { aiConsentAt: true, aiConsentRevokedAt: true } } },
           });
-          if (!currentMember || !currentMember.consent) {
+          if (!currentMember || !aiAllowed(currentMember.consent, currentMember.studentIdRef)) {
             throw new SessionConflict(
               "PERMISSION_DENIED",
               "Học sinh đã thu hồi sự đồng ý sử dụng AI",
@@ -878,6 +881,7 @@ export function aiRouter(config: AppConfig) {
                 studentId: targetStudentId,
                 text: candidate.text,
                 evidenceIds: candidate.evidenceIds,
+                kind: candidate.kind ?? null,
                 status: "pending", // Sourced pending claims only
                 revision: 1,
               },
@@ -983,7 +987,7 @@ export function aiRouter(config: AppConfig) {
           "PERMISSION_DENIED",
           "Học sinh không thuộc buổi học",
         );
-      if (!member.consent)
+      if (!aiAllowed(member.consent, member.studentIdRef))
         return fail(
           res,
           403,
@@ -1093,7 +1097,7 @@ export function aiRouter(config: AppConfig) {
             "AI_UNAVAILABLE",
             errorMsg.startsWith("AI_")
               ? errorMsg
-              : "Gemini tạm không khả dụng; có thể chuẩn bị giáo án thủ công",
+              : "Dịch vụ AI tạm không khả dụng; có thể chuẩn bị giáo án thủ công",
           );
         }
 
@@ -1118,8 +1122,9 @@ export function aiRouter(config: AppConfig) {
                 studentId: parsed.data.studentId,
               },
             },
+            include: { studentIdRef: { select: { aiConsentAt: true, aiConsentRevokedAt: true } } },
           });
-          if (!currentMember || !currentMember.consent) {
+          if (!currentMember || !aiAllowed(currentMember.consent, currentMember.studentIdRef)) {
             throw new SessionConflict(
               "PERMISSION_DENIED",
               "Học sinh đã thu hồi sự đồng ý sử dụng AI",

@@ -1945,3 +1945,21 @@ body.dark .online-restored .calendar-event-pill--draft {
     justify-content: flex-end;
   }
 }
+.online-restored .plan-ai-blocked { color: var(--muted, #8a8fa8); font-size: 12px; margin-right: auto; }
+.online-restored .profile-classes { margin-top: 4px; font-size: 13px; color: var(--muted, #8a8fa8); }
+.online-restored .profile-classes .text-button { padding: 0; font-size: 13px; }
+.lesson-editor textarea { min-height: 90px; }
+.lesson-preview { padding: 20px; }
+.lesson-public-content { white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; padding: 20px; width: 100%; max-width: 850px; margin: 0 auto; }
+.lesson-private-notes { flex: none; padding: 12px 20px; background: var(--restore-panel, #f4f0ff); border-top: 1px solid var(--restore-border, #ddd); }
+.lesson-private-notes p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.lr-canvas > .lesson-private-notes { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3; max-height: 40%; overflow: auto; }
+.lr-canvas:has(> .lesson-private-notes) > .lr-doc { bottom: 48px; }
+.lr-canvas .lr-empty--pane:has(.lesson-public-content) { overflow: auto; align-items: stretch; justify-content: flex-start; }
+
+/* Tài liệu: ba việc máy làm thêm khi có tệp */
+.online-restored .mat-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.online-restored .mat-values > div { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--restore-line); background: var(--restore-surface); font-size: 12.5px; line-height: 18px; color: var(--restore-subtle); min-width: 0; }
+.online-restored .mat-values svg { flex: none; margin-top: 1px; color: var(--restore-brand); }
+.online-restored .mat-values b { display: block; font-size: 13px; color: var(--restore-ink); font-weight: 600; }
+@media (max-width: 900px) { .online-restored .mat-values { grid-template-columns: minmax(0, 1fr); } }

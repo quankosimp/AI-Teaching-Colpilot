@@ -23,7 +23,7 @@ export interface TeachingRequestInput {
 
 export interface TeachingSuggestionResult {
   text: string;
-  provider: "gemini" | "mock";
+  provider: "openai" | "gemini" | "mock";
   model: string;
   modelVersion: string;
   contextSummary: string;
@@ -58,12 +58,14 @@ export interface ClaimDraftCandidate {
   text: string;
   evidenceIds: string[];
   reasoning?: string;
+  /** review = cần ôn lại, good = làm tốt. Không có thì gia sư tự chọn. */
+  kind?: "review" | "good";
 }
 
 export interface ClaimDraftResult {
   claims: ClaimDraftCandidate[];
   summary: string;
-  provider: "gemini" | "mock";
+  provider: "openai" | "gemini" | "mock";
   model: string;
   modelVersion: string;
   contextSummary: string;
@@ -82,7 +84,7 @@ export interface PlanSuggestionInput {
 
 export interface PlanSuggestionResult {
   text: string;
-  provider: "gemini" | "mock";
+  provider: "openai" | "gemini" | "mock";
   model: string;
   modelVersion: string;
   contextSummary: string;
@@ -93,7 +95,7 @@ export interface PlanSuggestionResult {
 export interface CircuitStatus {
   enabled: boolean;
   configured: boolean;
-  provider: "gemini" | "mock";
+  provider: "openai" | "gemini" | "mock";
   model: string;
   circuitOpen: boolean;
   consecutiveFailures: number;

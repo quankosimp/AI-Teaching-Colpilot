@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isAIConfigured } from "../ai/index.js";
 import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { SignJWT } from "jose";
 import { OAuth2Client } from "google-auth-library";
@@ -166,10 +167,7 @@ export function authRouter(config: AppConfig) {
       return res.json({
         teacher,
         featureFlags: {
-          ai:
-            process.env.ENABLE_AI === "true" &&
-            !!process.env.GEMINI_API_KEY &&
-            !!process.env.GEMINI_MODEL,
+          ai: process.env.ENABLE_AI === "true" && isAIConfigured(),
           recording: false,
         },
       });

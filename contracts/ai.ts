@@ -45,7 +45,7 @@ export const AISuggestionItem = z.strictObject({
   responseText: z.string(),
   editedText: z.string().nullable().optional(),
   evidenceId: Id.nullable().optional(),
-  provider: z.enum(["gemini", "mock"]),
+  provider: z.enum(["openai", "gemini", "mock"]),
   model: z.string(),
   modelVersion: z.string(),
   status: z.enum(["ready", "used", "ignored", "reported", "error"]),
@@ -89,7 +89,7 @@ export const AIPlanSources = z.array(z.strictObject({
 })).min(1);
 export const AIPlanSuggestionResponse = z.strictObject({
   suggestion: z.strictObject({
-    id: Id, text: z.string(), status: z.string(), provider: z.enum(["gemini", "mock"]),
+    id: Id, text: z.string(), status: z.string(), provider: z.enum(["openai", "gemini", "mock"]),
     model: z.string(), sources: AIPlanSources,
   }),
 });
@@ -98,7 +98,7 @@ export type AIPlanSuggestionResponse = z.infer<typeof AIPlanSuggestionResponse>;
 export const AICircuitStatusResponse = z.strictObject({
   enabled: z.boolean(),
   configured: z.boolean(),
-  provider: z.enum(["gemini", "mock"]),
+  provider: z.enum(["openai", "gemini", "mock"]),
   model: z.string(),
   circuitOpen: z.boolean(),
   consecutiveFailures: z.number().int().nonnegative(),
