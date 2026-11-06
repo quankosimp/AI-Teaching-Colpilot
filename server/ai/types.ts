@@ -58,6 +58,8 @@ export interface ClaimDraftCandidate {
   text: string;
   evidenceIds: string[];
   reasoning?: string;
+  /** review = cần ôn lại, good = làm tốt. Không có thì gia sư tự chọn. */
+  kind?: "review" | "good";
 }
 
 export interface ClaimDraftResult {

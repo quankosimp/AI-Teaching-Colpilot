@@ -476,3 +476,29 @@ button.lr-pg:hover { background: var(--lr-soft); }
 .lr-qr__ok { color: #0f9f6e; font-weight: 600; }
 .lr-qr__wait { color: var(--lr-muted); }
 @media (max-width: 640px) { .lr-qr { display: none; } }
+
+/* Câu hỏi từ trang đang chiếu (AI soạn nháp, gia sư duyệt) */
+.lr-pq { position: absolute; top: 54px; right: 10px; z-index: 30; width: 400px; max-width: calc(100% - 20px); max-height: calc(100% - 70px); overflow: auto; background: var(--lr-surface); border: 1px solid var(--lr-line); border-radius: 14px; box-shadow: var(--lr-sh-pop); display: flex; flex-direction: column; }
+.lr-pq__h { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px 14px; border-bottom: 1px solid var(--lr-line); }
+.lr-pq__h .lr-ib { border: 0; width: 30px; height: 30px; }
+.lr-pq__ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none; background: var(--lr-accent-bg); color: var(--lr-accent-ink); }
+.lr-pq__t { flex: 1; min-width: 0; }
+.lr-pq__t b { display: block; font-size: 14px; font-weight: 600; color: var(--lr-ink); }
+.lr-pq__t span { display: block; font-size: 12px; color: var(--lr-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lr-pq__wait { display: flex; align-items: center; gap: 10px; padding: 22px 16px; font-size: 13px; color: var(--lr-sub); }
+.lr-pq__wait .lr-spin { width: 18px; height: 18px; border-width: 2px; }
+.lr-pq__note { margin: 0; padding: 12px 16px; font-size: 12.5px; line-height: 18px; color: var(--lr-sub); }
+.lr-pq__note.is-err { color: #b42318; }
+.lr-pq__list { list-style: none; margin: 0; padding: 6px 0; }
+.lr-pq__list li { display: flex; gap: 10px; padding: 10px 14px; }
+.lr-pq__list li + li { border-top: 1px solid var(--lr-line); }
+.lr-pq__n { width: 20px; height: 20px; flex: none; margin-top: 6px; border-radius: 6px; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--lr-soft); color: var(--lr-sub); }
+.lr-pq__list li.is-opened .lr-pq__n { background: #e3f6ec; color: #0f7a4b; }
+.lr-pq__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.lr-pq__body textarea { width: 100%; resize: vertical; min-height: 44px; border: 1px solid var(--lr-line-2); border-radius: 8px; padding: 7px 9px; background: var(--lr-surface); color: var(--lr-ink); font: 400 13px/18px "Be Vietnam Pro", Inter, sans-serif; }
+.lr-pq__body textarea:disabled { background: var(--lr-soft); color: var(--lr-sub); }
+.lr-pq__acts { display: flex; align-items: center; gap: 6px; }
+.lr-pq__done { font-size: 12px; font-weight: 600; color: #0f7a4b; }
+.lr-pq__f { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--lr-line); background: var(--lr-soft); border-radius: 0 0 14px 14px; font-size: 11.5px; line-height: 16px; color: var(--lr-sub); }
+.lr-pq__f span { flex: 1; min-width: 0; }
+.lr-btn--quiet.is-on { background: var(--lr-accent-bg); color: var(--lr-accent-ink) !important; }

@@ -317,6 +317,7 @@
 .online-restored .lv-sr__copy small { color: var(--restore-subtle); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .online-restored .lv-pill { flex: none; padding: 4px 10px; border-radius: 999px; background: var(--lv-mint-bg); color: var(--lv-mint); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .online-restored .lv-pill.is-warn { background: var(--lv-sun-bg); color: var(--lv-sun); }
+.online-restored .lv-pill.is-none { background: transparent; color: var(--muted, #8a8fa8); box-shadow: inset 0 0 0 1px currentColor; font-weight: 500; }
 
 /* Việc cần làm */
 .online-restored .lv-todo { padding: 20px; }

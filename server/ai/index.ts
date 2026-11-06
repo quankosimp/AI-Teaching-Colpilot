@@ -119,7 +119,7 @@ export function getCircuitStatus(): CircuitStatus {
   const real = activeAIProvider();
   const configured = real !== null;
   const realName: RealProvider = real ?? ((process.env.AI_PROVIDER || "openai").toLowerCase() === "gemini" ? "gemini" : "openai");
-  const model = (real ? realModel(real) : "") || (realName === "openai" ? "gpt-5.4-mini" : "gemini-2.5-flash");
+  const model = (real ? realModel(real) : "") || (realName === "openai" ? "gpt-6-luna" : "gemini-2.5-flash");
   const mockAllowed = isMockEnvironmentAllowed();
   const prod = isProductionOrStaging();
 

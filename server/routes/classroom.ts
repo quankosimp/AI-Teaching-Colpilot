@@ -59,6 +59,7 @@ import {
   triggerOutboxPublish,
 } from "../realtime.js";
 import { signature, storage } from "./materials.js";
+import { rememberMaterialPage } from "./classRooms.js";
 
 const safeId = z.uuid();
 const digest = (value: string) =>
@@ -1280,6 +1281,7 @@ export function classroomRouter(config: AppConfig) {
               status: "live",
               startedAt: current.startedAt ?? new Date(),
               currentActivityId: activeActId,
+              materialPage: current.currentActivityId ? current.materialPage : (current.Activity_sessionId_items[0]?.materialStartPage ?? 0),
               version: { increment: 1 },
             },
           });
@@ -1465,6 +1467,7 @@ export function classroomRouter(config: AppConfig) {
       );
       if (!result) return;
       triggerOutboxPublish(session.id);
+      await rememberMaterialPage(session.id);
       return res.json({
         session: await db.session.findUniqueOrThrow({
           where: { id: result.resourceId },
@@ -1551,6 +1554,10 @@ export function classroomRouter(config: AppConfig) {
         ? { ...existingTools, ...parsed.data.tools }
         : undefined;
       const { tools: _tools, sharedBoardOwnerId: _sbo, ...rest } = parsed.data;
+      if (rest.currentActivityId && rest.currentActivityId !== session.currentActivityId && rest.materialPage === undefined) {
+        const nextActivity = await db.activity.findFirst({where:{id:rest.currentActivityId,sessionId:session.id}});
+        rest.materialPage = nextActivity?.materialStartPage ?? 0;
+      }
       const changed = await db.$transaction(async (tx) => {
         const result = await tx.session.updateMany({
           where: {
@@ -1579,7 +1586,7 @@ export function classroomRouter(config: AppConfig) {
             parsed.data.currentActivityId !== undefined
               ? parsed.data.currentActivityId
               : session.currentActivityId,
-          page: parsed.data.materialPage ?? session.materialPage,
+          page: rest.materialPage ?? session.materialPage,
           resourceId: session.id,
           version: expected + 1,
         });

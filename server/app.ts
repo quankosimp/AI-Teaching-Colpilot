@@ -9,6 +9,7 @@ import { activeAIProvider, isAIConfigured } from "./ai/index.js";
 import { authRouter } from "./routes/auth.js";
 import { classroomRouter } from "./routes/classroom.js";
 import { classesRouter } from "./routes/classes.js";
+import { classRoomsRouter } from "./routes/classRooms.js";
 import { materialsRouter, storage } from "./routes/materials.js";
 import { reviewRouter } from "./routes/review.js";
 import { teacherRouter } from "./routes/teacher.js";
@@ -69,6 +70,7 @@ export function createApp(config?: AppConfig) {
     app.use("/api/v1/auth", authRouter(config));
     app.use("/api/v1", classroomRouter(config));
     app.use("/api/v1", classesRouter(config));
+    app.use("/api/v1", classRoomsRouter(config));
     app.use("/api/v1", reviewRouter(config));
     app.use("/api/v1", teacherRouter(config));
     app.use("/api/v1", materialsRouter(config));

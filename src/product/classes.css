@@ -256,3 +256,6 @@
   .cls-ph { flex-wrap: wrap; }
 }
 .restored-back { display: inline-flex; align-items: center; gap: 4px; padding: 0; margin-bottom: 6px; font-size: 13px; }
+.cls-namebtn { display: block; max-width: 100%; border: 0; background: none; padding: 0; font-weight: 600 !important; text-align: left; color: var(--c-ink) !important; }
+.cls-namebtn:hover { color: var(--c-acc-ink) !important; text-decoration: underline; }
+.cls-namebtn:focus-visible { outline: 2px solid var(--c-acc); outline-offset: 2px; border-radius: 4px; }

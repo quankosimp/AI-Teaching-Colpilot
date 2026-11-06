@@ -130,6 +130,7 @@ export function StudentLinkEntry() {
             <li><span className="lr-chk__d" /><div>Để sẵn vở và bút<small>Khi nộp bài, em có thể quét mã QR để chụp bằng điện thoại.</small></div></li>
           </ul>
           <button type="button" className="lr-btn lr-btn--pri lr-btn--lg" disabled={busy} onClick={() => void join("join")}>{busy ? "Đang vào lớp…" : "Vào lớp"}</button>
+          <p className="sl-note">Khi vào lớp, em đồng ý để thầy cô dùng trợ lý AI đọc bài làm và câu trả lời trong giờ, không kèm tên em, để gợi ý nhận xét. Thầy cô duyệt từng nhận xét trước khi lưu.</p>
         </>
       )}
       {p?.live && p.live.inClass && (

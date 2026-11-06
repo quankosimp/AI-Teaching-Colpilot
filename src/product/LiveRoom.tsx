@@ -6,6 +6,7 @@ import { ReviewPanel } from "./ReviewPanel";
 import { SubmissionForm } from "./SubmissionForm";
 import { OnlineBoard, type BoardState } from "./OnlineBoard";
 import { MaterialViewer } from "./MaterialViewer";
+import { PageQuestions, type PageQuestion } from "./PageQuestions";
 import { BoundedReconnectQueue } from "./reconnectQueue";
 import { useClassVideo, type ClassVideo, type VideoSeat } from "./media/useClassVideo";
 import type { VideoPlayer } from "@zoom/videosdk";
@@ -111,7 +112,7 @@ type Room = {
     color?: string;
     handRaised?: boolean;
   }[];
-  activities?: { id: string; title: string; duration: number }[];
+  activities?: { id: string; title: string; description: string; duration: number | null }[];
   session?: {
     id: string;
     title: string;
@@ -119,6 +120,7 @@ type Room = {
     startedAt?: string | null;
     version: number;
     sharedGoal: string;
+    goal?: string;
     currentActivityId: string | null;
     completedActivityIds?: string[];
     sharedView?: "document" | "board" | "check";
@@ -128,9 +130,12 @@ type Room = {
     Activity_sessionId_items?: {
       id: string;
       title: string;
-      duration: number;
+      duration: number | null;
       materialId?: string | null;
       materialVersion?: number | null;
+      description: string;
+      teacherNotes?: string | null;
+      materialStartPage?: number;
     }[];
     RoomMember_sessionId_items?: Member[];
   };
@@ -424,6 +429,7 @@ export function LiveRoom({
   view = "teach",
   onViewChange,
   onThemeToggle,
+  onEnded,
 }: {
   sessionId: string;
   grant?: Grant;
@@ -432,6 +438,8 @@ export function LiveRoom({
   view?: "teach" | "grading" | "summary";
   onViewChange?: (view: "teach" | "grading" | "summary") => void;
   onThemeToggle?: () => void;
+  /** Có thì Kết thúc buổi chuyển thẳng sang màn Sau buổi (điểm danh xác nhận ở đó). */
+  onEnded?: () => void;
 }) {
   const [selectedStudent, setSelectedStudent] = useState("");
   const [inspectBoard, setInspectBoard] = useState(false);
@@ -439,6 +447,9 @@ export function LiveRoom({
   const [chat, setChat] = useState("");
   const [ttl, setTtl] = useState(24);
   const [question, setQuestion] = useState("");
+  // Trang đang soạn câu hỏi bằng AI (giữ cố định khi gia sư lật trang trong lúc đợi).
+  const [pqPage, setPqPage] = useState<number | null>(null);
+  const pqCache = useRef(new Map<string, PageQuestion[]>());
   const [answer, setAnswer] = useState("");
   const [room, setRoom] = useState<Room | null>(null);
   const [error, setError] = useState("");
@@ -648,7 +659,8 @@ export function LiveRoom({
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   };
-  const selected = selectedStudent || members[0]?.studentId || "";
+  // Chưa chọn ai thì mở sẵn em đang trong lớp, không phải em vắng đứng đầu danh sách.
+  const selected = selectedStudent || members.find((m) => m.state === "joined")?.studentId || members[0]?.studentId || "";
   const activity = s?.Activity_sessionId_items?.find(
     (a) => a.id === s.currentActivityId,
   );
@@ -775,6 +787,7 @@ export function LiveRoom({
   const selName = selMember ? memberName(selMember) : "";
   const subsOf = (id: string) => room?.submissions?.filter((x) => x.studentId === id).length || 0;
   const acts = s?.Activity_sessionId_items || [];
+  const preparedActivity = activity ?? acts[0];
   const studentActivities = room?.activities || [];
   const pageList = grant ? studentActivities : acts;
   const currentActivity = grant
@@ -800,7 +813,11 @@ export function LiveRoom({
 
   const startSession = () => void command(`/sessions/${sessionId}/start`, "POST", {});
   // Kết thúc buổi: hiện bảng điểm danh đã điền sẵn, gia sư xác nhận hoặc để sau.
-  const endSession = () => setEndOpen(true);
+  const endSession = () => {
+    if (!onEnded) return setEndOpen(true);
+    if (!confirm("Kết thúc buổi học? Các em sẽ rời lớp.")) return;
+    void command(`/sessions/${sessionId}/end`, "POST", {}).then((saved) => saved && onEnded());
+  };
   const finishSession = async (rows: { studentId: string; present: boolean; excused: boolean }[] | null) => {
     const saved = await command(`/sessions/${sessionId}/end`, "POST", {});
     if (!saved) throw new Error("Chưa kết thúc được buổi học. Hãy thử lại.");
@@ -961,7 +978,7 @@ export function LiveRoom({
     <header className="lr-top">
       <div className="lr-top__l">
         {isTeacher && (
-          <button type="button" className="lr-ib" aria-label="Quay lại" title="Về danh sách buổi học" onClick={onExit}>
+          <button type="button" className="lr-ib" aria-label="Quay lại" title="Về lớp" onClick={onExit}>
             <ArrowLeft size={18} />
           </button>
         )}
@@ -1320,7 +1337,7 @@ export function LiveRoom({
               aria-label={a.title}
               className={`lr-pg${cur ? " is-on" : ""}`}
               onClick={() => patchClassroom({ currentActivityId: a.id })}
-              title={`${a.title} · ${a.duration} phút`}
+              title={a.duration ? `${a.title} · ${a.duration} phút` : a.title}
             >
               <span className="lr-pg__n">{done ? <Check size={11} strokeWidth={3} /> : index + 1}</span>
               <span className="lr-pg__t">{a.title}</span>
@@ -1335,6 +1352,18 @@ export function LiveRoom({
         {!pageList.length && <span className="lr-fine">Buổi này chưa có hoạt động.</span>}
       </div>
       <span className="lr-grow" />
+      {isTeacher && stage === "document" && material && (
+        <button
+          type="button"
+          className={`lr-btn lr-btn--sm lr-btn--quiet${pqPage !== null ? " is-on" : ""}`}
+          aria-expanded={pqPage !== null}
+          title="AI soạn nháp câu hỏi kiểm tra nhanh từ chữ trên trang đang chiếu"
+          onClick={() => setPqPage(pqPage === null ? s.materialPage || 0 : null)}
+        >
+          <Sparkles size={14} aria-hidden="true" />
+          Câu hỏi từ trang này
+        </button>
+      )}
       {isTeacher && s.currentActivityId && (
         <button
           type="button"
@@ -1379,7 +1408,8 @@ export function LiveRoom({
         ) : (
           <div className="lr-empty lr-empty--pane">
             <FileText size={28} aria-hidden="true" />
-            <b>{grant ? "Thầy cô chưa mở tài liệu" : "Trang này chưa có tài liệu"}</b>
+            <b>{currentActivity?.title || (grant ? "Thầy cô chưa mở nội dung" : "Chưa có nội dung")}</b>
+            {currentActivity?.description && <div className="lesson-public-content">{currentActivity.description}</div>}
             <p>
               {grant
                 ? "Khi thầy cô mở tài liệu hoặc chia sẻ màn hình, nội dung sẽ hiện ở đây."
@@ -1387,6 +1417,11 @@ export function LiveRoom({
             </p>
           </div>
         ))}
+      {isTeacher && stage === "document" && (s.goal || activity?.teacherNotes) && <details className="lesson-private-notes">
+        <summary>Ghi chú riêng của gia sư</summary>
+        {s.goal && <p>{s.goal}</p>}
+        {activity?.teacherNotes && <p>{activity.teacherNotes}</p>}
+      </details>}
       {stage === "board" && (
         <div className="lr-boardwrap">
           {isTeacher && inspectBoard && (
@@ -1540,6 +1575,20 @@ export function LiveRoom({
   const boardCard = s && (
     <section className="lr-card lr-boardcard" aria-label="Sân khấu lớp học">
       {pagesHead}
+      {isTeacher && material && pqPage !== null && stage === "document" && (
+        <PageQuestions
+          key={`${material.id}:${pqPage}`}
+          sessionId={sessionId}
+          material={material}
+          page={pqPage}
+          live={live}
+          canOpen={!!s.currentActivityId && s.tools?.check !== false}
+          cache={pqCache.current}
+          onOpen={(q) => (s.currentActivityId ? command(`/sessions/${sessionId}/checks`, "POST", { activityId: s.currentActivityId, question: q }) : Promise.resolve(false))}
+          onShowAnswers={() => { setPqPage(null); showView("check"); }}
+          onClose={() => setPqPage(null)}
+        />
+      )}
       {canvas}
       {isTeacher ? ctrlTeacher : ctrlStudent}
     </section>
@@ -1831,7 +1880,7 @@ export function LiveRoom({
                   <li key={a.id} className={i === curIndex ? "is-now" : ""}>
                     <span className={`lr-steps__d${i < curIndex ? " is-y" : i === curIndex ? " is-now" : ""}`}>{i < curIndex ? <Check size={11} strokeWidth={3} /> : null}</span>
                     {a.title}
-                    <small>{a.duration} phút</small>
+                    <small>{a.duration == null ? "Chưa ước lượng" : `${a.duration} phút`}</small>
                   </li>
                 ))}
               </ul>
@@ -1901,7 +1950,8 @@ export function LiveRoom({
         </div>
         <div className="lr-modal__b">
           {uploadAllowed && <PhoneHandoff request={request} received={(room?.ownSubmissions || []).length} />}
-          <SubmissionForm sessionId={sessionId} activityId={s.currentActivityId} enabled={uploadAllowed} request={request} onSubmitted={load} />
+          {/* Nộp từ máy tính xong thì đóng hộp: bài hiện ngay ở "Bài của em", và mã QR không đếm nhầm bài này là từ điện thoại. */}
+          <SubmissionForm sessionId={sessionId} activityId={s.currentActivityId} enabled={uploadAllowed} request={request} onSubmitted={async () => { await load(); setSubmitOpen(false); }} />
           {!uploadAllowed && <p className="lr-fine">Thầy cô đang tắt nộp bài.</p>}
           <p className="lr-tipline">
             <Camera size={15} aria-hidden="true" />
@@ -1928,6 +1978,16 @@ export function LiveRoom({
               Bắt đầu buổi học
             </button>
           </div>
+          {preparedActivity && <section className="lr-card lesson-preview">
+            <h2>Xem trước: {preparedActivity.title}</h2>
+            {preparedActivity.description && <div className="lesson-public-content">{preparedActivity.description}</div>}
+            {preparedActivity.materialId && preparedActivity.materialVersion && <MaterialViewer materialId={preparedActivity.materialId} version={preparedActivity.materialVersion} title={preparedActivity.title} kind="auto" controlledPage={preparedActivity.materialStartPage ?? 0} />}
+            {(s.goal || preparedActivity.teacherNotes) && <details className="lesson-private-notes">
+              <summary>Ghi chú riêng của gia sư</summary>
+              {s.goal && <p>{s.goal}</p>}
+              {preparedActivity.teacherNotes && <p>{preparedActivity.teacherNotes}</p>}
+            </details>}
+          </section>}
           <div className="lr-card lr-tipcard">
             <div className="lr-tipcard__h">
               <MonitorUp size={18} aria-hidden="true" />
@@ -1994,12 +2054,12 @@ export function LiveRoom({
           </div>
           {acts.length > 0 && (
             <div className="lr-card lr-box">
-              <div className="lr-box__h"><b>Kế hoạch buổi</b><span>{acts.reduce((t, a) => t + a.duration, 0)} phút</span></div>
+              <div className="lr-box__h"><b>Kế hoạch buổi</b><span>{acts.some(a => a.duration != null) ? `${acts.reduce((t, a) => t + (a.duration ?? 0), 0)} phút đã ước lượng` : "Chưa ước lượng"}</span></div>
               <ol className="lr-plan2">
                 {acts.map((a, index) => (
                   <li key={a.id}>
                     <button type="button" aria-current={s.currentActivityId === a.id ? "step" : undefined} onClick={() => patchClassroom({ currentActivityId: a.id })}>
-                      <i>{index + 1}</i><span>{a.title}</span><small>{a.duration} phút</small>
+                      <i>{index + 1}</i><span>{a.title}</span><small>{a.duration == null ? "Chưa ước lượng" : `${a.duration} phút`}</small>
                     </button>
                   </li>
                 ))}
@@ -2172,7 +2232,8 @@ function SubmissionGrade({
   children: React.ReactNode;
 }) {
   const [feedback, setFeedback] = useState("");
-  const [support, setSupport] = useState("DocLap");
+  // Chưa biết em làm với mức hỗ trợ nào thì để "Chưa rõ", gia sư tự chọn.
+  const [support, setSupport] = useState("ChuaRo");
   return (
     <form
       className="online-room__grade-card"
@@ -2200,10 +2261,10 @@ function SubmissionGrade({
             value={support}
             onChange={(e) => setSupport(e.target.value)}
           >
+            <option value="ChuaRo">Chưa rõ</option>
             <option value="DocLap">Độc lập</option>
             <option value="CoGoiY">Có gợi ý</option>
             <option value="DuocHuongDan">Được hướng dẫn</option>
-            <option value="ChuaRo">Chưa rõ</option>
           </select>
         </label>
         <button className="button primary small">Chấm bài</button>

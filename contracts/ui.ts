@@ -13,7 +13,7 @@ export const StudentActivity = z.strictObject({
   id: Id,
   title: z.string(),
   description: z.string(),
-  duration: z.number().int().positive(),
+  duration: z.number().int().positive().nullable(),
   order: z.number().int().nonnegative(),
   type: z.enum(["KhoiDong", "LyThuyet", "LuyenTap", "KiemTra"]),
 });

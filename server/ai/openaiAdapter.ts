@@ -16,6 +16,7 @@ const ClaimCandidateOutputSchema = z.strictObject({
   text: z.string().min(5).max(1000),
   evidenceIds: z.array(z.string().uuid()).min(1).max(10),
   reasoning: z.string().max(500).optional(),
+  kind: z.enum(["review", "good"]).optional(),
 });
 
 const ClaimsDraftOutputSchema = z.strictObject({
@@ -26,7 +27,7 @@ const ClaimsDraftOutputSchema = z.strictObject({
 export interface OpenAIAdapterConfig {
   apiKey: string;
   model: string;
-  /** none | low | medium | high — chỉ gửi cho model có suy luận (gpt-5, o-series). */
+  /** none | low | medium | high — chỉ gửi cho model có suy luận (gpt-5 trở lên, o-series). */
   reasoningEffort?: string;
   baseUrl?: string;
   timeoutMs?: number;
@@ -62,7 +63,8 @@ export class RealOpenAIAdapter implements AIAdapter {
   }
 
   private get reasons() {
-    return /^(gpt-5|o\d)/.test(this.model);
+    // GPT-5 trở lên và o-series chỉ nhận reasoning_effort, không nhận temperature khác 1.
+    return /^(gpt-([5-9]|\d{2,})|o\d)/.test(this.model);
   }
 
   private async chat(prompt: string, opts: { temperature: number; json?: boolean }): Promise<ChatResult> {
@@ -215,12 +217,13 @@ export class RealOpenAIAdapter implements AIAdapter {
       `Học sinh môn: ${sanitizeContext(input.student.subject || "", names)}, khối: ${sanitizeContext(input.student.grade || "", names)}.`,
       cleanGoal ? `Mục tiêu học tập: ${cleanGoal}.` : "",
       cleanExtra ? `Yêu cầu thêm từ giáo viên: ${cleanExtra}.` : "",
-      "Nhiệm vụ: Tổng hợp các minh chứng quan sát thực tế thành 1 đến 2 nhận định năng lực dạng dự thảo để giáo viên duyệt.",
+      "Nhiệm vụ: Tổng hợp các minh chứng quan sát thực tế thành 1 nhận định ngắn (tối đa khoảng 120 ký tự) dạng dự thảo để giáo viên duyệt. Chỉ viết 2 nhận định nếu có hai điều thật sự khác nhau.",
+      "Mỗi nhận định có loại ghi riêng ở trường kind: \"review\" nếu học sinh cần ôn lại hoặc còn vướng, \"good\" nếu học sinh làm tốt. Trường text chỉ là câu nhận định bằng tiếng Việt, không chứa chữ review hay good, không chứa ID minh chứng (ID chỉ ghi ở evidenceIds).",
       PLAIN_TEXT_RULE,
       "Quy tắc nghiêm ngặt:",
       "1. Mỗi nhận định BẮT BUỘC phải trích dẫn đúng ID của ít nhất một minh chứng cung cấp bên dưới.",
       "2. Không tạo nhận định mà không có ID minh chứng đính kèm. Không bịa đặt ID.",
-      "3. Trả lời định dạng JSON với cấu trúc: {\"claims\": [{\"text\": \"...\", \"evidenceIds\": [\"uuid\"]}]}",
+      "3. Trả lời định dạng JSON với cấu trúc: {\"claims\": [{\"text\": \"...\", \"kind\": \"review\", \"evidenceIds\": [\"uuid\"]}]}",
       `Dữ liệu minh chứng quan sát:\n${obsDescriptions.join("\n")}`,
     ].filter(Boolean).join("\n");
 
@@ -244,7 +247,16 @@ export class RealOpenAIAdapter implements AIAdapter {
       const validClaims: ClaimDraftResult["claims"] = [];
 
       for (const item of parsed.data.claims) {
-        const text = item.text.replace(/\s*\((pending|dự thảo)\)\s*\.?$/i, "").trim();
+        // Model đôi khi chèn loại vào đầu câu ("review: …"): bỏ đi, và dùng nó làm loại nếu thiếu.
+        const prefix = item.text.match(/^\s*(review|good)\s*[:\-–]\s*/i);
+        const kind = item.kind ?? (prefix ? (prefix[1].toLowerCase() as "review" | "good") : undefined);
+        const text = item.text
+          .replace(/^\s*(review|good)\s*[:\-–]\s*/i, "")
+          .replace(/\s*\((pending|dự thảo)\)\s*\.?$/i, "")
+          // Model nhỏ đôi khi chép ID minh chứng vào câu: "(uuid)" hoặc "[ID: uuid]".
+          .replace(/\s*[([]\s*(?:ID\s*:\s*)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\s*,\s*[0-9a-f-]{36})*\s*[)\]]/gi, "")
+          .replace(/\s+([.,;])/g, "$1")
+          .trim();
         if (text.length < 5) continue;
 
         // Discard candidate wholly if duplicate evidence references exist
@@ -263,6 +275,7 @@ export class RealOpenAIAdapter implements AIAdapter {
           text,
           evidenceIds: item.evidenceIds,
           reasoning: item.reasoning?.trim(),
+          kind,
         });
       }
 

@@ -38,6 +38,10 @@ export const JoinRequest = z.strictObject({
   name: z.string().trim().min(1).max(120),
   consent: z.literal(true),
 });
+export const LessonMaterialRef = z.strictObject({
+  materialId: z.uuid(),
+  version: z.number().int().positive(),
+});
 export const SessionCreate = z.strictObject({
   studentIds: z
     .array(Id)
@@ -51,16 +55,19 @@ export const SessionCreate = z.strictObject({
   time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   duration: z.number().int().positive(),
   tools: Tools,
+  status: z.enum(["draft", "scheduled"]).optional(),
+  initialMaterial: LessonMaterialRef.optional(),
 });
 export const ActivityInput = z.strictObject({
   id: Id.optional(),
   title: z.string().trim().min(1),
   description: z.string(),
   teacherNotes: z.string().nullable().optional(),
-  duration: z.number().int().positive(),
+  duration: z.number().int().positive().nullable().default(null),
   type: z.enum(["KhoiDong", "LyThuyet", "LuyenTap", "KiemTra"]),
   materialId: Id.nullable().optional(),
   materialVersion: z.number().int().positive().nullable().optional(),
+  materialStartPage: z.number().int().min(0).max(9999).default(0),
   sourceEvidenceIds: z.array(Id),
   sourceClaimRefs: z.array(ClaimRef),
 });
@@ -421,6 +428,7 @@ export const StudentRecord = StudentInput.extend({
   initials: z.string(),
   color: z.string(),
   version: z.number().int().positive(),
+  linkVersion: z.number().int().positive().optional(),
   archivedAt: z.iso.datetime({ offset: true }).nullable(),
   createdAt: z.iso.datetime({ offset: true }),
   updatedAt: z.iso.datetime({ offset: true }),

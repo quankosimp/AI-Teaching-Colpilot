@@ -1,3 +1,6 @@
+import { LessonPreparation } from "./LessonPreparation";
+import { LessonSchedule, type ScheduleStart } from "./LessonSchedule";
+import { lessonHeading, lessonWhen, materialRef, nextPupilLesson, type LessonMaterial as Material, type LessonSession as Session, type LessonClaim as ApprovedClaim } from "./lessonPlanning";
 import {
   useCallback,
   useEffect,
@@ -8,38 +11,33 @@ import {
 import {
   AsyncPanel,
   FormFeedback,
-  AISuggestionReview,
   type AsyncState,
   type Feedback,
 } from "./presentation";
 import { api, ApiError, googleCallback, signIn, signOut } from "./onlineApi";
 import { Modal, Status, initials } from "./ui";
 import { OnlineShell, type OnlineNavItem } from "./OnlineShell";
-import {
-  OnlineOverview,
-  OnlineSessionPicker,
-  type RecentEvidence,
-} from "./OnlineOverview";
+import { type RecentEvidence } from "./OnlineOverview";
 import { statusLabel } from "./statusLabels";
 import {
   ArrowRight,
   BookOpen,
-  CalendarDays,
   ChevronRight,
   FileText,
   GraduationCap,
   Pencil,
+  Pin,
   Plus,
   Search,
-  Settings2,
   ShieldCheck,
   Sparkles,
   Users,
   Video,
   ChevronLeft,
 } from "lucide-react";
-import { ClassesPage } from "./Classes";
-import { SessionsPage } from "./Sessions";
+import { ClassesHome } from "./classHome";
+import { AfterClass } from "./classHome/AfterClass";
+import { MaterialClassesDialog } from "./classHome/ClassMaterials";
 import { LiveRoom } from "./LiveRoom";
 import { MaterialViewer } from "./MaterialViewer";
 import "./product.css";
@@ -60,63 +58,7 @@ type Student = {
   color: string;
   version: number;
 };
-type Material = {
-  id: string;
-  title: string;
-  topic: string;
-  grade: string;
-  subject: string;
-  level: string;
-  kind: "PDF" | "Anh" | "BaiTap" | "GhiChu";
-  currentVersion: number;
-};
-type Activity = {
-  id: string;
-  title: string;
-  description: string;
-  duration: number;
-  type: "KhoiDong" | "LyThuyet" | "LuyenTap" | "KiemTra";
-  materialId: string | null;
-  materialVersion: number | null;
-  teacherNotes: string | null;
-  sourceEvidenceIds: string[];
-  sourceClaimRefs: { claimId: string; revision: number }[];
-  isSourceStale?: boolean;
-};
-type Session = {
-  id: string;
-  title: string;
-  date: string;
-  time: string;
-  duration: number;
-  goal: string;
-  sharedGoal: string;
-  status: string;
-  version: number;
-  groupId?: string | null;
-  groupName?: string | null;
-  Activity_sessionId_items: Activity[];
-  RoomMember_sessionId_items: { studentId: string }[];
-};
 type Teacher = { id: string; name: string; email: string };
-type ApprovedClaim = {
-  id: string;
-  studentId: string;
-  text: string;
-  revision: number;
-  evidenceIds: string[];
-  observationEvidenceIds: string[];
-};
-type Annotation = {
-  id: string;
-  activityId: string;
-  materialId: string;
-  page: number;
-  x: number;
-  y: number;
-  text: string;
-  materialVersion: number;
-};
 type Page =
   | "dashboard"
   | "classes"
@@ -128,6 +70,7 @@ type Page =
   | "grading"
   | "live"
   | "summary"
+  | "after"
   | "account";
 const pageNames: Record<Page, string> = {
   dashboard: "Tổng quan",
@@ -135,22 +78,22 @@ const pageNames: Record<Page, string> = {
   sessions: "Buổi học",
   students: "Học sinh",
   student: "Hồ sơ học sinh",
-  materials: "Kho học liệu",
-  plans: "Soạn buổi học",
+  materials: "Tài liệu",
+  plans: "Chi tiết buổi học",
   grading: "Chấm bài",
   live: "Phòng dạy",
   summary: "Tổng kết & duyệt",
+  after: "Sau buổi",
   account: "Tài khoản",
 };
-// Soạn, dạy, chấm và tổng kết đều đi từ một mục "Buổi học".
-const navItems: OnlineNavItem[] = (
-  ["dashboard", "classes", "sessions", "students", "materials", "account"] as const
-).map((id) => ({
+// Thanh bên theo thiết kế "Lớp là phòng": Lớp · Tài liệu, Tài khoản ở dưới.
+const navItems: OnlineNavItem[] = (["classes", "materials", "account"] as const).map((id) => ({
   id,
-  label: pageNames[id],
-  icon: (id === "sessions" ? "plans" : id) as OnlineNavItem["icon"],
+  label: id === "materials" ? "Tài liệu" : pageNames[id],
+  icon: id as OnlineNavItem["icon"],
 }));
-const sessionPages: Page[] = ["sessions", "plans", "live", "grading", "summary"];
+// Các trang thuộc vòng dạy của một lớp: mục Lớp trên thanh bên luôn sáng.
+const classPages: Page[] = ["classes", "after", "student", "plans", "live", "grading", "summary", "sessions", "dashboard", "students"];
 const message = (e: unknown): Feedback =>
   e instanceof ApiError
     ? e.failure
@@ -161,7 +104,6 @@ const message = (e: unknown): Feedback =>
         requestId: "unknown",
       };
 const body = (value: unknown) => JSON.stringify(value);
-const configTools = { board: true, upload: true, check: true, chat: true };
 
 let oauthBootstrap: Promise<void> | null = null;
 function initializeOAuth() {
@@ -181,13 +123,27 @@ export default function OnlineApp() {
   const [state, setState] = useState<AsyncState>("loading");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState(false);
-  const [page, setPage] = useState<Page>("dashboard");
+  const [page, setPage] = useState<Page>("classes");
   const [students, setStudents] = useState<Student[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedStudent, setSelectedStudent] = useState("");
   const [selectedSession, setSelectedSession] = useState("");
+  // Mở hồ sơ từ trang lớp thì nhớ lớp đó để quay lại đúng chỗ.
+  const [returnClass, setReturnClass] = useState<{ id: string; name: string } | null>(null);
+  const [classOpen, setClassOpen] = useState("");
+  // Lớp của phòng đang mở, để thoát phòng là về đúng trang lớp đó.
+  const [roomClass, setRoomClass] = useState("");
+  const [afterSession, setAfterSession] = useState("");
+  const backToClass = () => {
+    setClassOpen(roomClass);
+    setPage("classes");
+  };
+  const [studentGroups, setStudentGroups] = useState<{ id: string; name: string }[]>([]);
   const [roomSession, setRoomSession] = useState("");
+  const [roomBackToLesson, setRoomBackToLesson] = useState(false);
+  // Mở màn chấm từ màn Sau buổi thì thoát phòng là về lại màn Sau buổi đó.
+  const [roomBackToAfter, setRoomBackToAfter] = useState("");
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [title, setTitle] = useState("");
@@ -198,30 +154,17 @@ export default function OnlineApp() {
   const [materialLevel, setMaterialLevel] = useState("TrungBinh");
   const [materialDescription, setMaterialDescription] = useState("");
   const [preview, setPreview] = useState<Material | null>(null);
-  const [viewerActivity, setViewerActivity] = useState("");
-  const [suggestion, setSuggestion] = useState<{
-    id: string;
-    text: string;
-    provider?: "openai" | "gemini" | "mock";
-    sources: { claimId: string; revision: number; evidenceIds: string[] }[];
-  } | null>(null);
-  const [editingSuggestion, setEditingSuggestion] = useState(false);
-  const [activity, setActivity] = useState("");
-  const [activityDescription, setActivityDescription] = useState("");
-  const [activityDuration, setActivityDuration] = useState(15);
+  const [schedule, setSchedule] = useState<(ScheduleStart & { editId?: string }) | null>(null);
+  const [lessonNotice, setLessonNotice] = useState<{ id: string; text: string } | null>(null);
+  const [uploadSessionId, setUploadSessionId] = useState("");
+  const [uploadError, setUploadError] = useState("");
+  const [pinMaterial, setPinMaterial] = useState<Material | null>(null);
   const [grade, setGrade] = useState("Lớp 9");
   const [subject, setSubject] = useState("Toán");
-  const [planDate, setPlanDate] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
-  const [planTime, setPlanTime] = useState("19:00");
-  const [planDuration, setPlanDuration] = useState(60);
-  const [memberIds, setMemberIds] = useState<string[]>([]);
   const [editGoal, setEditGoal] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editStrengths, setEditStrengths] = useState("");
   const [editGaps, setEditGaps] = useState("");
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [history, setHistory] = useState<ApprovedClaim[]>([]);
   const [openedSource, setOpenedSource] = useState<{
     evidence: { title: string; detail: string };
@@ -230,16 +173,7 @@ export default function OnlineApp() {
   const [theme, setTheme] = useState(() =>
     document.body.classList.contains("dark"),
   );
-  const [modal, setModal] = useState<
-    | "student"
-    | "profile"
-    | "material"
-    | "session"
-    | "session-settings"
-    | "activity"
-    | null
-  >(null);
-  const [editingActivity, setEditingActivity] = useState("");
+  const [modal, setModal] = useState<"student" | "profile" | "material" | null>(null);
   const [query, setQuery] = useState("");
   const [studentFilter, setStudentFilter] = useState("active");
   const [recentEvidence, setRecentEvidence] = useState<RecentEvidence[]>([]);
@@ -252,6 +186,24 @@ export default function OnlineApp() {
     "loading" | "ready" | "error"
   >("loading");
   useEffect(() => setProfileTab("overview"), [selectedStudent]);
+  useEffect(() => {
+    setStudentGroups([]);
+    if (!teacher || page !== "student" || !selectedStudent) return;
+    let active = true;
+    void api<{ groups: { id: string; name: string; students: { id: string }[] }[] }>("/groups")
+      .then((r) => {
+        if (active)
+          setStudentGroups(
+            r.groups
+              .filter((g) => g.students.some((m) => m.id === selectedStudent))
+              .map((g) => ({ id: g.id, name: g.name })),
+          );
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [teacher?.id, page, selectedStudent]);
   useEffect(() => {
     setStudentEvidence([]);
     if (!teacher || page !== "student" || !selectedStudent) return;
@@ -301,25 +253,23 @@ export default function OnlineApp() {
     setProfileTab("overview");
     setModal(null);
     setRoomSession("");
-    setPage("dashboard");
+    setPage("classes");
     setStudents([]);
     setMaterials([]);
     setSessions([]);
     setHistory([]);
-    setAnnotations([]);
     setPreview(null);
-    setViewerActivity("");
     setOpenedSource(null);
-    setSuggestion(null);
     setSelectedStudent("");
     setSelectedSession("");
-    setMemberIds([]);
     setFile(null);
     setName("");
     setGoal("");
     setTitle("");
-    setActivity("");
-    setActivityDescription("");
+    setPinMaterial(null);
+    setSchedule(null);
+    setLessonNotice(null);
+    setUploadSessionId("");
     setMaterialTopic("");
     setMaterialDescription("");
     setEditGoal("");
@@ -452,25 +402,6 @@ export default function OnlineApp() {
       active = false;
     };
   }, [selectedStudent, page, roomSession]);
-  useEffect(() => {
-    if (!selectedSession) {
-      setAnnotations([]);
-      return;
-    }
-    let active = true;
-    api<{ annotations: Annotation[] }>(
-      `/sessions/${selectedSession}/annotations`,
-    )
-      .then((result) => {
-        if (active) setAnnotations(result.annotations);
-      })
-      .catch((error) => {
-        if (active) setFeedback(message(error));
-      });
-    return () => {
-      active = false;
-    };
-  }, [selectedSession]);
   const updateStudent = (patch: Partial<Student>) => {
     if (!student) return;
     void run(async () => {
@@ -482,133 +413,67 @@ export default function OnlineApp() {
       await reload();
     });
   };
-  const saveMaterial = (e: FormEvent) => {
-    e.preventDefault();
-    if (!file) return;
+  const openUpload = (sessionId = "") => {
+    setTitle("");
+    setFile(null);
+    setUploadError("");
+    setUploadSessionId(sessionId);
+    setModal("material");
+  };
+  const saveMaterial = (event: FormEvent) => {
+    event.preventDefault();
+    if (!file || busy) return;
+    setUploadError("");
+    const target = sessions.find(item => item.id === uploadSessionId);
+    const pupil = students.find(item => item.id === target?.RoomMember_sessionId_items[0]?.studentId);
     void run(async () => {
-      const bytes = await file.arrayBuffer();
-      const hash = Array.from(
-        new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
-        (x) => x.toString(16).padStart(2, "0"),
-      ).join("");
-      const intent = await api<{ uploadId: string; uploadUrl: string }>(
-        "/materials/upload-intent",
-        {
+      let material: Material;
+      try {
+        const bytes = await file.arrayBuffer();
+        const hash = Array.from(
+          new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+          (byte) => byte.toString(16).padStart(2, "0"),
+        ).join("");
+        const intent = await api<{ uploadId: string; uploadUrl: string }>("/materials/upload-intent", {
+          method: "POST",
+          body: body({ fileName: file.name, mimeType: file.type, sizeBytes: file.size, sha256: hash }),
+        });
+        const upload = await fetch(intent.uploadUrl, { method: "PUT", body: file });
+        if (!upload.ok) throw new Error("Chưa tải được tệp. Vui lòng thử lại.");
+        const fromLesson = !!uploadSessionId;
+        const uploadTitle = fromLesson ? file.name.replace(/\.[^.]+$/, "").trim() || file.name : title;
+        const result = await api<{ material: Material }>("/materials", {
           method: "POST",
           body: body({
-            fileName: file.name,
-            mimeType: file.type,
-            sizeBytes: file.size,
-            sha256: hash,
+            uploadId: intent.uploadId,
+            title: uploadTitle,
+            subject: fromLesson ? pupil?.subject || "" : materialSubject,
+            grade: fromLesson ? pupil?.grade || "" : materialGrade,
+            topic: fromLesson ? "" : materialTopic,
+            level: fromLesson ? "TrungBinh" : materialLevel,
+            kind: file.type === "application/pdf" ? "PDF" : "Anh",
+            description: fromLesson ? "" : materialDescription,
+            source: "Tải lên",
           }),
-        },
-      );
-      const upload = await fetch(intent.uploadUrl, {
-        method: "PUT",
-        body: file,
-      });
-      if (!upload.ok) throw new Error("Upload failed");
-      await api("/materials", {
-        method: "POST",
-        body: body({
-          uploadId: intent.uploadId,
-          title,
-          subject: materialSubject,
-          grade: materialGrade,
-          topic: materialTopic,
-          level: materialLevel,
-          kind: file.type === "application/pdf" ? "PDF" : "Anh",
-          description: materialDescription,
-          source: "Tải lên",
-        }),
-      });
+        });
+        material = result.material;
+      } catch (error) {
+        setUploadError(error instanceof ApiError ? error.failure.message : "Chưa tải được tệp. Vui lòng thử lại.");
+        return;
+      }
       setTitle("");
       setFile(null);
+      setMaterials(items => [material, ...items.filter(item => item.id !== material.id)]);
       setModal(null);
-      await reload();
-    });
-  };
-  const createSession = (e: FormEvent) => {
-    e.preventDefault();
-    if (!student) return;
-    void run(async () => {
-      const created = await api<{ session: Session }>("/sessions", {
-        method: "POST",
-        body: body({
-          studentIds: [...new Set([student.id, ...memberIds])],
-          title,
-          goal: student.goal,
-          sharedGoal: "",
-          date: planDate,
-          time: planTime,
-          duration: planDuration,
-          tools: configTools,
-        }),
-      });
-      setTitle("");
-      setModal(null);
-      await reload();
-      setSelectedSession(created.session.id);
-      setPage("plans");
-    });
-  };
-  const saveActivities = async (items: Activity[]) => {
-    if (!session) return;
-    const payload = items.map(
-      ({
-        id,
-        title: itemTitle,
-        description,
-        duration,
-        type,
-        materialId,
-        materialVersion,
-        teacherNotes,
-        sourceEvidenceIds,
-        sourceClaimRefs,
-      }) => ({
-        ...(id ? { id } : {}),
-        title: itemTitle,
-        description,
-        duration,
-        type,
-        materialId,
-        materialVersion,
-        teacherNotes,
-        sourceEvidenceIds,
-        sourceClaimRefs,
-      }),
-    );
-    await api(`/sessions/${session.id}/activities`, {
-      method: "PUT",
-      headers: { "If-Match-Version": String(session.version) },
-      body: body(payload),
-    });
-    await reload();
-  };
-  const addActivity = (e: FormEvent) => {
-    e.preventDefault();
-    if (!session) return;
-    void run(async () => {
-      await saveActivities([
-        ...session.Activity_sessionId_items,
-        {
-          id: "",
-          title: activity,
-          description: activityDescription,
-          duration: activityDuration,
-          type: "LuyenTap",
-          materialId: null,
-          materialVersion: null,
-          teacherNotes: null,
-          sourceEvidenceIds: [],
-          sourceClaimRefs: [],
-        },
-      ]);
-      setActivity("");
-      setActivityDescription("");
-      setActivityDuration(15);
-      setModal(null);
+      setUploadSessionId("");
+      if (target) {
+        try {
+          await attachMaterial(target, material);
+        } catch (error) {
+          setLessonNotice({ id: target.id, text: "Đã tải tệp lên kho. Chọn buổi để gắn tệp." });
+          throw error;
+        }
+      }
     });
   };
   const toggleTheme = () => {
@@ -626,6 +491,8 @@ export default function OnlineApp() {
       }
     });
   const navigate = (id: string) => {
+    if (id !== "student") setReturnClass(null);
+    if (id === "classes") setClassOpen("");
     setPage(id as Page);
     setQuery("");
     if (!["live", "grading", "summary"].includes(id)) setRoomSession("");
@@ -636,10 +503,56 @@ export default function OnlineApp() {
   ) => {
     setSelectedSession(id);
     setRoomSession(id);
+    setRoomBackToLesson(page === "plans");
+    setRoomBackToAfter("");
     setPage(view === "teach" ? "live" : view);
   };
+  const openLesson = (id: string, preferredStudentId?: string) => {
+    const lesson = sessions.find(item => item.id === id);
+    const participant = preferredStudentId || lesson?.RoomMember_sessionId_items[0]?.studentId;
+    if (participant) setSelectedStudent(participant);
+    setSelectedSession(id);
+    setLessonNotice(null);
+    navigate("plans");
+  };
+  const openLessonFromList = (id?: string) => {
+    if (!id) { setSchedule({}); return; }
+    const lesson = sessions.find(item => item.id === id);
+    if (lesson?.status === "live") openRoom(id);
+    else if (lesson?.status === "ended" || lesson?.status === "reviewed") openRoom(id, "summary");
+    else openLesson(id);
+  };
+  const openPupilLesson = (pupil: Student) => {
+    const next = nextPupilLesson(sessions, pupil.id);
+    if (!next) return;
+    if (next.status === "live") openRoom(next.id);
+    else openLesson(next.id, pupil.id);
+  };
+  const updateLesson = (updated: Session, notice?: string) => {
+    setSessions(items => items.some(item => item.id === updated.id)
+      ? items.map(item => item.id === updated.id && item.version <= updated.version ? updated : item)
+      : [updated, ...items]);
+    if (notice) setLessonNotice({ id: updated.id, text: notice });
+  };
+  const attachMaterial = async (target: Session, material: Material) => {
+    try {
+      const { session: updated } = await api<{ session: Session }>("/sessions/" + target.id + "/materials", {
+        method: "POST",
+        headers: { "If-Match-Version": String(target.version) },
+        body: body(materialRef(material)),
+      });
+      if (page !== "plans" || selectedSession !== target.id) openLesson(target.id);
+      updateLesson(updated, "Đã thêm " + material.title + " vào buổi.");
+    } catch (error) {
+      if (error instanceof ApiError && error.failure.code === "VERSION_CONFLICT") {
+        const latest = await api<{ session: Session }>("/sessions/" + target.id).catch(() => null);
+        if (latest) updateLesson(latest.session);
+      }
+      throw error;
+    }
+  };
   const openSource = (id: string) =>
-    void run(async () => setOpenedSource(await api(`/evidence/${id}`)));
+    void run(async () => setOpenedSource(await api("/evidence/" + id)));
   const workspace = ["live", "grading", "summary"].includes(page);
   const filteredStudents = students.filter(
     (item) =>
@@ -797,7 +710,7 @@ export default function OnlineApp() {
     );
   return (
     <OnlineShell
-      page={sessionPages.includes(page) ? "sessions" : page}
+      page={classPages.includes(page) ? "classes" : page}
       title={pageNames[page]}
       teacher={teacher}
       theme={theme ? "dark" : "light"}
@@ -813,160 +726,63 @@ export default function OnlineApp() {
         <AsyncPanel state="error" onRetry={() => void reload()} />
       ) : (
         <>
-          {page === "dashboard" && (
-            <OnlineOverview
-              teacherName={teacher?.name}
-              students={students}
-              materialsCount={materials.length}
-              sessions={sessions}
-              evidence={recentEvidence}
-              evidenceError={evidenceError}
-              onPlan={(sessionId?: string) => {
-                if (sessionId) setSelectedSession(sessionId);
-                navigate("plans");
-              }}
-              onMaterials={() => navigate("materials")}
-              onStudents={() => navigate("students")}
-              onSession={openRoom}
-              onEvidence={openSource}
-            />
-          )}
-          {page === "sessions" && (
-            <SessionsPage
-              sessions={sessions}
-              students={students}
-              onOpen={(id, view) => openRoom(id, view)}
-              onEdit={(id) => {
-                setSelectedSession(id);
-                navigate("plans");
-              }}
-              onCreate={() => {
-                setTitle("");
-                setModal("session");
-              }}
-            />
-          )}
           {page === "classes" && (
-            <ClassesPage
+            <ClassesHome
+              key={classOpen || "list"}
+              initialOpenId={classOpen}
               students={students}
               onChanged={reload}
-              onOpenSession={(id) => {
-                const found = sessions.find((item) => item.id === id);
-                if (found?.status === "live") openRoom(id);
-                else {
-                  setSelectedSession(id);
-                  navigate("plans");
-                }
+              onEnterRoom={(sessionId, groupId) => {
+                setRoomClass(groupId);
+                void reload().then(() => openRoom(sessionId));
+              }}
+              onOpenRoomView={(sessionId, view, groupId) => {
+                setRoomClass(groupId);
+                openRoom(sessionId, view);
+              }}
+              onPrepare={(sessionId, groupId) => {
+                setRoomClass(groupId);
+                setSelectedSession(sessionId);
+                setLessonNotice(null);
+                void reload().then(() => setPage("plans"));
+              }}
+              onOpenAfter={(sessionId, groupId) => {
+                setRoomClass(groupId);
+                setAfterSession(sessionId);
+                setPage("after");
               }}
             />
           )}
-          {page === "students" && (
-            <>
-              <div className="restored-page-title">
-                <div>
-                  <h1>Học sinh của bạn</h1>
-                  <p>Hiểu từng học sinh để chuẩn bị đúng điều các em cần.</p>
-                </div>
-                <button
-                  className="button primary"
-                  onClick={() => setModal("student")}
-                >
-                  <Plus size={17} />
-                  Thêm học sinh
-                </button>
-              </div>
-              <div className="filter-card">
-                <label className="search-box">
-                  <Search size={17} />
-                  <input
-                    aria-label="Tìm học sinh"
-                    placeholder="Tìm theo tên, lớp hoặc môn học…"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </label>
-                <select
-                  aria-label="Trạng thái học sinh"
-                  value={studentFilter}
-                  onChange={(event) => setStudentFilter(event.target.value)}
-                >
-                  <option value="active">Đang theo dõi</option>
-                  <option value="archived">Đã lưu trữ</option>
-                  <option value="all">Tất cả học sinh</option>
-                </select>
-                <span className="result-count">
-                  {filteredStudents.length} học sinh
-                </span>
-              </div>
-              <div className="restored-student-grid">
-                {filteredStudents.map((item) => (
-                  <article className="card restored-student-card" key={item.id}>
-                    <div className="row-between">
-                      <span className={`avatar avatar-${item.color}`}>
-                        {item.initials || initials(item.name)}
-                      </span>
-                      <Status
-                        tone={item.status === "active" ? "green" : "neutral"}
-                      >
-                        {item.status === "active"
-                          ? "Đang theo dõi"
-                          : "Đã lưu trữ"}
-                      </Status>
-                    </div>
-                    <h2>{item.name}</h2>
-                    <p>
-                      {item.grade} · {item.subject}
-                    </p>
-                    <p className="student-goal">
-                      <span>Mục tiêu hiện tại</span>
-                      {item.goal || "Chưa ghi mục tiêu học tập."}
-                    </p>
-                    <div className="student-card-footer">
-                      <button
-                        className="button"
-                        onClick={() => {
-                          setSelectedStudent(item.id);
-                          navigate("student");
-                        }}
-                      >
-                        Xem hồ sơ
-                        <ChevronRight size={15} />
-                      </button>
-                      <button
-                        className="text-button"
-                        onClick={() => {
-                          setSelectedStudent(item.id);
-                          navigate("plans");
-                        }}
-                      >
-                        Soạn buổi học
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-              {!filteredStudents.length && (
-                <section className="card restored-empty">
-                  <Users size={30} />
-                  <h2>
-                    {query
-                      ? "Chưa tìm thấy học sinh"
-                      : "Chưa có học sinh ở danh sách này"}
-                  </h2>
-                  <p>Thêm hồ sơ để theo dõi mục tiêu và quá trình học.</p>
-                </section>
-              )}
-            </>
+          {page === "after" && afterSession && (
+            <AfterClass
+              key={afterSession}
+              sessionId={afterSession}
+              onBack={() => { void reload(); backToClass(); }}
+              onOpenGrading={(id) => { openRoom(id, "grading"); setRoomBackToAfter(id); }}
+            />
           )}
           {page === "student" && student && (
             <>
-              <button
-                className="text-button"
-                onClick={() => navigate("students")}
-              >
-                Học sinh <ChevronRight size={14} />
-                Hồ sơ
-              </button>
+              {returnClass ? (
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setClassOpen(returnClass.id);
+                    setReturnClass(null);
+                    setPage("classes");
+                  }}
+                >
+                  <ChevronLeft size={14} /> {returnClass.name}
+                </button>
+              ) : (
+                <button
+                  className="text-button"
+                  onClick={() => navigate("classes")}
+                >
+                  Học sinh <ChevronRight size={14} />
+                  Hồ sơ
+                </button>
+              )}
               <section className="card profile-hero">
                 <div className="profile-identity">
                   <span className={`avatar avatar-${student.color} avatar-lg`}>
@@ -977,6 +793,27 @@ export default function OnlineApp() {
                     <p>
                       {student.grade} · {student.subject}
                     </p>
+                    {studentGroups.length > 0 && (
+                      <p className="profile-classes">
+                        Đang học:{" "}
+                        {studentGroups.map((g, i) => (
+                          <span key={g.id}>
+                            {i > 0 && ", "}
+                            <button
+                              type="button"
+                              className="text-button"
+                              onClick={() => {
+                                setClassOpen(g.id);
+                                setReturnClass(null);
+                                setPage("classes");
+                              }}
+                            >
+                              {g.name}
+                            </button>
+                          </span>
+                        ))}
+                      </p>
+                    )}
                     <Status
                       tone={student.status === "active" ? "green" : "neutral"}
                     >
@@ -994,15 +831,10 @@ export default function OnlineApp() {
                     <Pencil size={15} />
                     Chỉnh sửa hồ sơ
                   </button>
-                  <button
-                    className="button primary"
-                    onClick={() => navigate("plans")}
-                  >
-                    <Plus size={15} />
-                    Soạn buổi học
-                  </button>
                 </div>
               </section>
+              {student.status === "active" && <StudentNextLesson student={student} sessions={sessions} students={students}
+                onOpen={() => openPupilLesson(student)} />}
               <div className="profile-metrics">
                 <div className="metric-card">
                   <span>Buổi học đã tham gia</span>
@@ -1243,10 +1075,7 @@ export default function OnlineApp() {
                                               ? "teach"
                                               : "summary",
                                           );
-                                        else {
-                                          setSelectedSession(item.id);
-                                          navigate("plans");
-                                        }
+                                        else openLesson(item.id, student.id);
                                       }}
                                     >
                                       Mở <ArrowRight size={14} />
@@ -1310,32 +1139,34 @@ export default function OnlineApp() {
             <>
               <div className="restored-page-title">
                 <div>
-                  <h1>Kho học liệu</h1>
-                  <p>Sắp xếp đề bài và tài liệu để dùng trong từng buổi học.</p>
+                  <h1>Tài liệu</h1>
+                  <p>Không bắt buộc: chia sẻ màn hình vẫn dạy được như thường. Tải lên đây khi bạn muốn máy làm thêm vài việc.</p>
                 </div>
                 <button
                   className="button primary"
-                  onClick={() => {
-                    setTitle("");
-                    setModal("material");
-                  }}
+                  onClick={() => openUpload()}
                 >
                   <Plus size={17} />
-                  Tải học liệu
+                  Tải tài liệu
                 </button>
+              </div>
+              <div className="mat-values">
+                <div><Pin size={16} /><span><b>Mở sẵn khi vào lớp</b>Ghim cho lớp, bấm Mở lớp là tài liệu đã trên màn chiếu.</span></div>
+                <div><BookOpen size={16} /><span><b>Nhớ trang đã dừng</b>Buổi sau mở tiếp đúng trang, không phải tìm lại.</span></div>
+                <div><Sparkles size={16} /><span><b>Câu hỏi từ trang đang chiếu</b>AI soạn nháp câu hỏi nhanh, bạn sửa rồi mới gửi.</span></div>
               </div>
               <div className="filter-card">
                 <label className="search-box">
                   <Search size={17} />
                   <input
-                    aria-label="Tìm học liệu"
+                    aria-label="Tìm tài liệu"
                     placeholder="Tìm theo tên, môn học hoặc chủ đề…"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                   />
                 </label>
                 <span className="result-count">
-                  {filteredMaterials.length} học liệu
+                  {filteredMaterials.length} tài liệu
                 </span>
               </div>
               <div className="restored-material-grid">
@@ -1362,726 +1193,38 @@ export default function OnlineApp() {
                       Xem tệp
                       <ArrowRight size={15} />
                     </button>
+                    <button type="button" className="button secondary" onClick={() => setPinMaterial(item)}>Dùng cho lớp</button>
                   </article>
                 ))}
               </div>
               {!filteredMaterials.length && (
                 <section className="card restored-empty">
                   <BookOpen size={32} />
-                  <h2>Chưa có học liệu phù hợp</h2>
+                  <h2>Chưa có tài liệu phù hợp</h2>
                   <p>Tải PDF hoặc hình ảnh để chuẩn bị nội dung giảng dạy.</p>
                   <button
                     className="button"
-                    onClick={() => setModal("material")}
+                    onClick={() => openUpload()}
                   >
-                    Tải học liệu đầu tiên
+                    Tải tài liệu đầu tiên
                   </button>
                 </section>
               )}
             </>
           )}
-          {page === "plans" && (
-            <>
-              <div className="restored-page-title">
-                <div>
-                  <button
-                    type="button"
-                    className="text-button restored-back"
-                    onClick={() => navigate("sessions")}
-                  >
-                    <ChevronLeft size={16} /> Buổi học
-                  </button>
-                  <h1>Soạn buổi học</h1>
-                  <p>
-                    Từ mục tiêu của học sinh đến một mạch hoạt động rõ ràng.
-                  </p>
-                </div>
-                <button
-                  className="button primary"
-                  onClick={() => {
-                    setTitle("");
-                    setModal("session");
-                  }}
-                >
-                  <Plus size={17} />
-                  Tạo buổi học
-                </button>
-              </div>
-              <div className="restored-plan-layout">
-                <aside className="card restored-plan-aside">
-                  <div className="section-head">
-                    <h2>Buổi học của bạn</h2>
-                    <CalendarDays size={18} />
-                  </div>
-                  <div className="restored-session-list">
-                    {sessions.map((item) => (
-                      <button
-                        key={item.id}
-                        aria-label={item.title}
-                        className={`restored-session-row${selectedSession === item.id ? " is-selected" : ""}`}
-                        onClick={() => setSelectedSession(item.id)}
-                      >
-                        <strong>{item.title}</strong>
-                        <span>
-                          {item.date} · {item.time}
-                        </span>
-                        <Status
-                          tone={item.status === "live" ? "green" : "neutral"}
-                        >
-                          {statusLabel(item.status)}
-                        </Status>
-                      </button>
-                    ))}
-                  </div>
-                  {!sessions.length && (
-                    <p className="muted">
-                      Tạo buổi học đầu tiên để thêm mục tiêu và hoạt động.
-                    </p>
-                  )}
-                </aside>
-                <section className="card restored-plan-main">
-                  {session ? (
-                    <>
-                      <header className="plan-main-header">
-                        <div className="plan-main-title-block">
-                          <div className="plan-main-badges">
-                            <Status
-                              tone={
-                                session.status === "live"
-                                  ? "green"
-                                  : session.status === "scheduled"
-                                    ? "blue"
-                                    : session.status === "reviewed"
-                                      ? "green"
-                                      : "violet"
-                              }
-                            >
-                              {statusLabel(session.status)}
-                            </Status>
-                            <span className="plan-duration-pill">
-                              Thời lượng {session.duration} phút
-                            </span>
-                          </div>
-                          <h2>{session.title}</h2>
-                          <p className="plan-meta-line">
-                            {session.date} · {session.time} · {session.duration}{" "}
-                            phút
-                          </p>
-                          {(session.sharedGoal || session.goal) && (
-                            <div className="plan-goals-summary">
-                              {session.sharedGoal && (
-                                <p>
-                                  <strong>Mục tiêu lớp học:</strong>{" "}
-                                  {session.sharedGoal}
-                                </p>
-                              )}
-                              {session.goal && (
-                                <p>
-                                  <strong>Mục tiêu giáo viên:</strong>{" "}
-                                  {session.goal}
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <div className="plan-main-actions">
-                          <button
-                            className="button ghost small"
-                            onClick={() => setModal("session-settings")}
-                          >
-                            <Settings2 size={15} />
-                            Thiết lập buổi học
-                          </button>
-                          <button
-                            className="button ghost small"
-                            disabled={busy || session.status !== "draft"}
-                            onClick={() =>
-                              void run(async () => {
-                                await api(`/sessions/${session.id}`, {
-                                  method: "PATCH",
-                                  headers: {
-                                    "If-Match-Version": String(session.version),
-                                  },
-                                  body: body({ status: "scheduled" }),
-                                });
-                                await reload();
-                              })
-                            }
-                          >
-                            Lên lịch
-                          </button>
-                          <button
-                            className="button primary"
-                            type="button"
-                            onClick={() => openRoom(session.id)}
-                          >
-                            <Video size={16} />
-                            Mở phòng học
-                          </button>
-                        </div>
-                      </header>
-
-                      <div className="plan-members-section">
-                        <span className="plan-section-label">
-                          Học sinh tham gia (
-                          {session.RoomMember_sessionId_items.length})
-                        </span>
-                        <div className="plan-member-list">
-                          {session.RoomMember_sessionId_items.map((member) => {
-                            const pupil = students.find(
-                              (item) => item.id === member.studentId,
-                            );
-                            const pupilName = pupil?.name || "Học sinh";
-                            return (
-                              <div
-                                key={member.studentId}
-                                className="plan-member-chip"
-                              >
-                                <span
-                                  className={`avatar avatar-sm avatar-${pupil?.color || "violet"}`}
-                                >
-                                  {pupil?.initials || initials(pupilName)}
-                                </span>
-                                <span className="plan-member-name">
-                                  {pupilName}
-                                </span>{" "}
-                                {session.status === "draft" && (
-                                  <button
-                                    className="text-button"
-                                    disabled={
-                                      busy ||
-                                      session.RoomMember_sessionId_items
-                                        .length <= 1
-                                    }
-                                    onClick={() =>
-                                      void run(async () => {
-                                        await api(
-                                          `/sessions/${session.id}/members/${member.studentId}`,
-                                          {
-                                            method: "DELETE",
-                                            headers: {
-                                              "If-Match-Version": String(
-                                                session.version,
-                                              ),
-                                            },
-                                          },
-                                        );
-                                        await reload();
-                                      })
-                                    }
-                                  >
-                                    Bỏ khỏi bản nháp
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="plan-activities-header">
-                        <div>
-                          <h3>
-                            Lộ trình hoạt động (
-                            {session.Activity_sessionId_items.length})
-                          </h3>
-                          <small>
-                            Tổng thời lượng:{" "}
-                            {session.Activity_sessionId_items.reduce(
-                              (n, a) => n + a.duration,
-                              0,
-                            )}{" "}
-                            phút / {session.duration} phút
-                          </small>
-                        </div>
-                        <div className="plan-activities-actions">
-                          <button
-                            className="button ghost small"
-                            disabled={
-                              busy || !session.RoomMember_sessionId_items.length
-                            }
-                            onClick={() =>
-                              void run(async () => {
-                                const studentId =
-                                  session.RoomMember_sessionId_items.some(
-                                    (m) => m.studentId === selectedStudent,
-                                  )
-                                    ? selectedStudent
-                                    : session.RoomMember_sessionId_items[0]
-                                        .studentId;
-                                const response = await api<{
-                                  suggestion: {
-                                    id: string;
-                                    text: string;
-                                    provider?: "openai" | "gemini" | "mock";
-                                    sources: {
-                                      claimId: string;
-                                      revision: number;
-                                      evidenceIds: string[];
-                                    }[];
-                                  };
-                                }>(`/sessions/${session.id}/ai/plan-suggestions`, {
-                                  method: "POST",
-                                  body: body({ studentId }),
-                                });
-                                setSuggestion(response.suggestion);
-                                setEditingSuggestion(false);
-                              })
-                            }
-                          >
-                            <Sparkles size={15} />
-                            Đề xuất hoạt động từ lịch sử đã duyệt
-                          </button>
-                          <button
-                            className="button secondary small"
-                            onClick={() => setModal("activity")}
-                          >
-                            <Plus size={16} />
-                            Thêm hoạt động
-                          </button>
-                        </div>
-                      </div>
-
-                      {session.Activity_sessionId_items.reduce(
-                        (n, a) => n + a.duration,
-                        0,
-                      ) > session.duration && (
-                        <p role="alert" className="plan-duration-alert">
-                          Tổng thời lượng hoạt động vượt thời lượng buổi học.
-                        </p>
-                      )}
-
-                      {suggestion && (
-                        <div className="plan-ai-suggestion">
-                          <p className="plan-ai-provider">
-                            <Sparkles size={14} />
-                            {suggestion.provider === "mock"
-                              ? "Giả lập local"
-                              : suggestion.provider === "openai"
-                                ? "OpenAI"
-                                : suggestion.provider === "gemini"
-                                ? "Gemini"
-                                : "Gợi ý đã lưu"}{" "}
-                            · Giáo viên kiểm tra nguồn trước khi dùng.
-                          </p>
-                          <AISuggestionReview
-                            text={suggestion.text}
-                            busy={busy}
-                            onEdit={() => setEditingSuggestion(true)}
-                            onDismiss={() =>
-                              void run(async () => {
-                                await api(`/ai-requests/${suggestion.id}`, {
-                                  method: "PATCH",
-                                  body: body({ status: "ignored" }),
-                                });
-                                setSuggestion(null);
-                              })
-                            }
-                            onAccept={() =>
-                              void run(async () => {
-                                await saveActivities([
-                                  ...session.Activity_sessionId_items,
-                                  {
-                                    id: "",
-                                    title: "Củng cố từ lịch sử đã duyệt",
-                                    description: "",
-                                    teacherNotes: suggestion.text,
-                                    duration: 15,
-                                    type: "KiemTra",
-                                    materialId: null,
-                                    materialVersion: null,
-                                    sourceEvidenceIds: [
-                                      ...new Set(
-                                        suggestion.sources.flatMap(
-                                          (source) => source.evidenceIds,
-                                        ),
-                                      ),
-                                    ],
-                                    sourceClaimRefs: suggestion.sources.map(
-                                      ({ claimId, revision }) => ({
-                                        claimId,
-                                        revision,
-                                      }),
-                                    ),
-                                  },
-                                ]);
-                                await api(`/ai-requests/${suggestion.id}`, {
-                                  method: "PATCH",
-                                  body: body({ status: "used" }),
-                                });
-                                setSuggestion(null);
-                              })
-                            }
-                          />
-                          {editingSuggestion && (
-                            <label>
-                              Sửa gợi ý riêng cho giáo viên
-                              <textarea
-                                value={suggestion.text}
-                                onChange={(e) =>
-                                  setSuggestion({
-                                    ...suggestion,
-                                    text: e.target.value,
-                                  })
-                                }
-                              />
-                            </label>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="plan-activities-list">
-                        {session.Activity_sessionId_items.map((a, index) => (
-                          <article
-                            className="restored-activity-card"
-                            key={a.id}
-                          >
-                            <div className="activity-card-header">
-                              <div className="activity-card-heading">
-                                <span className="activity-step-badge">
-                                  {String(index + 1).padStart(2, "0")}
-                                </span>
-                                <div>
-                                  <p className="activity-card-title">
-                                    {a.title} · {a.duration} phút
-                                  </p>
-                                  {a.description && (
-                                    <p className="activity-card-desc">
-                                      {a.description}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="activity-card-actions">
-                                <button
-                                  className="button ghost small"
-                                  onClick={() => setEditingActivity(a.id)}
-                                >
-                                  <Pencil size={14} />
-                                  Chỉnh sửa hoạt động
-                                </button>
-                                <button
-                                  className="text-button"
-                                  disabled={busy || index === 0}
-                                  onClick={() =>
-                                    void run(async () => {
-                                      const items = [
-                                        ...session.Activity_sessionId_items,
-                                      ];
-                                      [items[index - 1], items[index]] = [
-                                        items[index],
-                                        items[index - 1],
-                                      ];
-                                      await saveActivities(items);
-                                    })
-                                  }
-                                >
-                                  Lên
-                                </button>
-                                <button
-                                  className="text-button"
-                                  disabled={
-                                    busy ||
-                                    index ===
-                                      session.Activity_sessionId_items.length -
-                                        1
-                                  }
-                                  onClick={() =>
-                                    void run(async () => {
-                                      const items = [
-                                        ...session.Activity_sessionId_items,
-                                      ];
-                                      [items[index + 1], items[index]] = [
-                                        items[index],
-                                        items[index + 1],
-                                      ];
-                                      await saveActivities(items);
-                                    })
-                                  }
-                                >
-                                  Xuống
-                                </button>
-                                <button
-                                  className="text-button"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    void run(async () => {
-                                      await saveActivities(
-                                        session.Activity_sessionId_items.filter(
-                                          (item) => item.id !== a.id,
-                                        ),
-                                      );
-                                    })
-                                  }
-                                >
-                                  Xóa
-                                </button>
-                              </div>
-                            </div>
-
-                            {a.isSourceStale && (
-                              <p role="alert" className="activity-stale-alert">
-                                Nguồn đã thay đổi, cần kiểm tra lại.
-                              </p>
-                            )}
-
-                            {editingActivity === a.id && (
-                              <Modal
-                                title={`Chỉnh sửa: ${a.title}`}
-                                onClose={() => !busy && setEditingActivity("")}
-                              >
-                                <form
-                                  className="form-stack"
-                                  key={`${a.id}-${session.version}`}
-                                  onSubmit={(event) => {
-                                    event.preventDefault();
-                                    const fields = new FormData(
-                                      event.currentTarget,
-                                    );
-                                    void run(async () => {
-                                      await saveActivities(
-                                        session.Activity_sessionId_items.map(
-                                          (item) =>
-                                            item.id === a.id
-                                              ? {
-                                                  ...item,
-                                                  title: String(
-                                                    fields.get("title"),
-                                                  ),
-                                                  description: String(
-                                                    fields.get("description"),
-                                                  ),
-                                                  duration: Number(
-                                                    fields.get("duration"),
-                                                  ),
-                                                }
-                                              : item,
-                                        ),
-                                      );
-                                    });
-                                  }}
-                                >
-                                  <label>
-                                    Tên hoạt động
-                                    <input
-                                      name="title"
-                                      defaultValue={a.title}
-                                      required
-                                    />
-                                  </label>
-                                  <label>
-                                    Mô tả hoạt động
-                                    <textarea
-                                      name="description"
-                                      defaultValue={a.description}
-                                    />
-                                  </label>
-                                  <label>
-                                    Số phút
-                                    <input
-                                      name="duration"
-                                      type="number"
-                                      min="1"
-                                      defaultValue={a.duration}
-                                      required
-                                    />
-                                  </label>
-                                  <button
-                                    className="button primary small"
-                                    disabled={busy}
-                                  >
-                                    Lưu hoạt động
-                                  </button>
-                                </form>
-                              </Modal>
-                            )}
-
-                            <div className="activity-card-footer">
-                              <div className="activity-material-row">
-                                <select
-                                  aria-label={`Học liệu cho ${a.title}`}
-                                  value={a.materialId || ""}
-                                  onChange={(e) => {
-                                    const materialId = e.target.value || null;
-                                    void run(async () => {
-                                      await saveActivities(
-                                        session.Activity_sessionId_items.map(
-                                          (item) =>
-                                            item.id === a.id
-                                              ? {
-                                                  ...item,
-                                                  materialId,
-                                                  materialVersion: materialId
-                                                    ? (materials.find(
-                                                        (m) =>
-                                                          m.id === materialId,
-                                                      )?.currentVersion ?? null)
-                                                    : null,
-                                                }
-                                              : item,
-                                        ),
-                                      );
-                                    });
-                                  }}
-                                >
-                                  <option value="">Chưa gắn học liệu</option>
-                                  {materials.map((m) => (
-                                    <option key={m.id} value={m.id}>
-                                      {m.title}
-                                    </option>
-                                  ))}
-                                </select>
-                                {a.materialId && (
-                                  <button
-                                    className="button ghost small"
-                                    onClick={() =>
-                                      setViewerActivity(
-                                        viewerActivity === a.id ? "" : a.id,
-                                      )
-                                    }
-                                  >
-                                    {viewerActivity === a.id
-                                      ? "Đóng xem đề"
-                                      : "Xem và chú thích đề"}
-                                  </button>
-                                )}
-                              </div>
-                              <div className="activity-sources-row">
-                                {a.sourceEvidenceIds.map((id) => (
-                                  <button
-                                    className="text-button source-chip"
-                                    key={id}
-                                    onClick={() =>
-                                      void run(async () => {
-                                        setOpenedSource(
-                                          await api(`/evidence/${id}`),
-                                        );
-                                      })
-                                    }
-                                  >
-                                    <FileText size={13} />
-                                    Xem nguồn đã duyệt
-                                  </button>
-                                ))}
-                                {history
-                                  .filter(() =>
-                                    session.RoomMember_sessionId_items.some(
-                                      (member) =>
-                                        member.studentId === selectedStudent,
-                                    ),
-                                  )
-                                  .map((claim) => (
-                                    <button
-                                      className="text-button source-chip"
-                                      key={claim.id}
-                                      onClick={() =>
-                                        void run(async () => {
-                                          await saveActivities(
-                                            session.Activity_sessionId_items.map(
-                                              (item) =>
-                                                item.id === a.id
-                                                  ? {
-                                                      ...item,
-                                                      sourceEvidenceIds: [
-                                                        ...new Set([
-                                                          ...item.sourceEvidenceIds,
-                                                          ...claim.observationEvidenceIds,
-                                                        ]),
-                                                      ],
-                                                      sourceClaimRefs: [
-                                                        ...item.sourceClaimRefs.filter(
-                                                          (ref) =>
-                                                            ref.claimId !==
-                                                            claim.id,
-                                                        ),
-                                                        {
-                                                          claimId: claim.id,
-                                                          revision:
-                                                            claim.revision,
-                                                        },
-                                                      ],
-                                                    }
-                                                  : item,
-                                            ),
-                                          );
-                                        })
-                                      }
-                                    >
-                                      Gắn nguồn: {claim.text}
-                                    </button>
-                                  ))}
-                              </div>
-                            </div>
-
-                            {viewerActivity === a.id &&
-                              a.materialId &&
-                              a.materialVersion &&
-                              materials.find((m) => m.id === a.materialId) && (
-                                <MaterialViewer
-                                  materialId={a.materialId}
-                                  version={a.materialVersion}
-                                  title={
-                                    materials.find(
-                                      (m) => m.id === a.materialId,
-                                    )!.title
-                                  }
-                                  kind={
-                                    materials.find(
-                                      (m) => m.id === a.materialId,
-                                    )!.kind
-                                  }
-                                  annotations={annotations}
-                                  sessionId={session.id}
-                                  activityId={a.id}
-                                  students={session.RoomMember_sessionId_items.map(
-                                    (member) => ({
-                                      id: member.studentId,
-                                      name:
-                                        students.find(
-                                          (pupil) =>
-                                            pupil.id === member.studentId,
-                                        )?.name || "Học sinh",
-                                    }),
-                                  )}
-                                  onSaved={(saved) =>
-                                    setAnnotations((items) => [...items, saved])
-                                  }
-                                />
-                              )}
-                            {annotations
-                              .filter((item) => item.activityId === a.id)
-                              .map((item) => (
-                                <p key={item.id} className="activity-pin-note">
-                                  Chú thích trang {item.page + 1} · vị trí{" "}
-                                  {item.x}
-                                  %, {item.y}% · phiên bản{" "}
-                                  {item.materialVersion}: {item.text}
-                                </p>
-                              ))}
-                          </article>
-                        ))}
-                        {!session.Activity_sessionId_items.length && (
-                          <div className="restored-empty">
-                            <BookOpen size={28} />
-                            <p>Buổi học này chưa có hoạt động nào.</p>
-                            <small>
-                              Nhấn &ldquo;Thêm hoạt động&rdquo; hoặc đề xuất từ
-                              lịch sử đã duyệt để xây dựng lộ trình.
-                            </small>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="restored-empty">
-                      <CalendarDays size={30} />
-                      <p>Chọn buổi học.</p>
-                    </div>
-                  )}
-                </section>
-              </div>
-            </>
-          )}
+          {page === "plans" && (session ? <LessonPreparation key={session.id} session={session}
+            students={students} materials={materials} history={history} preferredStudentId={selectedStudent}
+            notice={lessonNotice?.id === session.id ? lessonNotice.text : ""}
+            onBack={() => (roomClass ? backToClass() : navigate("classes"))}
+            onSchedule={() => setSchedule({ editId: session.id })}
+            onOpenRoom={() => openRoom(session.id, session.status === "ended" || session.status === "reviewed" ? "summary" : "teach")}
+            onOpenStudent={id => { setSelectedStudent(id); navigate("student"); }}
+            onSource={openSource} onAttach={attachMaterial} onUpdated={updateLesson}
+            onUpload={() => openUpload(session.id)}
+          /> : <section className="card">
+            <h1>Chọn buổi học</h1>
+            <button type="button" className="button secondary" onClick={() => navigate("classes")}>Về danh sách buổi</button>
+          </section>)}
           {workspace &&
             (roomSession ? (
               <LiveRoom
@@ -2098,34 +1241,28 @@ export default function OnlineApp() {
                 onViewChange={(view) =>
                   setPage(view === "teach" ? "live" : view)
                 }
+                onEnded={() => {
+                  setAfterSession(roomSession);
+                  setRoomSession("");
+                  setPage("after");
+                  void reload();
+                }}
                 onExit={() => {
                   setRoomSession("");
-                  setPage("sessions");
+                  if (roomBackToAfter) {
+                    setAfterSession(roomBackToAfter);
+                    setRoomBackToAfter("");
+                    setPage("after");
+                  } else if (roomBackToLesson) setPage("plans");
+                  else {
+                    // Về đúng trang lớp vừa dạy (hoặc danh sách lớp nếu không rõ lớp).
+                    setClassOpen(roomClass);
+                    setPage("classes");
+                  }
+                  void reload();
                 }}
               />
-            ) : (
-              <OnlineSessionPicker
-                sessions={sessions}
-                students={students}
-                selected={selectedSession}
-                purpose={page as "live" | "grading" | "summary"}
-                onSelect={setSelectedSession}
-                onOpen={(id) =>
-                  openRoom(
-                    id,
-                    page === "grading"
-                      ? "grading"
-                      : page === "summary"
-                        ? "summary"
-                        : "teach",
-                  )
-                }
-                onPlan={(sessionId?: string) => {
-                if (sessionId) setSelectedSession(sessionId);
-                navigate("plans");
-              }}
-              />
-            ))}
+            ) : null)}
           {page === "account" && (
             <>
               <div className="restored-page-title">
@@ -2149,7 +1286,7 @@ export default function OnlineApp() {
                   <div>
                     <strong>Dữ liệu được lưu trên máy chủ</strong>
                     <p>
-                      Hồ sơ, học liệu và buổi học đi cùng tài khoản giáo viên
+                      Hồ sơ, tài liệu và buổi học đi cùng tài khoản giáo viên
                       của bạn.
                     </p>
                   </div>
@@ -2327,8 +1464,10 @@ export default function OnlineApp() {
         </Modal>
       )}
       {modal === "material" && (
-        <Modal title="Tải học liệu" onClose={() => !busy && setModal(null)}>
-          <form className="form-stack" onSubmit={saveMaterial}>
+        <Modal title={uploadSessionId ? "Tải tệp cho buổi học" : "Tải tài liệu"} onClose={() => { if (!busy) { setModal(null); setUploadSessionId(""); } }}>
+          <form className="form-stack lesson-dialog-form" onSubmit={saveMaterial}>
+            {uploadSessionId && session && <p className="lesson-dialog-context">{lessonHeading(session, students)} · {lessonWhen(session)}</p>}
+            {!uploadSessionId && <>
             <label>
               Tên
               <input
@@ -2383,6 +1522,7 @@ export default function OnlineApp() {
                 onChange={(e) => setMaterialDescription(e.target.value)}
               />
             </label>
+            </>}
             <label className="upload-field">
               PDF hoặc ảnh, tối đa 10 MiB
               <input
@@ -2392,207 +1532,25 @@ export default function OnlineApp() {
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
               />
             </label>
-            <button className="button primary" disabled={busy}>
-              Tải lên
-            </button>
+            {uploadError && <p className="lesson-error" role="alert">{uploadError}</p>}
+            <div className="lesson-dialog-actions">
+              <button className="button primary" disabled={busy || !file}>
+                {busy ? "Đang tải…" : uploadSessionId ? "Tải lên và thêm" : "Tải lên"}
+              </button>
+            </div>
           </form>
         </Modal>
       )}
-      {modal === "session" && (
-        <Modal title="Tạo buổi học" onClose={() => !busy && setModal(null)}>
-          <form className="form-stack" onSubmit={createSession}>
-            <label>
-              Học sinh
-              <select
-                aria-label="Học sinh"
-                value={selectedStudent}
-                onChange={(e) => setSelectedStudent(e.target.value)}
-              >
-                {students
-                  .filter((s) => s.status === "active")
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              Thêm học sinh (tối đa 5)
-              <select
-                aria-label="Thêm học sinh (tối đa 5)"
-                multiple
-                value={memberIds}
-                onChange={(e) =>
-                  setMemberIds(
-                    Array.from(e.target.selectedOptions, (o) => o.value),
-                  )
-                }
-              >
-                {students
-                  .filter((s) => s.status === "active")
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              Tên buổi học
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Ngày
-              <input
-                type="date"
-                value={planDate}
-                onChange={(e) => setPlanDate(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Giờ
-              <input
-                type="time"
-                value={planTime}
-                onChange={(e) => setPlanTime(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Thời lượng (phút)
-              <input
-                type="number"
-                min="1"
-                value={planDuration}
-                onChange={(e) => setPlanDuration(Number(e.target.value))}
-                required
-              />
-            </label>
-            <button
-              className="button primary"
-              disabled={busy || !student || student.status !== "active"}
-            >
-              Tạo bản nháp
-            </button>
-          </form>
-        </Modal>
-      )}
-      {modal === "session-settings" && session && (
-        <Modal
-          title="Thiết lập buổi học"
-          onClose={() => !busy && setModal(null)}
-        >
-          <form
-            key={`session-${session.id}-${session.version}`}
-            className="form-stack"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const fields = new FormData(event.currentTarget);
-              void run(async () => {
-                await api(`/sessions/${session.id}`, {
-                  method: "PATCH",
-                  headers: {
-                    "If-Match-Version": String(session.version),
-                  },
-                  body: body({
-                    title: String(fields.get("title")),
-                    goal: String(fields.get("goal")),
-                    sharedGoal: String(fields.get("sharedGoal")),
-                    date: String(fields.get("date")),
-                    time: String(fields.get("time")),
-                    duration: Number(fields.get("duration")),
-                  }),
-                });
-                await reload();
-              });
-            }}
-          >
-            <label>
-              Tên buổi
-              <input name="title" defaultValue={session.title} required />
-            </label>
-            <label>
-              Mục tiêu riêng
-              <textarea name="goal" defaultValue={session.goal} />
-            </label>
-            <label>
-              Mục tiêu chia sẻ
-              <textarea name="sharedGoal" defaultValue={session.sharedGoal} />
-            </label>
-            <label>
-              Ngày
-              <input
-                name="date"
-                type="date"
-                defaultValue={session.date}
-                required
-              />
-            </label>
-            <label>
-              Giờ
-              <input
-                name="time"
-                type="time"
-                defaultValue={session.time}
-                required
-              />
-            </label>
-            <label>
-              Thời lượng
-              <input
-                name="duration"
-                type="number"
-                min="1"
-                defaultValue={session.duration}
-                required
-              />
-            </label>
-            <button className="button secondary" disabled={busy}>
-              Lưu kế hoạch
-            </button>
-          </form>
-        </Modal>
-      )}
-      {modal === "activity" && (
-        <Modal title="Thêm hoạt động" onClose={() => !busy && setModal(null)}>
-          <form className="form-stack" onSubmit={addActivity}>
-            <label>
-              Hoạt động
-              <input
-                value={activity}
-                onChange={(e) => setActivity(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Mô tả
-              <textarea
-                value={activityDescription}
-                onChange={(e) => setActivityDescription(e.target.value)}
-              />
-            </label>
-            <label>
-              Thời lượng hoạt động
-              <input
-                type="number"
-                min="1"
-                value={activityDuration}
-                onChange={(e) => setActivityDuration(Number(e.target.value))}
-                required
-              />
-            </label>
-            <button className="button secondary" disabled={busy}>
-              Thêm hoạt động
-            </button>
-          </form>
-        </Modal>
-      )}
+      {schedule && <LessonSchedule start={schedule}
+        editing={schedule.editId ? sessions.find(item => item.id === schedule.editId) : undefined}
+        students={students} sessions={sessions} onClose={() => setSchedule(null)}
+        onOpenClasses={() => { setSchedule(null); navigate("classes"); }}
+        onSaved={(updated, notice) => {
+          setSchedule(null);
+          openLesson(updated.id, updated.RoomMember_sessionId_items[0]?.studentId);
+          updateLesson(updated, notice);
+        }} />}
+      {pinMaterial && <MaterialClassesDialog material={pinMaterial} onClose={() => setPinMaterial(null)} />}
       {preview && (
         <Modal title={preview.title} wide onClose={() => setPreview(null)}>
           <MaterialViewer
@@ -2607,6 +1565,19 @@ export default function OnlineApp() {
     </OnlineShell>
   );
 }
+function StudentNextLesson({ student, sessions, students, onOpen }: {
+  student: Student; sessions: Session[]; students: Student[]; onOpen: () => void;
+}) {
+  const next = nextPupilLesson(sessions, student.id);
+  return <section className="card lesson-next-pupil">
+    <div>
+      <h2>{next?.status === "live" ? "Buổi đang học" : "Buổi tiếp theo"}</h2>
+      {next ? <><strong>{lessonHeading(next, students)}</strong><p>{lessonWhen(next)}</p></> : <p>Chưa có buổi sắp tới.</p>}
+    </div>
+    {next && <button type="button" className="button primary" onClick={onOpen}>Mở buổi</button>}
+  </section>;
+}
+
 function historyReplace() {
   window.history.replaceState({}, "", location.pathname + location.hash);
 }

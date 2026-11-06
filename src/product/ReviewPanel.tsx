@@ -3,6 +3,9 @@ import { useState, type FormEvent } from "react";
 import { AIClaimDraftPanel } from "./AITeachingPanel";
 
 type Request = <T>(path: string, init?: RequestInit) => Promise<T>;
+type Draft = { detail: string; support: string; selected: string[]; claimText: string };
+/** Chưa biết em làm với mức hỗ trợ nào thì để "Chưa rõ", không điền sẵn kết luận. */
+const EMPTY_DRAFT: Draft = { detail: "", support: "ChuaRo", selected: [], claimText: "" };
 type Evidence = {
   id: string;
   studentId: string;
@@ -48,10 +51,8 @@ export function ReviewPanel({
   reload: () => Promise<unknown>;
 }) {
   const [student, setStudent] = useState("");
-  const [detail, setDetail] = useState("");
-  const [support, setSupport] = useState("DocLap");
-  const [selected, setSelected] = useState<string[]>([]);
-  const [claimText, setClaimText] = useState("");
+  // Nháp giữ riêng cho từng em: đổi em rồi quay lại vẫn còn phần đang gõ.
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -60,6 +61,22 @@ export function ReviewPanel({
     source: unknown;
   } | null>(null);
   const target = student || members[0]?.studentId || "";
+  const draft = drafts[target] ?? EMPTY_DRAFT;
+  const patchDraft = (id: string, next: (d: Draft) => Partial<Draft>) =>
+    setDrafts((all) => {
+      const cur = all[id] ?? EMPTY_DRAFT;
+      return { ...all, [id]: { ...cur, ...next(cur) } };
+    });
+  const { detail, support, selected, claimText } = draft;
+  const setDetail = (v: string, id = target) => patchDraft(id, () => ({ detail: v }));
+  const setSupport = (v: string) => patchDraft(target, () => ({ support: v }));
+  const setClaimText = (v: string, id = target) => patchDraft(id, () => ({ claimText: v }));
+  const setSelected = (v: string[] | ((old: string[]) => string[]), id = target) =>
+    patchDraft(id, (cur) => ({ selected: typeof v === "function" ? v(cur.selected) : v }));
+  const hasDraft = (id: string) => {
+    const d = drafts[id];
+    return !!d && (!!d.detail.trim() || !!d.claimText.trim() || d.selected.length > 0);
+  };
   const visible = evidence.filter((e) => e.studentId === target);
   const chosen = selected.filter((id) =>
     visible.some((e) => e.id === id && e.status === "active"),
@@ -92,6 +109,7 @@ export function ReviewPanel({
   };
   const createEvidence = (event: FormEvent) => {
     event.preventDefault();
+    const owner = target;
     void act(`/sessions/${sessionId}/evidence`, "POST", {
       studentId: target,
       kind: "GhiChu",
@@ -99,7 +117,7 @@ export function ReviewPanel({
       detail,
       support,
     }).then((ok) => {
-      if (ok) setDetail("");
+      if (ok) setDetail("", owner);
     });
   };
   return (
@@ -116,15 +134,13 @@ export function ReviewPanel({
             value={target}
             onChange={(e) => {
               setStudent(e.target.value);
-              setSelected([]);
               setSource(null);
-              setDetail("");
-              setClaimText("");
             }}
           >
             {members.map((m) => (
               <option key={m.studentId} value={m.studentId}>
                 {m.displayName || m.studentIdRef?.name || m.studentId}
+                {m.studentId !== target && hasDraft(m.studentId) ? " · còn nháp" : ""}
               </option>
             ))}
           </select>
@@ -149,10 +165,10 @@ export function ReviewPanel({
               value={support}
               onChange={(e) => setSupport(e.target.value)}
             >
+              <option value="ChuaRo">Chưa rõ</option>
               <option value="DocLap">Độc lập</option>
               <option value="CoGoiY">Có gợi ý</option>
               <option value="DuocHuongDan">Được hướng dẫn</option>
-              <option value="ChuaRo">Chưa rõ</option>
             </select>
           </label>
           <button className="button primary small" disabled={busy || !target}>
@@ -280,14 +296,15 @@ export function ReviewPanel({
         className="review-card-form"
         onSubmit={(e) => {
           e.preventDefault();
+          const owner = target;
           void act(`/sessions/${sessionId}/claims/draft`, "POST", {
-            studentId: target,
+            studentId: owner,
             text: claimText,
             evidenceIds: chosen,
           }).then((ok) => {
             if (ok) {
-              setClaimText("");
-              setSelected([]);
+              setClaimText("", owner);
+              setSelected([], owner);
             }
           });
         }}

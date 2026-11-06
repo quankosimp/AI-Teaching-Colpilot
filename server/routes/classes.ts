@@ -6,7 +6,10 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { z } from "zod";
-import { StudentAuthResponse } from "../../contracts/api.js";
+import { LessonMaterialRef, StudentAuthResponse } from "../../contracts/api.js";
+import { lessonMaterialActivity } from "../lessonMaterials.js";
+import { nextOccurrences, vnNowTime, vnToday } from "../../contracts/classes.js";
+import { aiConsentState } from "../aiConsent.js";
 import {
   asyncRoute,
   audit,
@@ -62,7 +65,9 @@ const GroupSessionCreate = z.strictObject({
   date: z.iso.date(),
   time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   duration: z.number().int().min(15).max(300),
-  studentIds: z.array(z.uuid()).min(1).max(5),
+  studentIds: z.array(z.uuid()).min(1).max(5).optional(),
+  status: z.enum(["draft", "scheduled"]).optional(),
+  initialMaterial: LessonMaterialRef.optional(),
 });
 const AttendanceSave = z.strictObject({
   rows: z
@@ -72,8 +77,7 @@ const AttendanceSave = z.strictObject({
         present: z.boolean(),
         excused: z.boolean().optional(),
       }),
-    )
-    .max(50),
+    ),
 });
 const LinkInput = z.strictObject({ token: z.string().min(10).max(200) });
 const LinkJoin = z.strictObject({
@@ -146,7 +150,7 @@ function todayVN() {
   }).format(new Date());
 }
 
-async function ownedGroup(id: string, actor: TeacherActor, res: Response) {
+export async function ownedGroup(id: string, actor: TeacherActor, res: Response) {
   if (!safeId.safeParse(id).success) {
     fail(res, 400, "VALIDATION_ERROR", "ID lớp không hợp lệ");
     return null;
@@ -171,6 +175,9 @@ const studentSelect = {
   color: true,
   status: true,
   gaps: true,
+  strengths: true,
+  aiConsentAt: true,
+  aiConsentRevokedAt: true,
 } as const;
 const groupInclude = {
   StudentGroupMember_groupId_items: {
@@ -187,9 +194,14 @@ const groupInclude = {
       startedAt: true,
       endedAt: true,
       attendanceConfirmedAt: true,
-      Activity_sessionId_items: { select: { id: true } },
+      Activity_sessionId_items: {
+        select: { id: true, title: true, materialIdRef: { select: { title: true } } },
+        orderBy: { order: "asc" as const },
+      },
+      Submission_sessionId_items: { select: { status: true } },
       RoomMember_sessionId_items: {
         select: {
+          state: true,
           studentId: true,
           joinedAt: true,
           leftAt: true,
@@ -232,13 +244,34 @@ function summarize(group: GroupFull) {
         (s.status === "draft" || s.status === "scheduled") && s.date >= today,
     ) ??
     null;
+  const liveRow = sessions.find((s) => s.status === "live") ?? null;
+  const schedule =
+    group.scheduleDays.length && group.scheduleTime
+      ? { days: [...group.scheduleDays].sort(), time: group.scheduleTime }
+      : null;
+  const planned = sessions.find(
+    (s) => (s.status === "draft" || s.status === "scheduled") && s.date >= today,
+  );
+  const fromSchedule = schedule
+    ? nextOccurrences(schedule.days, schedule.time, vnToday(), 1, vnNowTime())[0]
+    : undefined;
+  const nextAt =
+    planned && (!fromSchedule || planned.date <= fromSchedule)
+      ? { date: planned.date, time: planned.time, sessionId: planned.id }
+      : fromSchedule && schedule
+        ? { date: fromSchedule, time: schedule.time, sessionId: null }
+        : null;
+  const pendingSubmissions = done.reduce(
+    (n, s) => n + s.Submission_sessionId_items.filter((x) => x.status !== "reviewed").length,
+    0,
+  );
   return {
     id: group.id,
     name: group.name,
     subject: group.subject,
     grade: group.grade,
     createdAt: group.createdAt,
-    students: students.map(({ gaps: _g, ...s }) => s),
+    students: students.map(({ gaps: _g, strengths: _s, aiConsentAt: _a, aiConsentRevokedAt: _r, ...s }) => s),
     taught: done.length,
     attendance: { present, slots },
     next: next
@@ -253,10 +286,25 @@ function summarize(group: GroupFull) {
         }
       : null,
     unconfirmed: done.filter((s) => !s.attendanceConfirmedAt).length,
+    schedule,
+    nextAt,
+    live: liveRow
+      ? {
+          sessionId: liveRow.id,
+          startedAt: liveRow.startedAt,
+          joined: liveRow.RoomMember_sessionId_items.filter((m) => m.state === "joined").length,
+          total: liveRow.RoomMember_sessionId_items.length,
+        }
+      : null,
+    pending: {
+      unconfirmed: done.filter((s) => !s.attendanceConfirmedAt).length,
+      submissions: pendingSubmissions,
+    },
   };
 }
 
-function detail(group: GroupFull) {
+type Note = { id: string; kind: "review" | "good" | null; text: string; date: string; sessionId: string };
+function detail(group: GroupFull, notes: Map<string, Note[]> = new Map()) {
   const base = summarize(group);
   const roster = group.StudentGroupMember_groupId_items.map(
     (m) => m.studentIdRef,
@@ -282,6 +330,9 @@ function detail(group: GroupFull) {
       attended,
       total: marks.length,
       gaps: st.gaps,
+      strengths: st.strengths,
+      notes: notes.get(st.id) ?? [],
+      aiConsent: aiConsentState(st),
     };
   });
   const counts = new Map<string, string[]>();
@@ -312,6 +363,12 @@ function detail(group: GroupFull) {
       present: members.length - absent.length,
       absentNames: absent,
       attendanceConfirmed: !!s.attendanceConfirmedAt,
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+      used: [
+        ...new Set(s.Activity_sessionId_items.map((a) => a.materialIdRef?.title || a.title)),
+      ].slice(0, 3),
+      pendingSubmissions: s.Submission_sessionId_items.filter((x) => x.status !== "reviewed").length,
     };
   });
   return { ...base, students, gaps, sessions: list };
@@ -422,7 +479,31 @@ export function classesRouter(config: AppConfig) {
       const group = await ownedGroup(req.params.id, res.locals.actor, res);
       if (!group) return;
       const [full] = await loadGroups(res.locals.actor.id, group.id);
-      return res.json({ group: detail(full) });
+      // Điều cần nhớ của từng em: các nhận định đã duyệt trong lớp này, mới nhất trước.
+      const claims = await db.claim.findMany({
+        where: {
+          status: "approved",
+          resolvedAt: null,
+          studentId: { in: full.StudentGroupMember_groupId_items.map((m) => m.studentId) },
+          sessionIdRef: { groupId: full.id, teacherId: res.locals.actor.id },
+        },
+        orderBy: { reviewedAt: "desc" },
+        select: { id: true, kind: true, studentId: true, text: true, sessionId: true, reviewedAt: true, updatedAt: true },
+      });
+      const notes = new Map<string, Note[]>();
+      for (const c of claims) {
+        const list = notes.get(c.studentId) ?? [];
+        if (list.length < 20)
+          list.push({
+            id: c.id,
+            kind: c.kind === "review" || c.kind === "good" ? c.kind : null,
+            text: c.text,
+            sessionId: c.sessionId,
+            date: (c.reviewedAt ?? c.updatedAt).toISOString().slice(0, 10),
+          });
+        notes.set(c.studentId, list);
+      }
+      return res.json({ group: detail(full, notes) });
     }),
   );
 
@@ -522,16 +603,25 @@ export function classesRouter(config: AppConfig) {
       if (!parsed.success)
         return fail(res, 400, "VALIDATION_ERROR", "Ngày giờ buổi học chưa hợp lệ");
       const actor: TeacherActor = res.locals.actor;
-      const ids = [...new Set(parsed.data.studentIds)];
-      if (!(await checkOwnStudents(actor, ids)))
-        return fail(res, 400, "VALIDATION_ERROR", "Có học sinh không hợp lệ");
       const count = await db.session.count({ where: { groupId: group.id } });
       const title = parsed.data.title || `Buổi ${count + 1} · ${group.name}`;
+      const { initialMaterial, status, studentIds } = parsed.data;
       const result = await createOnce(
         req,
         res,
         `/groups/${group.id}/sessions`,
         async (tx) => {
+          const roster = await tx.studentGroupMember.findMany({
+            where: { groupId: group.id, studentIdRef: { teacherId: actor.id, status: "active" } },
+            select: { studentId: true },
+            orderBy: { studentId: "asc" },
+          });
+          const eligible = new Set(roster.map((member) => member.studentId));
+          const ids = studentIds ? [...new Set(studentIds)] : [...eligible];
+          if (!ids.length)
+            throw new SessionConflict("VALIDATION_ERROR", "Lớp này chưa có học sinh đang học.");
+          if (ids.some((id) => !eligible.has(id)))
+            throw new SessionConflict("VALIDATION_ERROR", "Có học sinh không thuộc danh sách đang học của lớp.");
           const session = await tx.session.create({
             data: {
               teacherId: actor.id,
@@ -539,6 +629,7 @@ export function classesRouter(config: AppConfig) {
               groupId: group.id,
               groupName: group.name,
               title,
+              status,
               goal: "",
               sharedGoal: "",
               date: parsed.data.date,
@@ -550,6 +641,11 @@ export function classesRouter(config: AppConfig) {
               RoomMember_sessionId_items: {
                 create: ids.map((studentId) => ({ studentId })),
               },
+              ...(initialMaterial && {
+                Activity_sessionId_items: {
+                  create: await lessonMaterialActivity(tx, actor.id, initialMaterial, 0),
+                },
+              }),
             },
           });
           await tx.auditLog.create({
@@ -571,6 +667,10 @@ export function classesRouter(config: AppConfig) {
       return res.status(201).json({
         session: await db.session.findUniqueOrThrow({
           where: { id: result.resourceId },
+          include: {
+            Activity_sessionId_items: { orderBy: { order: "asc" } },
+            RoomMember_sessionId_items: true,
+          },
         }),
       });
     }),
@@ -726,14 +826,17 @@ export function classesRouter(config: AppConfig) {
           "Buổi học chưa bắt đầu nên chưa điểm danh được",
         );
       await db.$transaction(async (tx) => {
-        for (const row of parsed.data.rows)
+        const rows = new Map(parsed.data.rows.map((row) => [row.studentId, row]));
+        for (const [present, excused] of [[true, false], [false, true], [false, false]]) {
+          const studentIds = [...rows.values()]
+            .filter((row) => row.present === present && (row.present ? false : !!row.excused) === excused)
+            .map((row) => row.studentId);
+          if (!studentIds.length) continue;
           await tx.roomMember.updateMany({
-            where: { sessionId: session.id, studentId: row.studentId },
-            data: {
-              attendance: row.present ? "present" : "absent",
-              excused: row.present ? false : !!row.excused,
-            },
+            where: { sessionId: session.id, studentId: { in: studentIds } },
+            data: { attendance: present ? "present" : "absent", excused },
           });
+        }
         await tx.session.update({
           where: { id: session.id },
           data: { attendanceConfirmedAt: new Date() },

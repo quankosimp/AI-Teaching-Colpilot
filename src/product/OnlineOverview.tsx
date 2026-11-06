@@ -39,7 +39,7 @@ type ActivityItem = {
   id?: string;
   title?: string;
   description?: string;
-  duration?: number;
+  duration?: number | null;
   type?: string;
 };
 type Session = {
@@ -379,7 +379,7 @@ export function OnlineOverview({
             tone: "sun",
             icon: BookOpen,
             title: "Tải học liệu đầu tiên",
-            note: "Để Copilot gợi ý đúng bài cho từng em",
+            note: "Để mở đề bài ngay trong phòng dạy",
             action: "Mở",
             run: onMaterials,
           },
@@ -433,7 +433,7 @@ export function OnlineOverview({
         </div>
         <button className="button primary" onClick={() => onPlan()}>
           <Plus size={17} />
-          Soạn buổi học
+          Đặt lịch
         </button>
       </div>
       <div className="lv-tq">
@@ -651,8 +651,13 @@ export function OnlineOverview({
                           {nx ? ` · buổi tới: ${dateLabel(nx.date)}` : ""}
                         </small>
                       </span>
-                      <span className={`lv-pill${st.gaps?.length ? " is-warn" : ""}`}>
-                        {st.gaps?.length ? `${st.gaps.length} điểm cần củng cố` : "Ổn định"}
+                      {/* Chưa ghi gì về em thì nói thẳng là chưa có nhận xét, không báo "ổn". */}
+                      <span className={`lv-pill${st.gaps?.length ? " is-warn" : st.strengths?.length ? "" : " is-none"}`}>
+                        {st.gaps?.length
+                          ? `${st.gaps.length} điểm cần củng cố`
+                          : st.strengths?.length
+                            ? `${st.strengths.length} điểm mạnh đã ghi`
+                            : "Chưa có nhận xét"}
                       </span>
                     </button>
                   );
@@ -1009,7 +1014,7 @@ export function OnlineOverview({
               <h3>Chưa có lịch dạy</h3>
               <p>Tạo một buổi học và chuẩn bị hoạt động cho học sinh.</p>
               <button className="button" onClick={() => onPlan()}>
-                Soạn buổi học đầu tiên
+                Đặt lịch buổi đầu tiên
               </button>
             </div>
           )}
@@ -1162,8 +1167,7 @@ export function OnlineOverview({
                             {act.title || `Hoạt động ${idx + 1}`}
                           </strong>
                           <span className="plan-duration-pill">
-                            {activityTypeLabel(act.type)} · {act.duration || 0}{" "}
-                            phút
+                            {activityTypeLabel(act.type)} · {act.duration == null ? "Chưa ước lượng" : `${act.duration} phút`}
                           </span>
                         </div>
                         {act.description && <p>{act.description}</p>}
@@ -1189,7 +1193,7 @@ export function OnlineOverview({
                 }}
               >
                 <Settings2 size={15} />
-                Chỉnh sửa giáo án
+                Mở buổi
               </button>
               {["ended", "reviewed"].includes(detailSession.status) && (
                 <button
@@ -1264,7 +1268,7 @@ export function OnlineSessionPicker({
         </div>
         <button className="button" onClick={onPlan}>
           <Plus size={17} />
-          Soạn buổi học
+          Đặt lịch
         </button>
       </div>
       <div className="restored-session-picker">
@@ -1319,7 +1323,7 @@ export function OnlineSessionPicker({
             <h2>Chưa có buổi học</h2>
             <p>Tạo giáo án trước khi bắt đầu giảng dạy.</p>
             <button className="button primary" onClick={onPlan}>
-              Soạn buổi học
+              Đặt lịch
             </button>
           </section>
         )}

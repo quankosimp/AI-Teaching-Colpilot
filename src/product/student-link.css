@@ -34,3 +34,4 @@
 .sl-note { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; color: var(--lr-muted, #8a8fa8); }
 .sl-done { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #e8f7f0; color: #0b7a55; font-size: 13px; font-weight: 600; }
 .sl-err { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 10px; background: #fdecec; color: #a3282c; font-size: 13px; }
+.sl-note { margin: 2px 0 0; color: var(--lr-sub); font-size: 12px; line-height: 17px; text-align: center; }

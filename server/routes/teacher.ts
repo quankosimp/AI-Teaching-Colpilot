@@ -1,4 +1,5 @@
-import { lockSession } from "../sessionLock.js";
+import { lockSession, SessionConflict } from "../sessionLock.js";
+import { lessonMaterialActivity } from "../lessonMaterials.js";
 import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -6,6 +7,7 @@ import {
   ActivityInput,
   AnnotationInput,
   ClassroomStatePatch,
+  LessonMaterialRef,
   SessionCreate,
   StudentInput,
 } from "../../contracts/api.js";
@@ -401,7 +403,7 @@ export function teacherRouter(config: AppConfig) {
       const parsed = SessionCreate.safeParse(req.body);
       if (!parsed.success)
         return fail(res, 400, "VALIDATION_ERROR", "Kế hoạch không hợp lệ");
-      const { studentIds, ...data } = parsed.data;
+      const { studentIds, initialMaterial, ...data } = parsed.data;
       if (!studentIds.every((id) => safeId.safeParse(id).success))
         return fail(res, 400, "VALIDATION_ERROR", "ID học sinh không hợp lệ");
       const count = await db.student.count({
@@ -419,16 +421,22 @@ export function teacherRouter(config: AppConfig) {
           "Học sinh không hợp lệ hoặc đã lưu trữ",
         );
       const result = await createOnce(req, res, "/sessions", async (tx) => {
+        const teacherId = res.locals.actor.id;
         const session = await tx.session.create({
           data: {
             ...data,
-            teacherId: res.locals.actor.id,
+            teacherId,
             primaryStudentId: studentIds[0],
             completedActivityIds: [],
             dismissedSuggestionIds: [],
             RoomMember_sessionId_items: {
               create: studentIds.map((studentId) => ({ studentId })),
             },
+            ...(initialMaterial && {
+              Activity_sessionId_items: {
+                create: await lessonMaterialActivity(tx, teacherId, initialMaterial, 0),
+              },
+            }),
           },
         });
         await tx.auditLog.create({
@@ -449,6 +457,10 @@ export function teacherRouter(config: AppConfig) {
       return res.status(201).json({
         session: await db.session.findUniqueOrThrow({
           where: { id: result.resourceId },
+          include: {
+            Activity_sessionId_items: { orderBy: { order: "asc" } },
+            RoomMember_sessionId_items: true,
+          },
         }),
       });
     }),
@@ -467,7 +479,7 @@ export function teacherRouter(config: AppConfig) {
           "SESSION_STATE_INVALID",
           "Không thể sửa buổi này",
         );
-      const patchSchema = SessionCreate.omit({ studentIds: true })
+      const patchSchema = SessionCreate.omit({ studentIds: true, initialMaterial: true })
         .partial()
         .extend({
           status: z.enum(["draft", "scheduled"]).optional(),
@@ -862,6 +874,62 @@ export function teacherRouter(config: AppConfig) {
       });
     }),
   );
+  r.post(
+    "/sessions/:id/materials",
+    asyncRoute(async (req, res) => {
+      if (!safeId.safeParse(req.params.id).success)
+        return fail(res, 400, "VALIDATION_ERROR", "ID buổi học không hợp lệ");
+      const session = await ownedSession(req.params.id, res.locals.actor, res);
+      if (!session) return;
+      const input = LessonMaterialRef.safeParse(req.body);
+      const expected = version(req);
+      if (!input.success || !expected)
+        return fail(res, 400, "VALIDATION_ERROR", "Tài liệu hoặc phiên bản không hợp lệ");
+      const teacherId = res.locals.actor.id;
+      const result = await createOnce(req, res, `/sessions/${session.id}/materials`, async (tx) => {
+        const current = await lockSession(tx, session.id);
+        if (!["draft", "scheduled"].includes(current.status))
+          throw new SessionConflict("SESSION_STATE_INVALID", "Chỉ có thể thêm tài liệu trước buổi dạy.");
+        if (current.version !== expected)
+          throw new SessionConflict("VERSION_CONFLICT", "Buổi học vừa thay đổi. Kiểm tra lại trước khi thêm tài liệu.");
+        const activities = await tx.activity.findMany({
+          where: { sessionId: session.id },
+          select: { order: true, materialId: true, materialVersion: true },
+        });
+        if (activities.some(a => a.materialId === input.data.materialId && a.materialVersion === input.data.version))
+          throw new SessionConflict("VALIDATION_ERROR", "Tài liệu này đã có trong buổi học.");
+        if (activities.length >= 50)
+          throw new SessionConflict("VALIDATION_ERROR", "Buổi học đã có tối đa 50 mục nội dung.");
+        const order = Math.max(-1, ...activities.map(a => a.order)) + 1;
+        const data = await lessonMaterialActivity(tx, teacherId, input.data, order);
+        await tx.activity.create({ data: { ...data, sessionId: session.id } });
+        await tx.session.update({ where: { id: session.id }, data: { version: { increment: 1 } } });
+        await tx.auditLog.create({
+          data: {
+            workspaceId: res.locals.actor.workspaceId,
+            actorId: teacherId,
+            actorRole: "teacher",
+            action: "session.activities_updated",
+            targetType: "session",
+            targetId: session.id,
+            sessionId: session.id,
+            requestId: res.locals.requestId,
+            metadata: {},
+          },
+        });
+        return session.id;
+      });
+      if (!result) return;
+      const updated = await db.session.findUniqueOrThrow({
+        where: { id: result.resourceId },
+        include: {
+          Activity_sessionId_items: { orderBy: { order: "asc" } },
+          RoomMember_sessionId_items: true,
+        },
+      });
+      return res.status(201).json({ session: (await markStale([updated], teacherId))[0] });
+    }),
+  );
   r.put(
     "/sessions/:id/activities",
     asyncRoute(async (req, res) => {
@@ -937,7 +1005,7 @@ export function teacherRouter(config: AppConfig) {
                     (v) => v.version === item.materialVersion,
                   ),
               )
-            : item.materialVersion != null
+            : item.materialVersion != null || item.materialStartPage !== 0
         )
           return true;
         if (
@@ -1049,7 +1117,7 @@ export function teacherRouter(config: AppConfig) {
         return res.json({
           session: result,
           durationExceeded:
-            parsed.data.reduce((sum, item) => sum + item.duration, 0) >
+            parsed.data.reduce((sum, item) => sum + (item.duration ?? 0), 0) >
             result.duration,
         });
       } catch {
