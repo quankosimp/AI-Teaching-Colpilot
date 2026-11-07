@@ -4,7 +4,7 @@ import { api, getAccessToken } from "./onlineApi";
 import { statusLabel } from "./statusLabels";
 import { ReviewPanel } from "./ReviewPanel";
 import { SubmissionForm } from "./SubmissionForm";
-import { OnlineBoard, type BoardState } from "./OnlineBoard";
+import { OnlineBoard, type BoardState, type BoardStroke } from "./OnlineBoard";
 import { MaterialViewer } from "./MaterialViewer";
 import { PageQuestions, type PageQuestion } from "./PageQuestions";
 import { BoundedReconnectQueue } from "./reconnectQueue";
@@ -21,6 +21,7 @@ import {
   FileText,
   Hand,
   Clock,
+  LayoutGrid,
   Layers,
   Link2,
   ListChecks,
@@ -97,6 +98,31 @@ const clock = (iso: string) => {
     ? ""
     : d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 };
+
+function renderThumbStroke(s: BoardStroke, i: number) {
+  const pts = s.points;
+  if (!pts.length) return null;
+  const kind = s.kind ?? "pen";
+  const w = s.width ?? 3;
+  const col = s.color || "#7c3aed";
+  if (kind === "line" && pts.length >= 2) {
+    const a = pts[0], b = pts[pts.length - 1];
+    return <line key={s.id || i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={col} strokeWidth={w} strokeLinecap="round" />;
+  }
+  if (kind === "rect" && pts.length >= 2) {
+    const a = pts[0], b = pts[pts.length - 1];
+    return <rect key={s.id || i} x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.abs(b.x - a.x)} height={Math.abs(b.y - a.y)} stroke={col} strokeWidth={w} fill="none" />;
+  }
+  if (kind === "circle" && pts.length >= 2) {
+    const a = pts[0], b = pts[pts.length - 1];
+    const rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
+    return <ellipse key={s.id || i} cx={a.x + (b.x - a.x) / 2} cy={a.y + (b.y - a.y) / 2} rx={rx} ry={ry} stroke={col} strokeWidth={w} fill="none" />;
+  }
+  if (pts.length < 2) return null;
+  const d = pts.map((p, j) => `${j === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+  return <path key={s.id || i} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
+}
+
 type Room = {
   waiting?: boolean;
   capabilities?: {
@@ -457,7 +483,7 @@ export function LiveRoom({
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [connected, setConnected] = useState(false);
-  const [panelTab, setPanelTab] = useState<"follow" | "chat" | "subs">("follow");
+  const [panelTab, setPanelTab] = useState<"follow" | "chat" | "subs" | "work">("follow");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
@@ -1698,13 +1724,14 @@ export function LiveRoom({
         {(
           [
             ["follow", "Học sinh", 0],
+            ["work", "Bài làm", inClass.length],
             ["chat", "Trò chuyện", msgs.length],
             ["subs", "Bài nộp", room?.submissions?.length || 0],
           ] as const
         ).map(([value, label, count]) => (
           <button type="button" role="tab" key={value} aria-selected={panelTab === value} className={panelTab === value ? "is-on" : ""} onClick={() => setPanelTab(value)}>
             {label}
-            {count > 0 && <span className="lr-cnt">{count}</span>}
+            {count > 0 && value === "work" ? null : count > 0 && <span className="lr-cnt">{count}</span>}
           </button>
         ))}
       </div>
@@ -1843,6 +1870,60 @@ export function LiveRoom({
             </form>
           )}
         </>
+      )}
+      {panelTab === "work" && (
+        <div className="lr-pn-b">
+          {inClass.length === 0 ? (
+            <p className="lr-empty">Chưa có học sinh trong lớp.</p>
+          ) : (
+            <div className="lr-wm">
+              {inClass.map((m) => {
+                const mBoard = room?.boards?.find(
+                  (b) => b.ownerId === m.studentId && (!s.currentActivityId || b.id.includes(`:${s.currentActivityId}:`))
+                );
+                const hasStrokes = (mBoard?.strokes?.length ?? 0) > 0;
+                const canPresent = !!(mBoard?.shared);
+                return (
+                  <div key={m.id} className="lr-wm__cell">
+                    <div className="lr-wm__name">{memberName(m)}</div>
+                    <div className="lr-wm__thumb-wrap">
+                      {hasStrokes ? (
+                        <svg viewBox="0 0 800 420" className="lr-wm__thumb" aria-label={`Bảng ${memberName(m)}`}>
+                          {mBoard!.strokes.map((st, i) => renderThumbStroke(st, i))}
+                        </svg>
+                      ) : (
+                        <div className="lr-wm__thumb lr-wm__thumb--empty">Chưa vẽ</div>
+                      )}
+                    </div>
+                    <div className="lr-wm__meta">
+                      <span>{subsOf(m.studentId)} bài nộp</span>
+                    </div>
+                    <div className="lr-wm__acts">
+                      <button
+                        type="button"
+                        className="lr-btn lr-btn--xs lr-btn--quiet"
+                        disabled={!canPresent}
+                        title={canPresent ? "Trình bày bảng này cho cả lớp" : "Học sinh chưa bật chia sẻ bảng"}
+                        onClick={() => { setInspectBoard(false); patchClassroom({ sharedBoardOwnerId: m.studentId, sharedView: "board" }); }}
+                      >
+                        <LayoutGrid size={12} aria-hidden="true" /> Trình bày
+                      </button>
+                      <button
+                        type="button"
+                        className="lr-btn lr-btn--xs lr-btn--quiet"
+                        disabled={!mBoard}
+                        title="Chụp bảng và lưu làm bằng chứng"
+                        onClick={() => void command(`/sessions/${sessionId}/boards/${m.studentId}/attempts`, "POST", {})}
+                      >
+                        <Camera size={12} aria-hidden="true" /> Chụp
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
       {panelTab === "chat" && chatBlock}
       {panelTab === "subs" && (

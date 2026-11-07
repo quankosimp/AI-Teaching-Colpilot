@@ -513,3 +513,15 @@ button.lr-pg:hover { background: var(--lr-soft); }
 .lr-pq__f { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--lr-line); background: var(--lr-soft); border-radius: 0 0 14px 14px; font-size: 11.5px; line-height: 16px; color: var(--lr-sub); }
 .lr-pq__f span { flex: 1; min-width: 0; }
 .lr-btn--quiet.is-on { background: var(--lr-accent-bg); color: var(--lr-accent-ink) !important; }
+
+/* Bàn làm việc lớp — lưới bảng nháp học sinh */
+.lr-wm { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 2px 0 8px; }
+.lr-wm__cell { display: flex; flex-direction: column; gap: 5px; background: var(--lr-soft); border: 1px solid var(--lr-line); border-radius: 10px; overflow: hidden; }
+.lr-wm__name { padding: 6px 8px 0; font-size: 12px; font-weight: 600; color: var(--lr-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lr-wm__thumb-wrap { width: 100%; aspect-ratio: 800 / 420; background: #fff; border-top: 1px solid var(--lr-line); border-bottom: 1px solid var(--lr-line); overflow: hidden; }
+.online-restored[data-theme="dark"] .lr-wm__thumb-wrap { background: #1a1929; }
+.lr-wm__thumb { display: block; width: 100%; height: 100%; }
+.lr-wm__thumb--empty { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; font-size: 11px; color: var(--lr-muted); }
+.lr-wm__meta { padding: 0 8px; font-size: 11px; color: var(--lr-sub); }
+.lr-wm__acts { display: flex; gap: 4px; padding: 0 6px 6px; }
+.lr-wm__acts .lr-btn { font-size: 11px; gap: 3px; padding: 3px 7px; }
