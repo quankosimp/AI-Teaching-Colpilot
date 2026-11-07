@@ -1137,6 +1137,7 @@ export function classroomRouter(config: AppConfig) {
           "Học sinh không được tự cấp quyền ghi",
         );
       }
+      // `following` is the student's own view-sync state — allowed to self-set.
       if (!parsed.data.leave && member.sessionIdRef.status !== "live")
         return fail(
           res,
@@ -1175,15 +1176,18 @@ export function classroomRouter(config: AppConfig) {
             ...(parsed.data.handRaised !== undefined
               ? { handRaised: parsed.data.handRaised }
               : {}),
+            ...(parsed.data.following !== undefined
+              ? { following: parsed.data.following }
+              : {}),
             ...(parsed.data.leave
-              ? { state: "left", leftAt: now, handRaised: false }
+              ? { state: "left", leftAt: now, handRaised: false, following: true }
               : {}),
           },
         });
         await appendOutboxEvent(tx, {
           sessionId: member.sessionId,
           type: "member.updated",
-          label: parsed.data.leave ? "Học sinh rời phòng" : "Học sinh giơ tay",
+          label: parsed.data.leave ? "Học sinh rời phòng" : parsed.data.following !== undefined ? "Học sinh thay đổi chế độ xem" : "Học sinh giơ tay",
           actorId: actor.id,
           visibility: { scope: "public" },
           resourceId: member.id,

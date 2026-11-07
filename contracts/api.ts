@@ -363,6 +363,7 @@ export const MemberUpdate = z.strictObject({
   canWrite: z.boolean().optional(),
   toolOverrides: Tools.partial().optional(),
   handRaised: z.boolean().optional(),
+  following: z.boolean().optional(),
   leave: z.boolean().optional(),
 });
 export const CheckInput = z.strictObject({

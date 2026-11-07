@@ -48,10 +48,11 @@ Nút "Hoạt động lớp" cũng sáng lên khi đang chia sẻ màn hình (`on
 | Trạng thái | Mô tả |
 |------------|-------|
 | **Trước** | Thanh ctrl: Tài liệu · Bảng · Chia sẻ màn hình · Hoạt động lớp (xem ảnh chụp màn hình gốc từ issue) |
-| **Sau — stage trống** | Empty-state copy mới, ctrl bar không có nút screen-share độc lập (xem `after-empty-state.png`) |
-| **Sau — menu mở** | Menu "Hoạt động lớp" gồm 2 nhóm: Hoạt động cho cả lớp + Chia sẻ app ngoài với separator (xem `after-menu-open.png`) |
+| **Sau — stage trống** | Empty-state copy mới, ctrl bar không có nút screen-share độc lập (xem `after-teacher-empty-state.jpg`) |
+| **Sau — menu mở** | Menu "Hoạt động lớp" gồm 2 nhóm: Hoạt động cho cả lớp + Chia sẻ app ngoài với separator (xem `after-activities-menu.jpg`) |
 
-> ⚠️ Ảnh chụp màn hình được lưu trong thư mục này; ảnh "trước" lấy từ màn hình gốc (commit `d9cdb05`).
+> ✅ Ảnh sau chụp 2026-11-08 từ dev server `:3000` (1440×900 desktop light mode).  
+> ⚠️ Ảnh "trước" lấy từ màn hình gốc (commit trước phase A).
 
 ## Cách kiểm tra
 

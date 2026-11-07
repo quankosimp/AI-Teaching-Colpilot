@@ -73,6 +73,7 @@ type Member = {
   toolOverrides?: Partial<Tools>;
   studentIdRef?: { name: string };
   handRaised?: boolean;
+  following?: boolean;
 };
 const memberName = (m: Member) => m.displayName || m.studentIdRef?.name || m.studentId;
 const initialsOf = (name: string) => {
@@ -460,6 +461,8 @@ export function LiveRoom({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
+  // null = học sinh đang theo thầy cô; number = tự xem trang riêng
+  const [localPage, setLocalPage] = useState<number | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [linkFor, setLinkFor] = useState("");
@@ -812,6 +815,17 @@ export function LiveRoom({
       ? "board"
       : s?.sharedView || "document";
 
+  // Học sinh tự lật trang → vào chế độ "xem riêng"
+  const handleStudentPageChange = (page: number) => {
+    setLocalPage(page);
+    void command(`/sessions/${sessionId}/members/${grant!.studentId}`, "PATCH", { following: false });
+  };
+  // Học sinh nhấn "Theo thầy cô" → quay lại đồng bộ
+  const snapBack = () => {
+    setLocalPage(null);
+    void command(`/sessions/${sessionId}/members/${grant!.studentId}`, "PATCH", { following: true });
+  };
+
   const startSession = () => void command(`/sessions/${sessionId}/start`, "POST", {});
   // Kết thúc buổi: hiện bảng điểm danh đã điền sẵn, gia sư xác nhận hoặc để sau.
   const endSession = () => {
@@ -1036,7 +1050,7 @@ export function LiveRoom({
     label?: string;
     sel?: boolean;
     hand?: boolean;
-    badge?: "answered" | "working" | "";
+    badge?: "answered" | "working" | "unsync" | "";
     onClick?: () => void;
     actions?: ReactNode;
   }) => {
@@ -1068,6 +1082,10 @@ export function LiveRoom({
         ) : o.badge === "working" ? (
           <span className="lr-seat__bd is-wait">
             <Clock size={12} aria-hidden="true" /> Đang làm
+          </span>
+        ) : o.badge === "unsync" ? (
+          <span className="lr-seat__bd is-unsync">
+            <Eye size={12} aria-hidden="true" /> Xem riêng
           </span>
         ) : null}
         {o.actions}
@@ -1102,7 +1120,9 @@ export function LiveRoom({
             ? openCheck.CheckResponse_checkId_items?.some((r) => r.studentId === m.studentId)
               ? "answered"
               : "working"
-            : "",
+            : m.following === false
+              ? "unsync"
+              : "",
           onClick: () => {
             setSelectedStudent(m.studentId);
             setPanelTab("follow");
@@ -1379,9 +1399,11 @@ export function LiveRoom({
           {s.completedActivityIds?.includes(s.currentActivityId) ? "Đã xong trang này" : "Xong trang này"}
         </button>
       )}
-      <span className="lr-follow">
+      <span className={`lr-follow${grant && localPage !== null ? " is-unsync" : ""}`}>
         <span className="lr-follow__dot" aria-hidden="true" />
-        {isTeacher ? <>Lớp đang xem: <b>{stage === "share" ? "Màn hình chia sẻ" : viewName[s.sharedView || "document"]}</b></> : "Đang theo thầy cô"}
+        {isTeacher
+          ? <>Lớp đang xem: <b>{stage === "share" ? "Màn hình chia sẻ" : viewName[s.sharedView || "document"]}</b></>
+          : localPage !== null ? "Đang xem riêng" : "Đang theo thầy cô"}
       </span>
     </div>
   );
@@ -1391,14 +1413,25 @@ export function LiveRoom({
       {stage === "document" &&
         (material ? (
           <div className="lr-doc">
+            {grant && localPage !== null && (
+              <div className="lr-unsync" role="status">
+                <span className="lr-unsync__label">Đang xem riêng</span>
+                {s.materialPage !== undefined && (
+                  <span className="lr-unsync__hint">Thầy cô đang ở trang {s.materialPage + 1}</span>
+                )}
+                <button type="button" className="lr-unsync__back" onClick={snapBack}>
+                  Theo thầy cô →
+                </button>
+              </div>
+            )}
             <MaterialViewer
               materialId={material.id}
               version={material.version}
               title={material.title}
               kind="auto"
               directReadUrl={material.readUrl}
-              controlledPage={s.materialPage || 0}
-              onPageChange={grant ? undefined : (page) => patchClassroom({ materialPage: page })}
+              controlledPage={grant ? (localPage ?? s.materialPage ?? 0) : (s.materialPage || 0)}
+              onPageChange={grant ? handleStudentPageChange : (page) => patchClassroom({ materialPage: page })}
               annotations={room?.annotations || []}
               sessionId={grant ? undefined : sessionId}
               activityId={s.currentActivityId || undefined}

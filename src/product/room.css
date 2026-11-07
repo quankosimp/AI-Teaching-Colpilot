@@ -338,6 +338,7 @@ button.lr-seat { cursor: pointer; }
 .lr-seat__bd.is-hand { background: var(--lr-amber-solid); color: #3a2100; }
 .lr-seat__bd.is-ok { background: #10b981; color: #fff; }
 .lr-seat__bd.is-wait { background: rgb(17 16 30 / .6); color: #fff; }
+.lr-seat__bd.is-unsync { background: rgb(17 16 30 / .55); color: #fff; }
 .lr-seat-add { flex: none; width: 150px; height: 96px; border-radius: 12px; border: 1.5px dashed var(--lr-line-2); background: var(--lr-surface); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--lr-sub); font-size: 12.5px; font-weight: 600; }
 
 /* vùng chính */
@@ -355,6 +356,14 @@ button.lr-pg:hover { background: var(--lr-soft); }
 .lr-follow { flex: none; display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--lr-sub); white-space: nowrap; }
 .lr-follow b { color: var(--lr-ink); font-weight: 600; }
 .lr-follow__dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 3px rgb(16 185 129 / .18); }
+.lr-follow.is-unsync { color: var(--lr-amber); font-weight: 600; }
+.lr-follow.is-unsync .lr-follow__dot { background: var(--lr-amber-solid); box-shadow: 0 0 0 3px rgb(245 165 36 / .22); }
+/* Banner "Đang xem riêng" phía trên tài liệu */
+.lr-unsync { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: var(--lr-amber-bg); border-bottom: 1px solid var(--lr-line); font-size: 13px; flex-wrap: wrap; }
+.lr-unsync__label { font-weight: 600; color: var(--lr-amber); }
+.lr-unsync__hint { color: var(--lr-sub); flex: 1; }
+.lr-unsync__back { flex: none; height: 28px; padding: 0 12px; border-radius: 8px; background: var(--lr-amber-solid); color: #fff; border: 0; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.lr-unsync__back:hover { opacity: .9; }
 .lr-canvas { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #fafafd radial-gradient(circle, #e0dfeb 1px, transparent 1.3px) 0 0 / 24px 24px; }
 .online-restored[data-theme="dark"] .lr-canvas { background: var(--lr-bg) radial-gradient(circle, #2b2a40 1px, transparent 1.3px) 0 0 / 24px 24px; }
 .lr-doc { position: absolute; inset: 0; overflow: auto; padding: 16px 20px; }

@@ -402,6 +402,7 @@ model RoomMember {
   canWrite                          Boolean              @default(true)
   toolOverrides                     Json?
   handRaised                        Boolean              @default(false)
+  following                         Boolean              @default(true)
   consent                           Boolean              @default(false)
   consentAt                         DateTime?
   joinedAt                          DateTime?
