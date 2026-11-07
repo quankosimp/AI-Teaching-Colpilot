@@ -443,6 +443,7 @@ export function LiveRoom({
 }) {
   const [selectedStudent, setSelectedStudent] = useState("");
   const [inspectBoard, setInspectBoard] = useState(false);
+  const [aiQuestion, setAiQuestion] = useState("");
   const [note, setNote] = useState("");
   const [chat, setChat] = useState("");
   const [ttl, setTtl] = useState(24);
@@ -1403,6 +1404,7 @@ export function LiveRoom({
               activityId={s.currentActivityId || undefined}
               students={members.map((m) => ({ id: m.studentId, name: memberName(m) }))}
               onSaved={grant ? undefined : () => void load()}
+              onAskAI={grant ? undefined : (text) => setAiQuestion(text)}
             />
           </div>
         ) : (
@@ -1412,8 +1414,8 @@ export function LiveRoom({
             {currentActivity?.description && <div className="lesson-public-content">{currentActivity.description}</div>}
             <p>
               {grant
-                ? "Khi thầy cô mở tài liệu hoặc chia sẻ màn hình, nội dung sẽ hiện ở đây."
-                : "Gắn tài liệu khi soạn buổi, hoặc bấm Bảng để viết, hoặc Chia sẻ màn hình để mở đề trên máy bạn."}
+                ? "Khi thầy cô mở tài liệu hoặc bảng viết, nội dung sẽ hiện ở đây."
+                : "Gắn tài liệu khi soạn buổi để học sinh thấy và chú thích được — hoặc bấm Bảng để viết trực tiếp."}
             </p>
           </div>
         ))}
@@ -1514,19 +1516,8 @@ export function LiveRoom({
       <span className="lr-grow" />
       {cb({ icon: <FileText size={18} />, label: "Tài liệu", on: stage === "document", onClick: () => showView("document") })}
       {cb({ icon: <PenLine size={18} />, label: "Bảng", on: stage === "board", onClick: () => showView("board") })}
-      {cb({
-        icon: <MonitorUp size={18} />,
-        label: video.sharingSelf ? "Đang chia sẻ" : "Chia sẻ màn hình",
-        on: video.sharingSelf,
-        disabled: avDisabled && !video.sharingSelf,
-        title: "Chia sẻ một cửa sổ: chọn thẻ Cửa sổ, đừng chọn tab lớp học",
-        onClick: () => {
-          setInspectBoard(false);
-          video.toggleShare();
-        },
-      })}
       <div className="lr-menuwrap">
-        {cb({ icon: <Layers size={18} />, label: "Hoạt động lớp", on: stage === "check", expanded: menuOpen, onClick: () => setMenuOpen(!menuOpen) })}
+        {cb({ icon: <Layers size={18} />, label: "Hoạt động lớp", on: stage === "check" || video.sharingSelf, expanded: menuOpen, onClick: () => setMenuOpen(!menuOpen) })}
         {menuOpen && (
           <div className="lr-menu" role="menu" aria-label="Hoạt động cho cả lớp">
             <p className="lr-menu__h">HOẠT ĐỘNG CHO CẢ LỚP</p>
@@ -1544,6 +1535,23 @@ export function LiveRoom({
                 <b>Gọi ngẫu nhiên</b>
                 <small>Chọn một em trong lớp để trả lời</small>
               </span>
+            </button>
+            <div className="lr-menu__sep" role="separator" />
+            <p className="lr-menu__h">CHIA SẺ APP NGOÀI</p>
+            <button
+              type="button"
+              role="menuitem"
+              className="lr-mi"
+              disabled={avDisabled && !video.sharingSelf}
+              title="Chia sẻ một cửa sổ: chọn thẻ Cửa sổ, đừng chọn tab lớp học"
+              onClick={() => { setInspectBoard(false); video.toggleShare(); setMenuOpen(false); }}
+            >
+              <span className="lr-mi__ic is-share"><MonitorUp size={17} /></span>
+              <span>
+                <b>Chia sẻ màn hình</b>
+                <small>Dùng khi cần mở app/website ngoài — tài liệu nạp sẵn thì học sinh thấy rõ hơn và chú thích được</small>
+              </span>
+              {video.sharingSelf && <span className="lr-chip lr-chip--warn">Đang chia sẻ</span>}
             </button>
           </div>
         )}
@@ -1750,6 +1758,7 @@ export function LiveRoom({
                     active={["draft", "scheduled", "live"].includes(s.status)}
                     request={request}
                     reload={load}
+                    injectedText={aiQuestion}
                   />
                 </div>
                 {selEvidence.length > 0 && (

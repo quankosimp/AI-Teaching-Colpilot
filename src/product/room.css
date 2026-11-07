@@ -407,6 +407,8 @@ button.lr-pg:hover { background: var(--lr-soft); }
 .lr-mi__ic { width: 34px; height: 34px; flex: none; border-radius: 10px; display: grid; place-items: center; }
 .lr-mi__ic.is-acc { background: var(--lr-accent-bg); color: var(--lr-accent-ink); }
 .lr-mi__ic.is-blue { background: #e6ecff; color: #2449c8; }
+.lr-mi__ic.is-share { background: var(--lr-amber-bg); color: var(--lr-amber); }
+.lr-menu__sep { height: 1px; background: var(--lr-line); margin: 4px 6px; }
 
 /* cột phải */
 .lr-queue { margin: 12px 12px 0; padding: 10px 10px 10px 12px; border-radius: 14px; background: var(--lr-amber-bg); display: flex; flex-direction: column; gap: 8px; flex: none; }
