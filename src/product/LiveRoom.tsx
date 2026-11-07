@@ -75,6 +75,7 @@ type Member = {
   studentIdRef?: { name: string };
   handRaised?: boolean;
   following?: boolean;
+  canWrite?: boolean;
 };
 const memberName = (m: Member) => m.displayName || m.studentIdRef?.name || m.studentId;
 const initialsOf = (name: string) => {
@@ -1234,8 +1235,8 @@ export function LiveRoom({
         }
         board={room?.sharedBoard || room?.commonBoard || null}
         actorId={grant.studentId}
-        canWrite={false}
-        onCommand={async () => {}}
+        canWrite={s.status === "live" && room?.capabilities?.boardWrite === true && (!s.sharedBoardOwnerId || s.sharedBoardOwnerId === "common")}
+        onCommand={async (cmd) => { void command(`/sessions/${sessionId}/boards/common`, "PUT", cmd, true); }}
       />
     ));
 
@@ -1793,6 +1794,21 @@ export function LiveRoom({
                     <Camera size={14} aria-hidden="true" />
                     Chụp bảng
                   </button>
+                  <button
+                    type="button"
+                    className={`lr-btn lr-btn--sm ${selMember.canWrite ? "lr-btn--warn" : "lr-btn--ghost"}`}
+                    title={selMember.canWrite ? "Thu quyền viết bảng chung" : "Cho học sinh viết trên bảng chung đang trình bày"}
+                    onClick={() => {
+                      if (selMember.canWrite) {
+                        void command(`/sessions/${sessionId}/members/${selMember.id}`, "PATCH", { canWrite: false });
+                      } else {
+                        void command(`/sessions/${sessionId}/members/${selMember.id}`, "PATCH", { canWrite: true });
+                        patchClassroom({ sharedView: "board", sharedBoardOwnerId: "common" });
+                      }
+                    }}
+                  >
+                    {selMember.canWrite ? "Thu quyền bảng" : "Mời lên bảng"}
+                  </button>
                 </div>
                 <div className="lr-blk">
                   <p className="lr-lbl">Em được dùng</p>
@@ -2023,7 +2039,12 @@ export function LiveRoom({
                   <li key={x.id}>
                     <b>{x.title}</b>
                     {x.answer && <span>{x.answer}</span>}
-                    {x.finalFeedback ? <small>Nhận xét: {x.finalFeedback}</small> : <em>Chờ thầy cô chấm</em>}
+                    {x.finalFeedback ? (
+                      <>
+                        <small>Nhận xét: {x.finalFeedback}</small>
+                        {x.support && <small className="lr-chip lr-chip--support">Mức hỗ trợ: {statusLabel(x.support)}</small>}
+                      </>
+                    ) : <em>Chờ thầy cô chấm</em>}
                   </li>
                 ))}
               </ul>

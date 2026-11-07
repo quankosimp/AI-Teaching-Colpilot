@@ -525,3 +525,6 @@ button.lr-pg:hover { background: var(--lr-soft); }
 .lr-wm__meta { padding: 0 8px; font-size: 11px; color: var(--lr-sub); }
 .lr-wm__acts { display: flex; gap: 4px; padding: 0 6px 6px; }
 .lr-wm__acts .lr-btn { font-size: 11px; gap: 3px; padding: 3px 7px; }
+
+/* Phase D — Mời lên bảng (podium) */
+.lr-chip--support { background: var(--lr-soft) !important; color: var(--lr-sub); font-size: 11px; }
