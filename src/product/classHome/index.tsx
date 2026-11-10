@@ -7,7 +7,7 @@ import { errText } from "./ui";
 import type { ClassSummary, Pupil } from "./types";
 
 /** Màn đầu của app: danh sách lớp; bấm một lớp là mở trang lớp đó. */
-export function ClassesHome({ students, initialOpenId = "", onEnterRoom, onOpenRoomView, onOpenAfter, onPrepare, onChanged }: {
+export function ClassesHome({ students, initialOpenId = "", onEnterRoom, onOpenRoomView, onOpenAfter, onPrepare, onChanged, onOpenStudentProfile }: {
   students: Pupil[];
   initialOpenId?: string;
   onEnterRoom: (sessionId: string, groupId: string) => void;
@@ -15,6 +15,7 @@ export function ClassesHome({ students, initialOpenId = "", onEnterRoom, onOpenR
   onOpenAfter: (sessionId: string, groupId: string) => void;
   onPrepare: (sessionId: string, groupId: string) => void;
   onChanged: () => Promise<void> | void;
+  onOpenStudentProfile?: (studentId: string, groupId: string, groupName: string) => void;
 }) {
   const [groups, setGroups] = useState<ClassSummary[] | null>(null);
   const [error, setError] = useState("");
@@ -32,7 +33,8 @@ export function ClassesHome({ students, initialOpenId = "", onEnterRoom, onOpenR
       onOpenRoomView={(sessionId, view) => onOpenRoomView(sessionId, view, openId)}
       onOpenAfter={(sessionId) => onOpenAfter(sessionId, openId)}
       onPrepare={(sessionId) => onPrepare(sessionId, openId)}
-      onChanged={onChanged} />;
+      onChanged={onChanged}
+      onOpenStudentProfile={onOpenStudentProfile} />;
   return <>
     <ClassList groups={groups} error={error} onOpenClass={setOpenId} onEnterRoom={onEnterRoom} onCreate={() => setCreating(true)} />
     {creating && <CreateClass students={students} onClose={() => setCreating(false)} onCreated={async (id) => { setCreating(false); await onChanged(); await load(); setOpenId(id); }} />}

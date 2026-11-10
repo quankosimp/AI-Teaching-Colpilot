@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, CalendarDays, Check, ChevronLeft, Copy, Link2, Plus, Video } from "lucide-react";
+import { AlertCircle, CalendarDays, Check, ChevronLeft, ChevronRight, Link2, Plus, Sparkles, Video } from "lucide-react";
 import { api } from "../onlineApi";
 import { AttendanceDialog } from "../Classes";
-import { Av, CIco, Stack, copyText, dayLabel, errText, shortDate, weekdayNames } from "./ui";
+import { Av, CIco, Stack, dayLabel, errText, weekdayNames } from "./ui";
 import { InviteLinks } from "./InviteLinks";
 import { ScheduleDialog } from "./ScheduleDialog";
-import { StudentDrawer } from "./StudentDrawer";
 import { ClassMaterials } from "./ClassMaterials";
 import { useOpenClass } from "./useOpenClass";
 import type { ClassDetail, ClassSessionRow, Pupil } from "./types";
@@ -16,7 +15,7 @@ type Tab = "students" | "log" | "materials";
 const minutes = (a: string | null, b: string | null) => (a && b ? Math.max(0, Math.round((Date.parse(b) - Date.parse(a)) / 60000)) : 0);
 const lastName = (n: string) => n.trim().split(/\s+/).slice(-1)[0];
 
-export function ClassPage({ id, students, onBack, onEnterRoom, onOpenRoomView, onOpenAfter, onPrepare, onChanged }: {
+export function ClassPage({ id, students, onBack, onEnterRoom, onOpenRoomView, onOpenAfter, onPrepare, onChanged, onOpenStudentProfile }: {
   id: string;
   students: Pupil[];
   onBack: () => void;
@@ -25,16 +24,15 @@ export function ClassPage({ id, students, onBack, onEnterRoom, onOpenRoomView, o
   onOpenAfter: (sessionId: string) => void;
   onPrepare: (sessionId: string) => void;
   onChanged: () => Promise<void> | void;
+  onOpenStudentProfile?: (studentId: string, groupId: string, groupName: string) => void;
 }) {
   const [g, setG] = useState<ClassDetail | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("students");
-  const [drawer, setDrawer] = useState("");
   const [invite, setInvite] = useState(false);
   const [sched, setSched] = useState(false);
   const [attFor, setAttFor] = useState("");
   const [adding, setAdding] = useState(false);
-  const [copied, setCopied] = useState("");
   const [preparing, setPreparing] = useState(false);
   const opener = useOpenClass(onEnterRoom);
   const load = useCallback(async () => {
@@ -44,19 +42,8 @@ export function ClassPage({ id, students, onBack, onEnterRoom, onOpenRoomView, o
   useEffect(() => { void load(); }, [load]);
   if (error && !g) return <div className="cls"><button type="button" className="cls-btn cls-btn--sec" onClick={onBack}><ChevronLeft size={16} />Danh sách lớp</button><p className="cls-alert" role="alert"><AlertCircle size={16} />{error}</p></div>;
   if (!g) return <div className="cls"><p className="cls-muted" role="status">Đang tải lớp…</p></div>;
-  const open = drawer ? g.students.find((s) => s.id === drawer) : undefined;
   const past = g.sessions.filter((s) => s.status !== "draft" && s.status !== "scheduled");
   const waiting = past.filter((s) => (s.status === "ended" || s.status === "reviewed") && (!s.attendanceConfirmed || s.pendingSubmissions > 0 || s.status === "ended")).length;
-  const copyLink = async (sid: string) => {
-    try { const r = await api<{ url: string }>(`/students/${sid}/link`); if (await copyText(r.url)) { setCopied(sid); setTimeout(() => setCopied(""), 2000); } else setError(r.url); }
-    catch (e) { setError(errText(e)); }
-  };
-  const remove = async (sid: string) => {
-    const name = g.students.find((s) => s.id === sid)?.name ?? "em này";
-    if (!confirm(`Bỏ ${name} khỏi lớp? Hồ sơ và các buổi cũ của em vẫn giữ.`)) return;
-    try { setG((await api<{ group: ClassDetail }>(`/groups/${g.id}/members/${sid}`, { method: "DELETE" })).group); setDrawer(""); await onChanged(); }
-    catch (e) { setError(errText(e)); }
-  };
   const prepare = async () => {
     setPreparing(true); setError("");
     try { const r = await api<{ sessionId: string }>(`/groups/${g.id}/prepare`, { method: "POST", body: "{}" }); onPrepare(r.sessionId); }
@@ -83,6 +70,7 @@ export function ClassPage({ id, students, onBack, onEnterRoom, onOpenRoomView, o
       <CIco name={g.name} size="lg" />
       <div className="cls-min"><h1 className="cls-one">{g.name}</h1><div className="cls-row"><Stack people={g.students} /><span className="cls-muted cls-one">{g.subject} · {g.grade} · {g.students.length} em</span></div></div>
       <span className="cls-grow" />
+      <button type="button" className="cls-btn cls-btn--sec" disabled={!g.students.length || preparing} onClick={() => void prepare()}><Sparkles size={16} />{preparing ? "Đang mở…" : "Soạn giáo án AI"}</button>
       <button type="button" className="cls-btn cls-btn--sec" disabled={!g.students.length} onClick={() => setInvite(true)}><Link2 size={16} />Link mời</button>
       {g.live
         ? <button type="button" className="cls-btn cls-btn--go cls-btn--lg" onClick={() => onEnterRoom(g.live!.sessionId)}><Video size={17} />Vào lại</button>
@@ -94,20 +82,25 @@ export function ClassPage({ id, students, onBack, onEnterRoom, onOpenRoomView, o
       <span className="cls-grow" /><button type="button" className="cls-btn cls-btn--txt cls-btn--sm" onClick={() => setSched(true)}>{g.schedule ? "Sửa lịch" : "Đặt lịch"}</button>
     </div>
     <div className="cls-tabs2" role="tablist">
-      <button type="button" role="tab" aria-selected={tab === "students"} className={tab === "students" ? "is-on" : ""} onClick={() => setTab("students")}>Các em <span className="cls-c">{g.students.length}</span></button>
+      <button type="button" role="tab" aria-selected={tab === "students"} className={tab === "students" ? "is-on" : ""} onClick={() => setTab("students")}>Học sinh <span className="cls-c">{g.students.length}</span></button>
       <button type="button" role="tab" aria-selected={tab === "log"} className={tab === "log" ? "is-on" : ""} onClick={() => setTab("log")}>Nhật ký buổi <span className={`cls-c${waiting ? " is-warn" : ""}`}>{waiting ? `${waiting} còn việc` : past.length}</span></button>
       <button type="button" role="tab" aria-selected={tab === "materials"} className={tab === "materials" ? "is-on" : ""} onClick={() => setTab("materials")}>Tài liệu</button>
     </div>
     {tab === "students" && <section className="cls-card cls-etbl">
       {g.students.length === 0 && <p className="cls-pad cls-muted">Lớp chưa có học sinh.</p>}
       {g.students.length > 0 && <div className="cls-tbl">
-        <div className="cls-th"><span>Học sinh</span><span>Đi học</span><span>Cần nhớ</span><span /></div>
-        {g.students.map((s) => <div key={s.id} className={`cls-tr${drawer === s.id ? " is-sel" : ""}`}>
-          <div className="cls-nm"><Av p={s} /><div className="cls-min"><button type="button" className="cls-namebtn cls-one" title={`Mở hồ sơ ${s.name}`} onClick={() => setDrawer(s.id)}>{s.name}</button></div></div>
+        <div className="cls-th"><span>Học sinh</span><span>Đi học</span><span /></div>
+        {g.students.map((s) => <button
+          key={s.id}
+          type="button"
+          className="cls-tr cls-tr--clickable"
+          title={`Mở hồ sơ ${s.name}`}
+          onClick={() => onOpenStudentProfile?.(s.id, g.id, g.name)}
+        >
+          <div className="cls-nm"><Av p={s} /><div className="cls-min"><span className="cls-namebtn cls-one">{s.name}</span></div></div>
           <div className="cls-min"><b style={{ font: "600 13px Inter, sans-serif" }}>{s.total ? `${s.attended}/${s.total}` : "—"}</b><span className="cls-muted cls-one" style={{ display: "block" }}>{s.total ? "buổi đã học" : "chưa có buổi"}</span></div>
-          <div className="cls-min">{s.notes.length ? s.notes.slice(0, 2).map((n) => <div key={n.id} className="cls-mitem"><span className={`cls-tagnote${n.kind ? ` is-${n.kind}` : ""}`}>{n.kind === "review" ? "Ôn lại" : n.kind === "good" ? "Làm tốt" : "Ghi nhận"}</span><span className="cls-one">{n.text}</span><span className="from">{shortDate(n.date)}</span></div>) : <span className="cls-muted">Chưa có điều cần nhớ</span>}</div>
-          <div className="cls-lk"><button type="button" className="cls-btn cls-btn--sec cls-btn--sm" onClick={() => void copyLink(s.id)}>{copied === s.id ? <Check size={14} /> : <Copy size={14} />}<span className="cls-lbl">{copied === s.id ? "Đã chép" : "Chép link"}</span></button></div>
-        </div>)}
+          <div className="cls-lk"><span className="cls-muted cls-lbl">Xem hồ sơ</span><ChevronRight size={16} className="cls-muted" /></div>
+        </button>)}
       </div>}
       <button type="button" className="cls-addrow" onClick={() => setAdding(true)}><Plus size={15} />Thêm học sinh</button>
     </section>}
@@ -121,7 +114,6 @@ export function ClassPage({ id, students, onBack, onEnterRoom, onOpenRoomView, o
       {past.map(row)}
     </section>}
     {tab === "materials" && <ClassMaterials groupId={g.id} groupName={g.name} preparing={preparing} onPrepare={() => void prepare()} />}
-    {open && <StudentDrawer student={open} groupName={g.name} onClose={() => setDrawer("")} onRemove={() => void remove(open.id)} onChanged={() => void load()} />}
     {invite && <InviteLinks title={g.name} students={g.students} onClose={() => setInvite(false)} />}
     {sched && <ScheduleDialog groupId={g.id} groupName={g.name} schedule={g.schedule} onClose={() => setSched(false)} onSaved={() => { setSched(false); void load(); }} />}
     {attFor && <AttendanceDialog sessionId={attFor} mode="edit" onClose={() => setAttFor("")} onSaved={() => { setAttFor(""); void load(); }} />}

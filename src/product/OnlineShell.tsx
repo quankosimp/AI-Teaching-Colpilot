@@ -1,12 +1,13 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   CalendarDays, CheckCircle2, ChevronRight, ClipboardCheck, GraduationCap,
-  LayoutDashboard, LibraryBig, LogOut, Menu, Moon, Settings2, ShieldCheck,
+  LayoutDashboard, LibraryBig, Menu, Moon, ShieldCheck,
   Sparkles, Sun, Users, Video, X, type LucideIcon,
 } from "lucide-react";
+import { UserMenu } from "./UserMenu";
 import "./online-restoration.css";
 
-export type OnlineNavIcon = "dashboard" | "classes" | "students" | "materials" | "plan" | "plans" | "grading" | "live" | "summary" | "account";
+export type OnlineNavIcon = "dashboard" | "classes" | "students" | "materials" | "plan" | "plans" | "grading" | "live" | "summary";
 export type OnlineNavItem = { id: string; label: string; icon?: OnlineNavIcon; badge?: number };
 export type OnlineShellProps = {
   page: string;
@@ -17,7 +18,6 @@ export type OnlineShellProps = {
   navItems: OnlineNavItem[];
   onNavigate: (id: string) => void;
   onSignOut?: () => void;
-  accountAction?: () => void;
   room?: boolean;
   actions?: ReactNode;
   children: ReactNode;
@@ -25,14 +25,10 @@ export type OnlineShellProps = {
 const icons: Record<OnlineNavIcon, LucideIcon> = {
   dashboard: LayoutDashboard, classes: GraduationCap, students: Users, materials: LibraryBig,
   plan: CalendarDays, plans: CalendarDays, grading: ClipboardCheck,
-  live: Video, summary: CheckCircle2, account: Settings2,
+  live: Video, summary: CheckCircle2,
 };
-function initials(name: string) {
-  return name.trim().split(/\s+/).slice(-2).map(part => part[0] || "").join("").toLocaleUpperCase("vi-VN") || "GV";
-}
-
 /** API-neutral presentation shell, matched to the original ProductApp composition. */
-export function OnlineShell({ page, title, teacher, theme, onThemeToggle, navItems, onNavigate, onSignOut, accountAction, room = false, actions, children }: OnlineShellProps) {
+export function OnlineShell({ page, title, teacher, theme, onThemeToggle, navItems, onNavigate, onSignOut, room = false, actions, children }: OnlineShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [smallScreen, setSmallScreen] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 1100px)").matches);
   const menuId = useId();
@@ -71,7 +67,6 @@ export function OnlineShell({ page, title, teacher, theme, onThemeToggle, navIte
     onNavigate(id);
     if (mobileOpen) closeMenu();
   };
-  const hasAccount = navItems.some(item => item.id === "account");
   const home = navItems.find(item => item.id === "dashboard")?.id || navItems[0]?.id;
 
   return <div className={`online-restored${room ? " online-restored--room" : ""}`} data-theme={theme}>
@@ -106,11 +101,13 @@ export function OnlineShell({ page, title, teacher, theme, onThemeToggle, navIte
       <div className="restored-sidebar-footer">
         <div className="restored-approval-note"><ShieldCheck size={19} aria-hidden="true" /><div><strong>Gia sư giữ quyền duyệt</strong><p>Gợi ý của Copilot luôn cần bạn xem và xác nhận.</p></div></div>
         {teacher && <div className="restored-me">
-          <button className="restored-me__main" type="button" aria-label={`Mở tài khoản ${teacher.name}`} onClick={accountAction || (() => { if (hasAccount) navigate("account"); })} disabled={!accountAction && !hasAccount}>
-            <span className="restored-avatar">{initials(teacher.name)}</span>
-            <span className="restored-account-copy"><strong>{teacher.name}</strong><small>Gia sư</small></span>
-          </button>
-          {onSignOut && <button className="restored-icon restored-me__out" type="button" aria-label="Đăng xuất" title="Đăng xuất" onClick={onSignOut}><LogOut size={17} aria-hidden="true" /></button>}
+          <UserMenu
+            teacher={teacher}
+            theme={theme}
+            onThemeToggle={onThemeToggle}
+            onSignOut={onSignOut}
+            placement="up"
+          />
         </div>}
       </div>
     </aside>
@@ -123,9 +120,16 @@ export function OnlineShell({ page, title, teacher, theme, onThemeToggle, navIte
         <div className="restored-topbar-actions">
           {actions}
           <button className="restored-icon" type="button" aria-label="Đổi giao diện" title={theme === "dark" ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối"} onClick={onThemeToggle}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
-          {teacher && <button className="restored-account-chip restored-account-chip--top" type="button" aria-label={`Mở tài khoản ${teacher.name}`} onClick={accountAction || (() => { if (hasAccount) navigate("account"); })} disabled={!accountAction && !hasAccount}>
-            <span className="restored-avatar">{initials(teacher.name)}</span><span className="restored-account-copy"><strong>{teacher.name}</strong><small>Gia sư</small></span>
-          </button>}
+          {teacher && <div className="restored-account-chip--top">
+            <UserMenu
+              teacher={teacher}
+              theme={theme}
+              onThemeToggle={onThemeToggle}
+              onSignOut={onSignOut}
+              placement="down"
+              compact={smallScreen}
+            />
+          </div>}
         </div>
       </header>
       <main ref={content} id="restored-page-content" className="restored-content" tabIndex={-1}>{children}</main>

@@ -16,6 +16,7 @@ import {
 } from "./presentation";
 import { api, ApiError, googleCallback, signIn, signOut } from "./onlineApi";
 import { Modal, Status, initials } from "./ui";
+import { StudentJourney } from "./StudentJourney";
 import { OnlineShell, type OnlineNavItem } from "./OnlineShell";
 import { type RecentEvidence } from "./OnlineOverview";
 import { statusLabel } from "./statusLabels";
@@ -36,7 +37,9 @@ import {
   ChevronLeft,
 } from "lucide-react";
 import { ClassesHome } from "./classHome";
+import { DashboardHome } from "./classHome/DashboardHome";
 import { AfterClass } from "./classHome/AfterClass";
+import { LandingPage } from "./LandingPage";
 import { MaterialClassesDialog } from "./classHome/ClassMaterials";
 import { LiveRoom } from "./LiveRoom";
 import { MaterialViewer } from "./MaterialViewer";
@@ -70,8 +73,7 @@ type Page =
   | "grading"
   | "live"
   | "summary"
-  | "after"
-  | "account";
+  | "after";
 const pageNames: Record<Page, string> = {
   dashboard: "Tổng quan",
   classes: "Lớp",
@@ -84,16 +86,18 @@ const pageNames: Record<Page, string> = {
   live: "Phòng dạy",
   summary: "Tổng kết & duyệt",
   after: "Sau buổi",
-  account: "Tài khoản",
 };
-// Thanh bên theo thiết kế "Lớp là phòng": Lớp · Tài liệu, Tài khoản ở dưới.
-const navItems: OnlineNavItem[] = (["classes", "materials", "account"] as const).map((id) => ({
-  id,
-  label: id === "materials" ? "Tài liệu" : pageNames[id],
-  icon: id as OnlineNavItem["icon"],
-}));
+// Thanh bên theo thiết kế "Lớp là phòng" và module Quản lý Học sinh (SRS M02): Trang chủ · Lớp · Học sinh · Tài liệu.
+const navItems: OnlineNavItem[] = [
+  { id: "dashboard", label: "Trang chủ", icon: "dashboard" },
+  ...( ["classes", "students", "materials"] as const).map((id) => ({
+    id,
+    label: id === "materials" ? "Tài liệu" : pageNames[id],
+    icon: id as OnlineNavItem["icon"],
+  })),
+];
 // Các trang thuộc vòng dạy của một lớp: mục Lớp trên thanh bên luôn sáng.
-const classPages: Page[] = ["classes", "after", "student", "plans", "live", "grading", "summary", "sessions", "dashboard", "students"];
+const classPages: Page[] = ["classes", "after", "plans", "live", "grading", "summary", "sessions"];
 const message = (e: unknown): Feedback =>
   e instanceof ApiError
     ? e.failure
@@ -123,7 +127,7 @@ export default function OnlineApp() {
   const [state, setState] = useState<AsyncState>("loading");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState(false);
-  const [page, setPage] = useState<Page>("classes");
+  const [page, setPage] = useState<Page>("dashboard");
   const [students, setStudents] = useState<Student[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -140,12 +144,16 @@ export default function OnlineApp() {
     setPage("classes");
   };
   const [studentGroups, setStudentGroups] = useState<{ id: string; name: string }[]>([]);
+  const [allGroups, setAllGroups] = useState<{ id: string; name: string; subject?: string; grade?: string; students: { id: string }[] }[]>([]);
   const [roomSession, setRoomSession] = useState("");
   const [roomBackToLesson, setRoomBackToLesson] = useState(false);
   // Mở màn chấm từ màn Sau buổi thì thoát phòng là về lại màn Sau buổi đó.
   const [roomBackToAfter, setRoomBackToAfter] = useState("");
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
+  const [newNotes, setNewNotes] = useState("");
+  const [newStrengths, setNewStrengths] = useState("");
+  const [newGaps, setNewGaps] = useState("");
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [materialGrade, setMaterialGrade] = useState("Lớp 9");
@@ -161,6 +169,9 @@ export default function OnlineApp() {
   const [pinMaterial, setPinMaterial] = useState<Material | null>(null);
   const [grade, setGrade] = useState("Lớp 9");
   const [subject, setSubject] = useState("Toán");
+  const [editName, setEditName] = useState("");
+  const [editGrade, setEditGrade] = useState("Lớp 9");
+  const [editSubject, setEditSubject] = useState("Toán");
   const [editGoal, setEditGoal] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editStrengths, setEditStrengths] = useState("");
@@ -173,13 +184,19 @@ export default function OnlineApp() {
   const [theme, setTheme] = useState(() =>
     document.body.classList.contains("dark"),
   );
+  const [showLandingPreview, setShowLandingPreview] = useState(false);
   const [modal, setModal] = useState<"student" | "profile" | "material" | null>(null);
   const [query, setQuery] = useState("");
   const [studentFilter, setStudentFilter] = useState("active");
+  const [studentGradeFilter, setStudentGradeFilter] = useState("all");
+  const [studentGroupFilter, setStudentGroupFilter] = useState("all");
+  const [studentPage, setStudentPage] = useState(1);
+  const [materialSubjectFilter, setMaterialSubjectFilter] = useState("all");
+  const [materialLevelFilter, setMaterialLevelFilter] = useState("all");
   const [recentEvidence, setRecentEvidence] = useState<RecentEvidence[]>([]);
   const [evidenceError, setEvidenceError] = useState("");
   const [profileTab, setProfileTab] = useState<
-    "overview" | "history" | "evidence"
+    "overview" | "journey" | "history" | "evidence"
   >("overview");
   const [studentEvidence, setStudentEvidence] = useState<RecentEvidence[]>([]);
   const [studentEvidenceState, setStudentEvidenceState] = useState<
@@ -187,23 +204,32 @@ export default function OnlineApp() {
   >("loading");
   useEffect(() => setProfileTab("overview"), [selectedStudent]);
   useEffect(() => {
-    setStudentGroups([]);
-    if (!teacher || page !== "student" || !selectedStudent) return;
+    setStudentPage(1);
+  }, [query, studentFilter, studentGradeFilter, studentGroupFilter]);
+  useEffect(() => {
+    if (!teacher) {
+      setAllGroups([]);
+      setStudentGroups([]);
+      return;
+    }
     let active = true;
-    void api<{ groups: { id: string; name: string; students: { id: string }[] }[] }>("/groups")
+    void api<{ groups: { id: string; name: string; subject?: string; grade?: string; students: { id: string }[] }[] }>("/groups")
       .then((r) => {
-        if (active)
+        if (!active) return;
+        setAllGroups(r.groups);
+        if (selectedStudent) {
           setStudentGroups(
             r.groups
               .filter((g) => g.students.some((m) => m.id === selectedStudent))
               .map((g) => ({ id: g.id, name: g.name })),
           );
+        }
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
-  }, [teacher?.id, page, selectedStudent]);
+  }, [teacher?.id, page, selectedStudent, students.length]);
   useEffect(() => {
     setStudentEvidence([]);
     if (!teacher || page !== "student" || !selectedStudent) return;
@@ -253,7 +279,9 @@ export default function OnlineApp() {
     setProfileTab("overview");
     setModal(null);
     setRoomSession("");
-    setPage("classes");
+    setClassOpen("");
+    setReturnClass(null);
+    setPage("dashboard");
     setStudents([]);
     setMaterials([]);
     setSessions([]);
@@ -355,9 +383,15 @@ export default function OnlineApp() {
           grade,
           subject,
           goal,
-          strengths: [],
-          gaps: [],
-          notes: "",
+          strengths: newStrengths
+            .split("\n")
+            .map((x) => x.trim())
+            .filter(Boolean),
+          gaps: newGaps
+            .split("\n")
+            .map((x) => x.trim())
+            .filter(Boolean),
+          notes: newNotes,
           status: "active",
           initials: name
             .trim()
@@ -371,6 +405,9 @@ export default function OnlineApp() {
       });
       setName("");
       setGoal("");
+      setNewNotes("");
+      setNewStrengths("");
+      setNewGaps("");
       await reload();
       setSelectedStudent(result.student.id);
       setModal(null);
@@ -382,14 +419,17 @@ export default function OnlineApp() {
   );
   const session = sessions.find((s) => s.id === selectedSession);
   useEffect(() => {
+    setEditName(student?.name || "");
+    setEditGrade(student?.grade || "Lớp 9");
+    setEditSubject(student?.subject || "Toán");
     setEditGoal(student?.goal || "");
     setEditNotes(student?.notes || "");
     setEditStrengths(student?.strengths.join("\n") || "");
     setEditGaps(student?.gaps.join("\n") || "");
     setHistory([]);
-  }, [student?.id]);
+  }, [student?.id, student?.version]);
   useEffect(() => {
-    if (!selectedStudent) return;
+    if (!selectedStudent || !teacher) return;
     let active = true;
     api<{ claims: ApprovedClaim[] }>(`/students/${selectedStudent}/history`)
       .then((r) => {
@@ -401,17 +441,25 @@ export default function OnlineApp() {
     return () => {
       active = false;
     };
-  }, [selectedStudent, page, roomSession]);
-  const updateStudent = (patch: Partial<Student>) => {
-    if (!student) return;
+  }, [teacher?.id, selectedStudent, page, roomSession, afterSession, state]);
+  const updateStudentById = (
+    target: Student,
+    patch: Partial<Student>,
+    closeModalAfter = false,
+  ) => {
     void run(async () => {
-      await api(`/students/${student.id}`, {
+      await api(`/students/${target.id}`, {
         method: "PATCH",
-        headers: { "If-Match-Version": String(student.version) },
+        headers: { "If-Match-Version": String(target.version) },
         body: body(patch),
       });
       await reload();
+      if (closeModalAfter) setModal(null);
     });
+  };
+  const updateStudent = (patch: Partial<Student>, closeModalAfter = false) => {
+    if (!student) return;
+    updateStudentById(student, patch, closeModalAfter);
   };
   const openUpload = (sessionId = "") => {
     setTitle("");
@@ -554,18 +602,47 @@ export default function OnlineApp() {
   const openSource = (id: string) =>
     void run(async () => setOpenedSource(await api("/evidence/" + id)));
   const workspace = ["live", "grading", "summary"].includes(page);
-  const filteredStudents = students.filter(
-    (item) =>
-      (studentFilter === "all" || item.status === studentFilter) &&
-      `${item.name} ${item.grade} ${item.subject}`
-        .toLocaleLowerCase("vi-VN")
-        .includes(query.toLocaleLowerCase("vi-VN")),
+  const availableStudentGrades = Array.from(
+    new Set(students.map((s) => s.grade.trim()).filter(Boolean)),
   );
-  const filteredMaterials = materials.filter((item) =>
-    `${item.title} ${item.subject} ${item.topic}`
+  const filteredStudents = students.filter((item) => {
+    if (studentFilter !== "all" && item.status !== studentFilter) return false;
+    if (studentGradeFilter !== "all" && item.grade.trim() !== studentGradeFilter) return false;
+    if (studentGroupFilter === "unassigned") {
+      const inAnyGroup = allGroups.some((g) => g.students.some((m) => m.id === item.id));
+      if (inAnyGroup) return false;
+    } else if (studentGroupFilter !== "all") {
+      const grp = allGroups.find((g) => g.id === studentGroupFilter);
+      if (!grp || !grp.students.some((m) => m.id === item.id)) return false;
+    }
+    const searchable = `${item.name} ${item.grade} ${item.subject} ${item.goal} ${item.strengths.join(" ")} ${item.gaps.join(" ")}`.toLocaleLowerCase("vi-VN");
+    return searchable.includes(query.toLocaleLowerCase("vi-VN"));
+  });
+  const STUDENT_PAGE_SIZE = 6;
+  const totalStudentPages = Math.max(
+    1,
+    Math.ceil(filteredStudents.length / STUDENT_PAGE_SIZE),
+  );
+  const safeStudentPage = Math.min(studentPage, totalStudentPages);
+  const pagedStudents = filteredStudents.slice(
+    (safeStudentPage - 1) * STUDENT_PAGE_SIZE,
+    safeStudentPage * STUDENT_PAGE_SIZE,
+  );
+  const availableMaterialSubjects = Array.from(
+    new Set(materials.map((m) => m.subject.trim()).filter(Boolean)),
+  );
+  const filteredMaterials = materials.filter((item) => {
+    if (
+      materialSubjectFilter !== "all" &&
+      item.subject.trim() !== materialSubjectFilter
+    )
+      return false;
+    if (materialLevelFilter !== "all" && item.level !== materialLevelFilter)
+      return false;
+    return `${item.title} ${item.subject} ${item.topic} ${item.description || ""} ${item.source || ""}`
       .toLocaleLowerCase("vi-VN")
-      .includes(query.toLocaleLowerCase("vi-VN")),
-  );
+      .includes(query.toLocaleLowerCase("vi-VN"));
+  });
   const sourceModal = openedSource && (
     <Modal
       title={openedSource.evidence.title}
@@ -579,134 +656,63 @@ export default function OnlineApp() {
       </pre>
     </Modal>
   );
-  if (!teacher)
+  if (!teacher || showLandingPreview)
     return (
-      <main className="restored-auth" data-theme={theme ? "dark" : "light"}>
-        <section className="restored-auth-hero">
-          <div className="restored-auth-brand">
-            <span className="brand-mark">
-              <Sparkles size={24} />
-            </span>
-            <strong>AI Teaching Copilot</strong>
-          </div>
-          <Status tone="violet">Không gian dạy học trực tuyến</Status>
-          <h1>
-            Một nơi để dạy.
-            <br />
-            Một mạch để học tiếp.
-          </h1>
-          <p>
-            Chuẩn bị buổi học, cùng làm bài và lưu lại điều học sinh đã hiểu —
-            trong một phòng học.
-          </p>
-          <div className="auth-features">
-            <div>
-              <Video size={20} />
-              <span>Phòng giáo viên và học sinh riêng biệt</span>
-            </div>
-            <div>
-              <BookOpen size={20} />
-              <span>Đề bài, bảng nháp và minh chứng cùng một nơi</span>
-            </div>
-            <div>
-              <ShieldCheck size={20} />
-              <span>Gia sư duyệt trước khi cập nhật hồ sơ</span>
-            </div>
-          </div>
-          <div className="restored-auth-preview">
-            <Sparkles size={20} />
-            <h3>Giữ mạch bài học của từng học sinh</h3>
-            <p>
-              Soạn giáo án → cùng làm bài → đối chiếu minh chứng → chuẩn bị buổi
-              tiếp theo.
-            </p>
-          </div>
-        </section>
-        <section className="restored-auth-main">
-          <div className="eyebrow">DÀNH CHO GIÁO VIÊN</div>
-          <h2>Chào mừng bạn trở lại</h2>
-          <p>Đăng nhập để mở lịch dạy và các buổi học.</p>
-          <FormFeedback saving={busy} error={feedback} />
-          {state === "loading" ? (
-            <AsyncPanel state="loading" />
-          ) : (
-            <>
-              <button
-                className="button ghost google-button"
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    const result = await api<{ url: string }>(
-                      "/auth/google/start",
-                    );
-                    location.assign(result.url);
-                  })
+      <LandingPage
+        theme={theme}
+        busy={busy}
+        state={state}
+        feedback={feedback}
+        isPreviewMode={!!teacher && showLandingPreview}
+        onToggleTheme={toggleTheme}
+        onGoogleSignIn={() =>
+          void run(async () => {
+            try {
+              const result = await api<{ url: string }>("/auth/google/start");
+              location.assign(result.url);
+            } catch (e) {
+              if (
+                e instanceof ApiError &&
+                e.failure.code === "AUTH_UNAVAILABLE"
+              ) {
+                if (!teacher) {
+                  await signIn("teacher-a");
                 }
-              >
-                <span className="google-g" aria-hidden="true">
-                  G
-                </span>
-                Tiếp tục với Google
-                <ArrowRight size={17} />
-              </button>
-              <div className="auth-demo">
-                <Status tone="violet">Demo cục bộ</Status>
-                <p>
-                  Dùng tài khoản mẫu trên máy chủ demo để thử luồng dạy học.
-                </p>
-                <button
-                  className="demo-account"
-                  aria-label="Demo Hoàng Nam"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      await signIn("teacher-a");
-                      await reload();
-                    })
-                  }
-                >
-                  <span className="avatar avatar-violet">HN</span>
-                  <span>
-                    <strong>Demo Hoàng Nam</strong>
-                    <small>Không gian giáo viên</small>
-                  </span>
-                  <ArrowRight size={17} />
-                </button>
-                <button
-                  className="demo-account"
-                  aria-label="Demo Mai An"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      await signIn("teacher-b");
-                      await reload();
-                    })
-                  }
-                >
-                  <span className="avatar avatar-blue">MA</span>
-                  <span>
-                    <strong>Demo Mai An</strong>
-                    <small>Tài khoản kiểm tra độc lập</small>
-                  </span>
-                  <ArrowRight size={17} />
-                </button>
-              </div>
-              {state === "error" && (
-                <button className="button" onClick={() => void reload()}>
-                  Thử kết nối lại
-                </button>
-              )}
-            </>
-          )}
-          <p className="auth-student-note">
-            <GraduationCap size={19} />
-            Học sinh dùng liên kết buổi học do giáo viên cung cấp.
-          </p>
-          <button className="text-button" onClick={toggleTheme}>
-            Đổi giao diện
-          </button>
-        </section>
-      </main>
+                setShowLandingPreview(false);
+                setClassOpen("");
+                setReturnClass(null);
+                setRoomSession("");
+                setPage("dashboard");
+                await reload();
+                window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+                return;
+              }
+              throw e;
+            }
+          })
+        }
+        onDemoSignIn={(account) =>
+          void run(async () => {
+            await signIn(account);
+            setShowLandingPreview(false);
+            setClassOpen("");
+            setReturnClass(null);
+            setRoomSession("");
+            setPage("dashboard");
+            await reload();
+            window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+          })
+        }
+        onRetry={() => void reload()}
+        onBackToWorkspace={() => {
+          setShowLandingPreview(false);
+          setClassOpen("");
+          setReturnClass(null);
+          setRoomSession("");
+          setPage("dashboard");
+          window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+        }}
+      />
     );
   return (
     <OnlineShell
@@ -718,14 +724,45 @@ export default function OnlineApp() {
       navItems={navItems}
       onNavigate={navigate}
       onSignOut={logout}
-      accountAction={() => navigate("account")}
       room={workspace && !!roomSession}
+      actions={
+        <button
+          type="button"
+          className="button ghost"
+          style={{ minHeight: 36, padding: "6px 12px", fontSize: 13 }}
+          onClick={() => setShowLandingPreview(true)}
+        >
+          <Sparkles size={15} />
+          Giới thiệu sản phẩm
+        </button>
+      }
     >
       <FormFeedback saving={busy} error={feedback} />
       {state === "error" ? (
         <AsyncPanel state="error" onRetry={() => void reload()} />
       ) : (
         <>
+          {page === "dashboard" && (
+            <DashboardHome
+              classCount={allGroups.length}
+              activeStudentCount={students.filter((s) => s.status === "active").length}
+              materialCount={materials.length}
+              onGoToClasses={() => navigate("classes")}
+              onGoToStudents={() => navigate("students")}
+              onGoToMaterials={() => navigate("materials")}
+              onOpenClass={(id) => { navigate("classes"); setClassOpen(id); }}
+              onEnterRoom={(sessionId, groupId) => {
+                setRoomClass(groupId);
+                void reload().then(() => openRoom(sessionId));
+              }}
+              onOpenStudent={(studentId) => {
+                setSelectedStudent(studentId);
+                setReturnClass(null);
+                setPage("student");
+              }}
+              onReload={reload}
+            />
+          )}
           {page === "classes" && (
             <ClassesHome
               key={classOpen || "list"}
@@ -751,6 +788,11 @@ export default function OnlineApp() {
                 setAfterSession(sessionId);
                 setPage("after");
               }}
+              onOpenStudentProfile={(studentId, groupId, groupName) => {
+                setSelectedStudent(studentId);
+                setReturnClass({ id: groupId, name: groupName });
+                setPage("student");
+              }}
             />
           )}
           {page === "after" && afterSession && (
@@ -761,28 +803,324 @@ export default function OnlineApp() {
               onOpenGrading={(id) => { openRoom(id, "grading"); setRoomBackToAfter(id); }}
             />
           )}
-          {page === "student" && student && (
+          {page === "students" && (
             <>
-              {returnClass ? (
+              <div className="restored-page-title">
+                <div>
+                  <h1>Học sinh của bạn</h1>
+                  <p>
+                    Quản lý hồ sơ học tập, mục tiêu, điểm mạnh, khoảng trống cần
+                    củng cố và lịch sử nhận định đã duyệt (SRS M02).
+                  </p>
+                </div>
                 <button
-                  className="text-button"
+                  type="button"
+                  className="button primary"
                   onClick={() => {
-                    setClassOpen(returnClass.id);
-                    setReturnClass(null);
-                    setPage("classes");
+                    setName("");
+                    setGrade("Lớp 9");
+                    setSubject("Toán");
+                    setGoal("");
+                    setNewNotes("");
+                    setNewStrengths("");
+                    setNewGaps("");
+                    setModal("student");
                   }}
                 >
-                  <ChevronLeft size={14} /> {returnClass.name}
+                  <Plus size={17} />
+                  Thêm học sinh
                 </button>
-              ) : (
-                <button
-                  className="text-button"
-                  onClick={() => navigate("classes")}
+              </div>
+              <div className="profile-metrics" style={{ marginBottom: 18 }}>
+                <div className="metric-card">
+                  <span>Đang theo dõi</span>
+                  <strong>
+                    {students.filter((s) => s.status === "active").length}
+                  </strong>
+                </div>
+                <div className="metric-card">
+                  <span>Đã lưu trữ</span>
+                  <strong>
+                    {students.filter((s) => s.status === "archived").length}
+                  </strong>
+                </div>
+                <div className="metric-card">
+                  <span>Cần củng cố kiến thức</span>
+                  <strong>
+                    {
+                      students.filter(
+                        (s) => s.status === "active" && s.gaps.length > 0,
+                      ).length
+                    }
+                  </strong>
+                </div>
+              </div>
+              <div className="filter-card">
+                <label className="search-box">
+                  <Search size={17} aria-hidden="true" />
+                  <input
+                    aria-label="Tìm học sinh"
+                    placeholder="Tìm theo tên, khối lớp, môn học hoặc mục tiêu…"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </label>
+                <select
+                  aria-label="Trạng thái học sinh"
+                  value={studentFilter}
+                  onChange={(event) => setStudentFilter(event.target.value)}
                 >
-                  Học sinh <ChevronRight size={14} />
-                  Hồ sơ
-                </button>
+                  <option value="active">Đang theo dõi</option>
+                  <option value="archived">Đã lưu trữ</option>
+                  <option value="all">Tất cả trạng thái</option>
+                </select>
+                <select
+                  aria-label="Lọc theo khối lớp"
+                  value={studentGradeFilter}
+                  onChange={(event) =>
+                    setStudentGradeFilter(event.target.value)
+                  }
+                >
+                  <option value="all">Mọi khối lớp</option>
+                  {availableStudentGrades.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Lọc theo lớp học"
+                  value={studentGroupFilter}
+                  onChange={(event) =>
+                    setStudentGroupFilter(event.target.value)
+                  }
+                >
+                  <option value="all">Mọi lớp học</option>
+                  <option value="unassigned">Chưa xếp lớp</option>
+                  {allGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="result-count" role="status" aria-live="polite">
+                  {filteredStudents.length} học sinh
+                </span>
+              </div>
+              <div className="restored-student-grid">
+                {pagedStudents.map((item) => {
+                  const enrolledGroups = allGroups.filter((g) =>
+                    g.students.some((m) => m.id === item.id),
+                  );
+                  const sessionCount = sessions.filter((s) =>
+                    s.RoomMember_sessionId_items.some(
+                      (m) => m.studentId === item.id,
+                    ),
+                  ).length;
+                  return (
+                    <article
+                      className="card restored-student-card"
+                      key={item.id}
+                    >
+                      <div className="row-between">
+                        <span className={`avatar avatar-${item.color}`}>
+                          {item.initials || initials(item.name)}
+                        </span>
+                        <Status
+                          tone={item.status === "active" ? "green" : "neutral"}
+                        >
+                          {item.status === "active"
+                            ? "Đang theo dõi"
+                            : "Đã lưu trữ"}
+                        </Status>
+                      </div>
+                      <div>
+                        <h2>{item.name}</h2>
+                        <p>
+                          {item.grade} · {item.subject} · {sessionCount} buổi học
+                        </p>
+                      </div>
+                      <div className="restored-card-tags">
+                        {enrolledGroups.length > 0 ? (
+                          enrolledGroups.map((grp) => (
+                            <span key={grp.id}>{grp.name}</span>
+                          ))
+                        ) : (
+                          <span>Chưa xếp lớp</span>
+                        )}
+                      </div>
+                      <p className="student-goal">
+                        <span>Mục tiêu hiện tại</span>
+                        {item.goal || "Chưa ghi mục tiêu học tập."}
+                      </p>
+                      {(item.strengths.length > 0 || item.gaps.length > 0) && (
+                        <ul
+                          className="trait-pill-list"
+                          role="list"
+                          style={{ margin: 0 }}
+                        >
+                          {item.strengths.slice(0, 2).map((st, idx) => (
+                            <li
+                              key={`s-${idx}`}
+                              className="trait-pill trait-pill--strength"
+                            >
+                              ✓ {st}
+                            </li>
+                          ))}
+                          {item.gaps.slice(0, 2).map((gp, idx) => (
+                            <li
+                              key={`g-${idx}`}
+                              className="trait-pill trait-pill--gap"
+                            >
+                              ! {gp}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="student-card-footer">
+                        <button
+                          type="button"
+                          className="button"
+                          onClick={() => {
+                            setSelectedStudent(item.id);
+                            setReturnClass(null);
+                            navigate("student");
+                          }}
+                        >
+                          Xem hồ sơ
+                          <ChevronRight size={15} />
+                        </button>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <button
+                            type="button"
+                            className="text-button"
+                            aria-label={`Chỉnh sửa hồ sơ ${item.name}`}
+                            onClick={() => {
+                              setSelectedStudent(item.id);
+                              setModal("profile");
+                            }}
+                          >
+                            <Pencil size={14} /> Sửa
+                          </button>
+                          <button
+                            type="button"
+                            className="text-button"
+                            aria-label={`${item.status === "active" ? "Lưu trữ" : "Khôi phục"} hồ sơ ${item.name}`}
+                            onClick={() =>
+                              updateStudentById(item, {
+                                status:
+                                  item.status === "active"
+                                    ? "archived"
+                                    : "active",
+                              })
+                            }
+                          >
+                            {item.status === "active" ? "Lưu trữ" : "Khôi phục"}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+              {totalStudentPages > 1 && (
+                <div
+                  className="row-between card"
+                  style={{ marginTop: 16, padding: "12px 18px" }}
+                >
+                  <span className="muted">
+                    Trang {safeStudentPage} / {totalStudentPages} · Hiển thị{" "}
+                    {pagedStudents.length} / {filteredStudents.length} học sinh
+                  </span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      className="button secondary small"
+                      disabled={safeStudentPage <= 1}
+                      onClick={() =>
+                        setStudentPage((p) => Math.max(1, p - 1))
+                      }
+                    >
+                      Trang trước
+                    </button>
+                    <button
+                      type="button"
+                      className="button secondary small"
+                      disabled={safeStudentPage >= totalStudentPages}
+                      onClick={() =>
+                        setStudentPage((p) =>
+                          Math.min(totalStudentPages, p + 1),
+                        )
+                      }
+                    >
+                      Trang sau
+                    </button>
+                  </div>
+                </div>
               )}
+              {!filteredStudents.length && (
+                <section className="card restored-empty">
+                  <Users size={30} />
+                  <h2>
+                    {query ||
+                    studentGradeFilter !== "all" ||
+                    studentGroupFilter !== "all"
+                      ? "Chưa tìm thấy học sinh phù hợp"
+                      : studentFilter === "archived"
+                        ? "Chưa có học sinh nào trong mục Lưu trữ"
+                        : "Chưa có học sinh ở danh sách này"}
+                  </h2>
+                  <p>
+                    Thêm hồ sơ học sinh mới hoặc điều chỉnh bộ lọc để theo dõi
+                    mục tiêu và quá trình học.
+                  </p>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => {
+                      setName("");
+                      setGrade("Lớp 9");
+                      setSubject("Toán");
+                      setGoal("");
+                      setNewNotes("");
+                      setNewStrengths("");
+                      setNewGaps("");
+                      setModal("student");
+                    }}
+                  >
+                    Thêm học sinh
+                  </button>
+                </section>
+              )}
+            </>
+          )}
+          {page === "student" && student && (
+            <>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => navigate("students")}
+                >
+                  <ChevronLeft size={14} /> Danh sách học sinh
+                </button>
+                {returnClass && (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setClassOpen(returnClass.id);
+                      setReturnClass(null);
+                      setPage("classes");
+                    }}
+                  >
+                    <ChevronLeft size={14} /> Quay về lớp {returnClass.name}
+                  </button>
+                )}
+              </div>
               <section className="card profile-hero">
                 <div className="profile-identity">
                   <span className={`avatar avatar-${student.color} avatar-lg`}>
@@ -823,8 +1161,23 @@ export default function OnlineApp() {
                     </Status>
                   </div>
                 </div>
-                <div className="profile-hero-actions">
+                <div className="profile-hero-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() =>
+                      updateStudent({
+                        status:
+                          student.status === "active" ? "archived" : "active",
+                      })
+                    }
+                  >
+                    {student.status === "active"
+                      ? "Lưu trữ hồ sơ"
+                      : "Khôi phục hồ sơ"}
+                  </button>
+                  <button
+                    type="button"
                     className="button"
                     onClick={() => setModal("profile")}
                   >
@@ -862,7 +1215,7 @@ export default function OnlineApp() {
                 role="tablist"
                 aria-label="Nội dung hồ sơ học sinh"
                 onKeyDown={(event) => {
-                  const tabs = ["overview", "history", "evidence"] as const;
+                  const tabs = ["overview", "journey", "history", "evidence"] as const;
                   const index = tabs.indexOf(profileTab);
                   const next =
                     event.key === "ArrowRight"
@@ -885,6 +1238,7 @@ export default function OnlineApp() {
                 {(
                   [
                     ["overview", "Tổng quan"],
+                    ["journey", "Lộ trình"],
                     ["history", "Lịch sử buổi học"],
                     ["evidence", "Minh chứng"],
                   ] as const
@@ -1004,6 +1358,25 @@ export default function OnlineApp() {
                     </section>
                   </div>
                 )}
+                {profileTab === "journey" && (
+                  <StudentJourney
+                    student={student}
+                    sessions={sessions}
+                    students={students}
+                    studentHistory={studentHistory}
+                    onOpenSession={openLessonFromList}
+                    onOpenNext={() => openPupilLesson(student)}
+                    onSessionUpsert={(updated) =>
+                      setSessions((items) =>
+                        items.some((item) => item.id === updated.id)
+                          ? items.map((item) =>
+                              item.id === updated.id ? updated : item,
+                            )
+                          : [updated, ...items],
+                      )
+                    }
+                  />
+                )}
                 {profileTab === "history" && (
                   <section className="card">
                     <div className="section-head">
@@ -1017,14 +1390,19 @@ export default function OnlineApp() {
                         (member) => member.studentId === student.id,
                       ),
                     ) ? (
-                      <div className="table-wrap">
+                      <div
+                        className="table-wrap"
+                        tabIndex={0}
+                        role="region"
+                        aria-label={`Các buổi học của ${student.name}`}
+                      >
                         <table className="data-table">
                           <thead>
                             <tr>
-                              <th>Buổi học</th>
-                              <th>Ngày giờ</th>
-                              <th>Trạng thái</th>
-                              <th>Thao tác</th>
+                              <th scope="col">Buổi học</th>
+                              <th scope="col">Ngày giờ</th>
+                              <th scope="col">Trạng thái</th>
+                              <th scope="col">Thao tác</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1139,16 +1517,36 @@ export default function OnlineApp() {
             <>
               <div className="restored-page-title">
                 <div>
-                  <h1>Tài liệu</h1>
-                  <p>Không bắt buộc: chia sẻ màn hình vẫn dạy được như thường. Tải lên đây khi bạn muốn máy làm thêm vài việc.</p>
+                  <h1>Kho học liệu & Đề cương (SRS M04)</h1>
+                  <p>
+                    Quản lý SGK, chuyên đề bồi dưỡng và đề thi thử PDF. Ghim sẵn cho lớp để mở đúng trang đang dạy và tạo câu hỏi nhanh bằng AI Copilot.
+                  </p>
                 </div>
-                <button
-                  className="button primary"
-                  onClick={() => openUpload()}
-                >
-                  <Plus size={17} />
-                  Tải tài liệu
-                </button>
+                <div className="row-actions">
+                  <button
+                    className="button primary"
+                    onClick={() => openUpload()}
+                  >
+                    <Plus size={17} />
+                    Tải tài liệu
+                  </button>
+                </div>
+              </div>
+              <div className="profile-metrics" style={{ marginBottom: 16 }}>
+                <div className="metric-card">
+                  <span>Tổng số học liệu</span>
+                  <strong>{materials.length}</strong>
+                </div>
+                <div className="metric-card">
+                  <span>Môn học Lớp 9</span>
+                  <strong>{availableMaterialSubjects.length}</strong>
+                </div>
+                <div className="metric-card">
+                  <span>Chuyên đề Nâng cao / Ôn vào 10</span>
+                  <strong>
+                    {materials.filter((m) => m.level === "NangCao").length}
+                  </strong>
+                </div>
               </div>
               <div className="mat-values">
                 <div><Pin size={16} /><span><b>Mở sẵn khi vào lớp</b>Ghim cho lớp, bấm Mở lớp là tài liệu đã trên màn chiếu.</span></div>
@@ -1157,14 +1555,39 @@ export default function OnlineApp() {
               </div>
               <div className="filter-card">
                 <label className="search-box">
-                  <Search size={17} />
+                  <Search size={17} aria-hidden="true" />
                   <input
                     aria-label="Tìm tài liệu"
-                    placeholder="Tìm theo tên, môn học hoặc chủ đề…"
+                    placeholder="Tìm theo tên đề cương, môn học, chủ đề hoặc trường…"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                   />
                 </label>
+                <select
+                  aria-label="Lọc môn học tài liệu"
+                  value={materialSubjectFilter}
+                  onChange={(e) => setMaterialSubjectFilter(e.target.value)}
+                >
+                  <option value="all">Mọi môn học</option>
+                  {availableMaterialSubjects.map((sub) => (
+                    <option key={sub} value={sub}>
+                      {sub}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Lọc mức độ tài liệu"
+                  value={materialLevelFilter}
+                  onChange={(e) => setMaterialLevelFilter(e.target.value)}
+                >
+                  <option value="all">Mọi mức độ</option>
+                  <option value="CoBan">Cơ bản</option>
+                  <option value="TrungBinh">Trung bình</option>
+                  <option value="NangCao">Nâng cao</option>
+                </select>
                 <span className="result-count">
                   {filteredMaterials.length} tài liệu
                 </span>
@@ -1176,24 +1599,62 @@ export default function OnlineApp() {
                     key={item.id}
                   >
                     <div className="material-preview">
-                      <FileText size={34} />
-                      <Status tone="violet">
-                        {item.kind === "PDF" ? "PDF" : "Hình ảnh"}
-                      </Status>
+                      <FileText size={32} />
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <Status tone="violet">
+                          {item.kind === "PDF" ? "PDF" : "Học liệu"}
+                        </Status>
+                        <Status
+                          tone={
+                            item.level === "NangCao"
+                              ? "amber"
+                              : item.level === "CoBan"
+                                ? "green"
+                                : "neutral"
+                          }
+                        >
+                          {item.level === "NangCao"
+                            ? "Nâng cao"
+                            : item.level === "CoBan"
+                              ? "Cơ bản"
+                              : "Trung bình"}
+                        </Status>
+                      </div>
                     </div>
                     <h2>{item.title}</h2>
-                    <p>
+                    <p style={{ fontWeight: 600 }}>
                       {item.subject} · {item.grade}
+                      {item.source ? ` · ${item.source}` : ""}
                     </p>
+                    {item.description && (
+                      <p
+                        className="muted"
+                        style={{
+                          fontSize: 12.5,
+                          lineHeight: 1.5,
+                          margin: "4px 0 10px",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {item.description}
+                      </p>
+                    )}
                     <div className="material-tags">
                       <span>{item.topic}</span>
                       <span>Phiên bản {item.currentVersion}</span>
                     </div>
-                    <button className="button" onClick={() => setPreview(item)}>
-                      Xem tệp
-                      <ArrowRight size={15} />
-                    </button>
-                    <button type="button" className="button secondary" onClick={() => setPinMaterial(item)}>Dùng cho lớp</button>
+                    <div className="row-actions" style={{ marginTop: "auto", paddingTop: 10 }}>
+                      <button className="button" onClick={() => setPreview(item)}>
+                        Xem tệp
+                        <ArrowRight size={15} />
+                      </button>
+                      <button type="button" className="button secondary" onClick={() => setPinMaterial(item)}>
+                        Ghim cho lớp
+                      </button>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -1201,13 +1662,26 @@ export default function OnlineApp() {
                 <section className="card restored-empty">
                   <BookOpen size={32} />
                   <h2>Chưa có tài liệu phù hợp</h2>
-                  <p>Tải PDF hoặc hình ảnh để chuẩn bị nội dung giảng dạy.</p>
-                  <button
-                    className="button"
-                    onClick={() => openUpload()}
-                  >
-                    Tải tài liệu đầu tiên
-                  </button>
+                  <p>Tải PDF hoặc nạp bộ học liệu mẫu Lớp 9 chuẩn GDPT 2018 để bắt đầu.</p>
+                  <div className="row-actions" style={{ justifyContent: "center" }}>
+                    <button
+                      className="button primary"
+                      onClick={() =>
+                        void run(async () => {
+                          await api("/demo-seed", { method: "POST", body: "{}" });
+                          await reload();
+                        })
+                      }
+                    >
+                      Nạp bộ học liệu Lớp 9 mẫu
+                    </button>
+                    <button
+                      className="button"
+                      onClick={() => openUpload()}
+                    >
+                      Tải tài liệu từ máy
+                    </button>
+                  </div>
                 </section>
               )}
             </>
@@ -1263,83 +1737,79 @@ export default function OnlineApp() {
                 }}
               />
             ) : null)}
-          {page === "account" && (
-            <>
-              <div className="restored-page-title">
-                <div>
-                  <h1>Tài khoản của bạn</h1>
-                  <p>Thông tin đăng nhập và không gian dữ liệu giáo viên.</p>
-                </div>
-              </div>
-              <section className="card account-panel">
-                <div className="profile-identity">
-                  <span className="avatar avatar-violet avatar-lg">
-                    {initials(teacher.name)}
-                  </span>
-                  <div>
-                    <h2>{teacher.name}</h2>
-                    <p>{teacher.email}</p>
-                    <Status tone="green">Phiên đã xác thực</Status>
-                  </div>
-                </div>
-                <div className="settings-row">
-                  <div>
-                    <strong>Dữ liệu được lưu trên máy chủ</strong>
-                    <p>
-                      Hồ sơ, tài liệu và buổi học đi cùng tài khoản giáo viên
-                      của bạn.
-                    </p>
-                  </div>
-                  <ShieldCheck size={22} />
-                </div>
-                <div className="settings-row">
-                  <div>
-                    <strong>Giao diện</strong>
-                    <p>
-                      {theme
-                        ? "Đang dùng giao diện tối"
-                        : "Đang dùng giao diện sáng"}
-                    </p>
-                  </div>
-                  <button className="button" onClick={toggleTheme}>
-                    Đổi giao diện
-                  </button>
-                </div>
-                <button className="button" onClick={logout}>
-                  Đăng xuất
-                </button>
-              </section>
-            </>
-          )}
         </>
       )}
       {modal === "student" && (
-        <Modal title="Thêm học sinh" onClose={() => !busy && setModal(null)}>
+        <Modal
+          title="Thêm hồ sơ học sinh"
+          wide
+          onClose={() => !busy && setModal(null)}
+        >
           <form className="form-stack" onSubmit={submitStudent}>
             <label>
               Tên học sinh
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                placeholder="Ví dụ: Nguyễn Minh Khôi"
                 required
               />
             </label>
+            <div className="form-grid-two">
+              <label>
+                Khối lớp
+                <input
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
+                  placeholder="Ví dụ: Lớp 9"
+                  required
+                />
+              </label>
+              <label>
+                Môn học
+                <input
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Ví dụ: Toán"
+                  required
+                />
+              </label>
+            </div>
             <label>
-              Lớp
-              <input value={grade} onChange={(e) => setGrade(e.target.value)} />
-            </label>
-            <label>
-              Môn học
+              Mục tiêu học tập
               <input
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+                placeholder="Ví dụ: Nắm vững phương trình bậc hai và hình học đường tròn"
               />
             </label>
+            <div className="form-grid-two">
+              <label>
+                Điểm mạnh ban đầu (mỗi dòng một mục)
+                <textarea
+                  value={newStrengths}
+                  onChange={(e) => setNewStrengths(e.target.value)}
+                  placeholder="Ví dụ: Tính toán cẩn thận"
+                />
+              </label>
+              <label>
+                Khoảng trống cần củng cố (mỗi dòng một mục)
+                <textarea
+                  value={newGaps}
+                  onChange={(e) => setNewGaps(e.target.value)}
+                  placeholder="Ví dụ: Hay quên điều kiện xác định"
+                />
+              </label>
+            </div>
             <label>
-              Mục tiêu
-              <input value={goal} onChange={(e) => setGoal(e.target.value)} />
+              Ghi chú riêng của giáo viên
+              <textarea
+                value={newNotes}
+                onChange={(e) => setNewNotes(e.target.value)}
+                placeholder="Ghi chú phong cách học hoặc lưu ý sư phạm…"
+              />
             </label>
-            <button className="button primary" disabled={busy}>
+            <button type="submit" className="button primary" disabled={busy}>
               Thêm học sinh
             </button>
           </form>
@@ -1347,7 +1817,7 @@ export default function OnlineApp() {
       )}
       {modal === "profile" && (
         <Modal
-          title="Hồ sơ học sinh"
+          title="Chỉnh sửa hồ sơ học sinh"
           wide
           onClose={() => !busy && setModal(null)}
         >
@@ -1378,20 +1848,57 @@ export default function OnlineApp() {
                   className="form-stack"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    updateStudent({
-                      goal: editGoal,
-                      notes: editNotes,
-                      strengths: editStrengths
-                        .split("\n")
-                        .map((x) => x.trim())
-                        .filter(Boolean),
-                      gaps: editGaps
-                        .split("\n")
-                        .map((x) => x.trim())
-                        .filter(Boolean),
-                    });
+                    updateStudent(
+                      {
+                        name: editName.trim() || student.name,
+                        grade: editGrade.trim() || student.grade,
+                        subject: editSubject.trim() || student.subject,
+                        goal: editGoal,
+                        notes: editNotes,
+                        strengths: editStrengths
+                          .split("\n")
+                          .map((x) => x.trim())
+                          .filter(Boolean),
+                        gaps: editGaps
+                          .split("\n")
+                          .map((x) => x.trim())
+                          .filter(Boolean),
+                      },
+                      true,
+                    );
                   }}
                 >
+                  <div className="form-grid-two">
+                    <label>
+                      Tên học sinh
+                      <input
+                        aria-label="Tên học sinh"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        required
+                      />
+                    </label>
+                    <div className="form-grid-two">
+                      <label>
+                        Khối lớp
+                        <input
+                          aria-label="Khối lớp"
+                          value={editGrade}
+                          onChange={(e) => setEditGrade(e.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        Môn học
+                        <input
+                          aria-label="Môn học"
+                          value={editSubject}
+                          onChange={(e) => setEditSubject(e.target.value)}
+                          required
+                        />
+                      </label>
+                    </div>
+                  </div>
                   <label>
                     Mục tiêu
                     <textarea
@@ -1426,7 +1933,7 @@ export default function OnlineApp() {
                       />
                     </label>
                   </div>
-                  <button className="button primary" disabled={busy}>
+                  <button type="submit" className="button primary" disabled={busy}>
                     Lưu hồ sơ
                   </button>
                 </form>

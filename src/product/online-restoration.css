@@ -1334,6 +1334,130 @@ body.dark .online-restored .online-board-canvas {
   font-size: 12px;
   color: var(--restore-subtle);
 }
+/* AI Chatbot styles */
+.online-restored .ai-chatbot__messages {
+  max-height: 320px;
+  overflow: auto;
+  margin: 10px 0 8px;
+  display: grid;
+  gap: 10px;
+}
+.online-restored .ai-chatbot__turn {
+  display: grid;
+  gap: 6px;
+}
+.online-restored .ai-chatbot__q,
+.online-restored .ai-chatbot__a {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.online-restored .ai-chatbot__q {
+  background: var(--restore-soft);
+  border: 1px solid var(--restore-line);
+  margin-left: 24px;
+}
+.online-restored .ai-chatbot__a {
+  background: var(--restore-bg);
+  border: 1px solid var(--restore-line);
+  margin-right: 24px;
+}
+.online-restored .ai-chatbot__q small,
+.online-restored .ai-chatbot__a small {
+  display: block;
+  font-size: 10px;
+  color: var(--restore-subtle);
+  margin-bottom: 4px;
+}
+.online-restored .ai-chatbot__q p,
+.online-restored .ai-chatbot__a p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.online-restored .ai-chatbot__loading {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  align-items: center;
+}
+.online-restored .ai-chatbot__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--restore-brand);
+  animation: ai-dot-bounce 1.2s infinite;
+}
+.online-restored .ai-chatbot__dot:nth-child(2) { animation-delay: 0.2s; }
+.online-restored .ai-chatbot__dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ai-dot-bounce {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; }
+}
+.online-restored .ai-chatbot__quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.online-restored .ai-chatbot__chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--restore-line);
+  background: var(--restore-surface);
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--restore-text);
+}
+.online-restored .ai-chatbot__chip:hover:not(:disabled) {
+  background: var(--restore-soft);
+  border-color: var(--restore-brand);
+  color: var(--restore-brand);
+}
+.online-restored .ai-chatbot__chip:disabled { opacity: 0.5; cursor: default; }
+.online-restored .ai-chatbot__compose {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.online-restored .ai-chatbot__compose input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--restore-line);
+  border-radius: 8px;
+  background: var(--restore-surface);
+  color: var(--restore-text);
+}
+.online-restored .ai-chatbot__compose input:disabled { opacity: 0.6; }
+/* Context menu (shared with demo) */
+.context-menu {
+  position: fixed;
+  z-index: 1200;
+  background: var(--restore-panel, #fff);
+  border: 1px solid var(--restore-line, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  min-width: 220px;
+}
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--restore-text, #111);
+  min-height: auto;
+}
+.context-menu-item:hover { background: var(--restore-bg, #f3f4f6); }
 .online-restored .presentation-suggestion {
   margin-top: 10px;
   padding: 12px;
@@ -1963,3 +2087,31 @@ body.dark .online-restored .calendar-event-pill--draft {
 .online-restored .mat-values svg { flex: none; margin-top: 1px; color: var(--restore-brand); }
 .online-restored .mat-values b { display: block; font-size: 13px; color: var(--restore-ink); font-weight: 600; }
 @media (max-width: 900px) { .online-restored .mat-values { grid-template-columns: minmax(0, 1fr); } }
+
+/* Lộ trình học tập (StudentJourney) */
+.online-restored .student-journey { display: flex; flex-direction: column; gap: 20px; }
+.online-restored .journey-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 760px) { .online-restored .journey-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.online-restored .journey-next-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
+.online-restored .journey-next-row strong { font-size: 14px; color: var(--restore-ink); }
+.online-restored .journey-next-row p { margin: 4px 0 0; font-size: 12.5px; }
+.online-restored .journey-next-live { border-bottom: 1px solid var(--restore-line); padding-bottom: 14px; margin-bottom: 6px; }
+.online-restored .journey-next-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.online-restored .journey-ai-draft { margin-top: 14px; border: 1px solid var(--restore-line); border-left: 3px solid var(--restore-brand); border-radius: 12px; padding: 14px 16px; background: var(--restore-soft); }
+.online-restored .journey-ai-draft-head { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; letter-spacing: .02em; color: var(--restore-brand); text-transform: uppercase; }
+.online-restored .journey-ai-draft p { margin: 10px 0 10px; font-size: 13px; line-height: 1.6; color: var(--restore-ink); white-space: pre-wrap; }
+.online-restored .journey-error { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-radius: 12px; background: #fdecec; color: #b42318; font-size: 13px; border: 1px solid #f6cfcb; }
+.online-restored .journey-error svg { flex: none; }
+.online-restored .journey-timeline { list-style: none; margin: 8px 0 0; padding: 0; position: relative; display: flex; flex-direction: column; gap: 16px; }
+.online-restored .journey-timeline::before { content: ""; position: absolute; top: 6px; bottom: 6px; left: 13px; width: 2px; background: var(--restore-line); }
+.online-restored .journey-item { display: flex; align-items: flex-start; gap: 14px; position: relative; }
+.online-restored .journey-node { position: relative; z-index: 1; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--restore-subtle); background: var(--restore-soft); font-variant-numeric: tabular-nums; }
+.online-restored .journey-node.is-done { background: var(--restore-brand); color: #fff; }
+.online-restored .journey-card { flex: 1; min-width: 0; border: 1px solid var(--restore-line); border-radius: 14px; padding: 14px 16px; background: var(--restore-surface); }
+.online-restored .journey-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.online-restored .journey-card h3 { margin: 8px 0 0; font-size: 14.5px; color: var(--restore-ink); font-weight: 650; }
+.online-restored .journey-goal { margin: 4px 0 0; font-size: 12.5px; color: var(--restore-subtle); }
+.online-restored .journey-summary { margin: 10px 0 0; font-size: 13px; line-height: 1.55; color: var(--restore-ink); background: var(--restore-soft); border-radius: 10px; padding: 10px 12px; }
+.online-restored .journey-summary.is-empty { color: var(--restore-subtle); background: transparent; border: 1px dashed var(--restore-line); font-style: italic; }
+.online-restored .journey-card-foot { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+.online-restored .journey-card-foot .text-button:disabled { opacity: .6; cursor: default; }
