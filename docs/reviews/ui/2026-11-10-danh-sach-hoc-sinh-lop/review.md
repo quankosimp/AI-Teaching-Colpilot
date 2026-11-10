@@ -15,6 +15,8 @@
    - Khi ấn vào từng dòng học sinh trong bảng, điều hướng mở thẳng trang **Hồ sơ học sinh** (`page = "student"`) của em đó (có nút **Quay về lớp ...** để trở lại lớp nhanh chóng), bỏ bước trung gian mở khung trượt bên phải.
 2. **Trang chủ / Tổng quan dạy học ([`DashboardHome.tsx`](file:///home/quanan/AI-Teaching-Colpilot/src/product/classHome/DashboardHome.tsx))**:
    - Loại bỏ nút **Đồng bộ dữ liệu Demo SRS** ở góc trên bên phải tiêu đề trang Tổng quan dạy học để giao diện gọn gàng và thực tế hơn.
+3. **Danh sách thẻ lớp học ([`ClassList.tsx`](file:///home/quanan/AI-Teaching-Colpilot/src/product/classHome/ClassList.tsx))**:
+   - Xóa nút **Link mời** ở chân mỗi thẻ lớp (nút này bị tràn và cắt chữ trên lưới thẻ lớp; nút **Link mời** trong trang chi tiết từng lớp vẫn được giữ lại).
 
 ## 2. Hành vi Trước và Sau khi sửa
 
@@ -24,6 +26,7 @@
 | **Các cột trong bảng (`ClassPage`)** | `Học sinh`, `Đi học`, `Cần nhớ`, và cột nút `Chép link` | `Học sinh`, `Đi học`, và nhãn điều hướng `Xem hồ sơ >` |
 | **Thao tác bấm vào học sinh (`ClassPage`)** | Mở khung trượt (`StudentDrawer`) bên phải màn hình | Mở thẳng trang **Hồ sơ học sinh** đầy đủ (`page = "student"`) kèm lối tắt quay lại lớp |
 | **Thanh tiêu đề Trang chủ (`DashboardHome`)** | Có nút `Đồng bộ dữ liệu Demo SRS` | Đã xóa nút `Đồng bộ dữ liệu Demo SRS` |
+| **Chân thẻ lớp (`ClassList`)** | Có nút `Link mời` ở góc phải chân thẻ (dễ bị tràn chữ) | Chỉ giữ 2 nút chính: `Vào lại / Mở lớp` và `Chi tiết & Giáo án` |
 
 ## 3. Ảnh chụp màn hình Trước và Sau
 
@@ -34,6 +37,8 @@
 | **Sau khi sửa - Mở hồ sơ học sinh khi bấm vào dòng** | ![Sau khi sửa - Mở hồ sơ học sinh](./03-sau-mo-ho-so-hoc-sinh.png) |
 | **Trước khi sửa - Trang chủ có nút Đồng bộ dữ liệu Demo SRS** | ![Trước khi sửa - Trang chủ](./04-truoc-trang-chu-bo-nut-demo.png) |
 | **Sau khi sửa - Trang chủ đã bỏ nút Đồng bộ dữ liệu Demo SRS** | ![Sau khi sửa - Trang chủ](./05-sau-trang-chu-bo-nut-demo.png) |
+| **Trước khi sửa - Thẻ lớp có nút Link mời ở chân thẻ** | ![Trước khi sửa - Thẻ lớp](./06-truoc-the-lop-bo-link-moi.png) |
+| **Sau khi sửa - Thẻ lớp đã bỏ nút Link mời** | ![Sau khi sửa - Thẻ lớp](./07-sau-the-lop-bo-link-moi.png) |
 
 ## 4. Cách sử dụng và kiểm tra
 
@@ -46,6 +51,7 @@
 ## 5. Phạm vi ảnh hưởng và giới hạn còn lại
 
 - **File thay đổi**:
+  - [`src/product/classHome/ClassList.tsx`](file:///home/quanan/AI-Teaching-Colpilot/src/product/classHome/ClassList.tsx)
   - [`src/product/classHome/ClassPage.tsx`](file:///home/quanan/AI-Teaching-Colpilot/src/product/classHome/ClassPage.tsx)
   - [`src/product/classHome/classes-v2.css`](file:///home/quanan/AI-Teaching-Colpilot/src/product/classHome/classes-v2.css)
   - [`src/product/classHome/DashboardHome.tsx`](file:///home/quanan/AI-Teaching-Colpilot/src/product/classHome/DashboardHome.tsx)
